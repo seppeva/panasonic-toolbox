@@ -169,7 +169,7 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then V="${GITHUB_REF_NAME#v}"; else V="$(grep -m1 '^VERSION = ' app/panasonic_scene.py | sed -E 's/VERSION = "(.*)"/\1/')"; fi
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "Versie: $V"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: out
           merge-multiple: true
