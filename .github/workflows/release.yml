@@ -148,7 +148,7 @@ jobs:
           & $iscc "/DAppVersion=$v" installer/windows.iss
           Compress-Archive -Path "dist/Panasonic Toolbox" -DestinationPath "dist/PanasonicToolbox-Windows-Portable.zip"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: build-${{ matrix.target }}-${{ matrix.arch }}
           path: |
