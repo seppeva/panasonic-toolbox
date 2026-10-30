@@ -281,3 +281,22 @@ button.toggle.on,.hold-row button.toggle.on{background:var(--accent-soft);border
 .live-presets .preset-grid{flex:1;grid-template-columns:repeat(12,1fr)}
 .live-presets label.w90{margin:0}
 @media (max-width:1250px){.live-presets .preset-grid{grid-template-columns:repeat(6,1fr)}}
+
+/* ---------- v2.5: zones, multi-select, file names ---------- */
+.zonebar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 10px}
+.zonebar:empty{display:none}
+.zonebar.inline{display:inline-flex;margin:0 8px 0 0}
+button.chip{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:26px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:500}
+button.chip:hover{border-color:var(--accent);background:#30353b}
+button.chip .muted{margin-left:3px}
+.selbar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--accent-soft);border:1px solid rgba(74,139,240,.35);border-radius:6px;padding:8px 12px;margin:0 0 10px}
+.selbar>span{align-self:center;color:var(--text)}
+.selbar.hidden{display:none}
+button.danger-text{color:#f0a49d}
+button.danger-text:hover{border-color:#e0574d;color:#fff}
+input.zonein{width:110px;height:26px;padding:2px 7px;background:transparent;border-color:transparent}
+input.zonein:hover,input.zonein:focus{background:var(--field);border-color:var(--rule)}
+.namefields label{min-width:220px}
+.namefields .ext{align-self:center;padding-left:6px;font-size:12px}
+.tokens{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
+.tokens .chip{font-family:var(--mono);font-size:11.5px;height:22px;padding:0 7px}

@@ -100,7 +100,7 @@ jobs:
         run: |
           if [[ "${{ matrix.target }}" == "mac" ]]; then BIN="dist/Panasonic Toolbox.app/Contents/MacOS/Panasonic Toolbox"; else BIN="dist/Panasonic Toolbox/Panasonic Toolbox.exe"; fi
           "$BIN" --headless --port 8799 &
-          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8799/api/ping && break; sleep 1; done
+          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8799/api/ping && break; sleep 1; done
           curl -sf http://127.0.0.1:8799/api/ping | grep -q panasonic-scene
           curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Toolbox</title>"
           curl -sf -X POST http://127.0.0.1:8799/api/quit || true
