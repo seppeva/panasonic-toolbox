@@ -1,19 +1,19 @@
-# Open-sourcecomponenten
+# Open source components
 
-Panasonic Scene zelf valt onder de [MIT-licentie](LICENSE). De geïnstalleerde app bevat de volgende componenten van derden:
+Panasonic Scene itself is licensed under the [MIT license](LICENSE). The installed app includes the following third-party components:
 
-| Component | Gebruik | Licentie |
+| Component | Used for | License |
 |---|---|---|
-| [Python](https://www.python.org/) | Runtime in de app | Python Software Foundation License |
-| [PyInstaller](https://pyinstaller.org/) | Bundelt de app (bootloader) | GPL-2.0 met *bootloader exception*: toegestaan om gebundelde apps onder eigen licentie te verspreiden |
-| [pywebview](https://pywebview.flowrl.com/) | Eigen app-venster | BSD-3-Clause |
-| [bottle](https://bottlepy.org/) (via pywebview) | Hulpcode van pywebview | MIT |
-| [proxy_tools](https://pypi.org/project/proxy_tools/) (via pywebview) | Hulpcode van pywebview | MIT |
-| [PyObjC](https://pyobjc.readthedocs.io/) (macOS) | Koppeling met WebKit | MIT |
-| [pythonnet](https://pythonnet.github.io/) en clr_loader (Windows) | Koppeling met Microsoft Edge WebView2 | MIT |
+| [Python](https://www.python.org/) | Runtime inside the app | Python Software Foundation License |
+| [PyInstaller](https://pyinstaller.org/) | Bundles the app (bootloader) | GPL-2.0 with *bootloader exception*: bundled apps may be distributed under their own license |
+| [pywebview](https://pywebview.flowrl.com/) | The app window | BSD-3-Clause |
+| [bottle](https://bottlepy.org/) (via pywebview) | Used by pywebview | MIT |
+| [proxy_tools](https://pypi.org/project/proxy_tools/) (via pywebview) | Used by pywebview | MIT |
+| [PyObjC](https://pyobjc.readthedocs.io/) (macOS) | Bridge to WebKit | MIT |
+| [pythonnet](https://pythonnet.github.io/) en clr_loader (Windows) | Bridge to Microsoft Edge WebView2 | MIT |
 
-De webpagina gebruikt het lettertype [IBM Plex](https://github.com/IBM/plex) (SIL Open Font License 1.1, zie `assets/fonts/OFL-IBM-Plex.txt`), zelf gehost.
+The website uses the [IBM Plex](https://github.com/IBM/plex) typeface (SIL Open Font License 1.1, see `assets/fonts/OFL-IBM-Plex.txt`), self-hosted.
 
-De lijst met scène-parameters in `app/web/catalog.js` is opgesteld op basis van de openbare *HD/4K Integrated Camera Interface Specifications* van Panasonic, via de Markdown-transcripties in [bitfocus/companion-module-panasonic-cameras](https://github.com/bitfocus/companion-module-panasonic-cameras) (MIT). Panasonic is een handelsmerk van Panasonic Holdings Corporation; dit project is niet verbonden aan Panasonic.
+The scene settings in `app/web/catalog.js` and the command list in `app/web/commands.js` are based on Panasonic's public *HD/4K Integrated Camera Interface Specifications* and *Remote Camera Controller Interface Specifications*, using the Markdown transcriptions in [bitfocus/companion-module-panasonic-cameras](https://github.com/bitfocus/companion-module-panasonic-cameras) (MIT). Panasonic is a trademark of Panasonic Holdings Corporation; this project is not affiliated with Panasonic.
 
-De exacte versies van de gebundelde Python-pakketten staan in de bestanden `build-info-*.txt` bij elke release.
+The exact versions of the bundled Python packages are listed in the `build-info-*.txt` files of each release.

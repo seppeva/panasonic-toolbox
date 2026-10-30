@@ -1,14 +1,14 @@
-# Parameters in een scene file
+# Settings in a scene file
 
-Dit zijn alle parameters die mee veranderen wanneer je op een controller van scène wisselt (XSF). Bron: per model de tabel *"When switching scene, update notification of each command belonging to the scene will be sent"* uit de officiële Panasonic *Interface Specifications*, aangevuld met de *Compatible model Table* (maart 2025).
+These are all the settings that change when you switch scenes on a controller (XSF). Source: for each model, the table *"When switching scene, update notification of each command belonging to the scene will be sent"* in Panasonic's official *Interface Specifications*, completed with the *Compatible Model Table* (March 2025).
 
-Elke parameter wordt uitgelezen met het opvraagcommando (bv. `QSD:A4`) en teruggezet door het antwoord (bv. `OSD:A4:80`) opnieuw te sturen naar `/cgi-bin/aw_cam`. Dag/Nacht gaat via `/cgi-bin/aw_ptz` (`#D6`).
+Each setting is read with its query command (e.g. `QSD:A4`) and restored by sending the answer (e.g. `OSD:A4:80`) back to `/cgi-bin/aw_cam`. Day/night uses `/cgi-bin/aw_ptz` (`#D6`).
 
-Andere modellen (HE130, UE70, UE20, UE4, UR100, HR140 …) gebruiken een algemene lijst van alle bekende scène-commando’s; wat de camera niet kent (`ER1`) wordt overgeslagen.
+Other models (HE130, UE70, UE20, UE4, UR100, HR140 …) use a generic list of every known scene command; whatever the camera doesn't support (`ER1`) is skipped.
 
-## AW-UE150 / UE155 / HE145 / UN145 — 111 parameters
+## AW-UE150 / UE155 / HE145 / UN145 — 111 settings
 
-| Groep | Parameter | Zetten | Opvragen |
+| Group | Setting | Set | Query |
 |---|---|---|---|
 | Brightness | Picture Level | `OSD:48:[Data]` | `QSD:48` |
 | Brightness | Iris Mode | `ORS:[Data]` | `QRS` |
@@ -122,9 +122,9 @@ Andere modellen (HE130, UE70, UE20, UE4, UR100, HR140 …) gebruiken een algemen
 | Matrix | Color Correction B Saturation | `OSD:96:[Data]` | `QSD:96` |
 | Matrix | Color Correction B Phase | `OSD:97:[Data]` | `QSD:97` |
 
-## AW-UE150A — 110 parameters
+## AW-UE150A — 110 settings
 
-| Groep | Parameter | Zetten | Opvragen |
+| Group | Setting | Set | Query |
 |---|---|---|---|
 | Brightness | Picture Level | `OSD:48:[Data]` | `QSD:48` |
 | Brightness | Iris Mode | `ORS:[Data]` | `QRS` |
@@ -237,9 +237,9 @@ Andere modellen (HE130, UE70, UE20, UE4, UR100, HR140 …) gebruiken een algemen
 | Other | Auto F.Mix Max Gain | `OSE:74:[Data]` | `QSE:74` |
 | Other | AUTO IRIS WINDOW POSITION | `OSL:CD:[Data]` | `QSL:CD` |
 
-## AW-UE160 (8 scene files) — 198 parameters
+## AW-UE160 (8 scene files) — 198 settings
 
-| Groep | Parameter | Zetten | Opvragen |
+| Group | Setting | Set | Query |
 |---|---|---|---|
 | PAINT | AGC | `OSL:26:[Data]` | `QSL:26` |
 | PAINT | Iris Mode | `ORS:[Data]` | `QRS` |
@@ -440,9 +440,9 @@ Andere modellen (HE130, UE70, UE20, UE4, UR100, HR140 …) gebruiken een algemen
 | KNEE | Black Offset | `OSL:8A:[Data]` | `QSL:8A` |
 | Other | ND Filter | `OFT:[Data]` | `QFT` |
 
-## AW-UE100 — 98 parameters
+## AW-UE100 — 98 settings
 
-| Groep | Parameter | Zetten | Opvragen |
+| Group | Setting | Set | Query |
 |---|---|---|---|
 | Brightness | Picture Level | `OSD:48:[Data]` | `QSD:48` |
 | Brightness | Control (Iris Mode) | `ORS:[Data]` | `QRS` |
@@ -543,9 +543,9 @@ Andere modellen (HE130, UE70, UE20, UE4, UR100, HR140 …) gebruiken een algemen
 | Matrix | Color Correction B Saturation | `OSD:96:[Data]` | `QSD:96` |
 | Matrix | Color Correction B Phase | `OSD:97:[Data]` | `QSD:97` |
 
-## AW-UE80 / UE50 / UE40 / UE30 — 85 parameters
+## AW-UE80 / UE50 / UE40 / UE30 — 85 settings
 
-| Groep | Parameter | Zetten | Opvragen |
+| Group | Setting | Set | Query |
 |---|---|---|---|
 | Brightness | Picture Level | `OSD:48:[Data]` | `QSD:48` |
 | Brightness | Iris Mode | `ORS:[Data]` | `QRS` |

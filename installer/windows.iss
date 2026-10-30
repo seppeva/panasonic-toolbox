@@ -1,4 +1,4 @@
-; Inno Setup-script voor Panasonic Scene (wordt gebouwd door GitHub Actions)
+; Inno Setup script for Panasonic Scene (built by GitHub Actions)
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
@@ -25,8 +25,8 @@ WizardStyle=modern
 CloseApplications=yes
 
 [Languages]
-Name: "dutch"; MessagesFile: "compiler:Languages\Dutch.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "dutch"; MessagesFile: "compiler:Languages\Dutch.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"

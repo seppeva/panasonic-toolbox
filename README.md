@@ -1,69 +1,68 @@
 # Panasonic Scene
 
-Desktop-app voor **macOS en Windows** om **scene files (alle shading-instellingen van een scène)** van Panasonic PTZ-camera's te exporteren en terug te importeren. Dat kan een AW-RP120/RP150 zelf niet. De app heeft ook een hulpmiddel om camera's snel toe te wijzen op een **AW-RP150**.
+Desktop app for **macOS and Windows** to **export and import the scene files (all shading settings of a scene)** of Panasonic PTZ cameras, something an AW-RP120/RP150 cannot do. It also looks up every HTTP command of the cameras (for Bitfocus Companion), opens a camera's web pages already logged in, and helps assign cameras to an **AW-RP150**.
 
-Download- en uitlegpagina: **https://seppeva.github.io/panasonicscene/** (later eventueel op een eigen domein, zie onderaan)
+Download page: **https://seppeva.github.io/panasonicscene/**
 
-## Opbouw van deze repo
+## Repository layout
 
-| Pad | Wat |
+| Path | What |
 |---|---|
-| `index.html`, `privacy.html`, `install.sh`, `install.ps1`, `assets/` | De webpagina (GitHub Pages) met downloadknop, uitleg, privacyverklaring en installatiescripts |
-| `app/panasonic_scene.py` | De app: lokale server op `127.0.0.1:8765` + eigen venster (pywebview) |
-| `app/web/` | De interface (HTML/JS/CSS) en `catalog.js` met alle scène-parameters per model |
-| `app/panasonic_scene.spec` | PyInstaller-configuratie (macOS .app en Windows .exe) |
-| `installer/windows.iss` | Inno Setup-script voor de Windows-installer |
-| `.github/workflows/release.yml` | Bouwt de Mac- en Windows-versies en zet ze in een GitHub Release |
-| `tools/` | Mock-camera voor tests en de generatoren van `catalog.js` |
-| `PARAMETERS.md` | Alle parameters in een scene file, per model |
-| `PRIVACY.md`, `SECURITY.md`, `SIGNING.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Privacyverklaring, beveiliging, ondertekening, licentie (MIT) en open-sourcecomponenten |
+| `index.html`, `privacy.html`, `install.sh`, `install.ps1`, `assets/` | The website (GitHub Pages): download buttons, explanation, privacy statement and install scripts |
+| `app/panasonic_scene.py` | The app: a local server on `127.0.0.1:8765` plus its own window (pywebview) |
+| `app/web/` | The interface (HTML/JS/CSS), `catalog.js` (scene settings per model) and `commands.js` (all HTTP commands) |
+| `app/panasonic_scene.spec`, `app/entitlements.plist` | PyInstaller build (macOS .app and Windows .exe) |
+| `installer/windows.iss` | Inno Setup script for the Windows installer |
+| `.github/workflows/release.yml` | Builds the Mac and Windows versions and publishes a GitHub Release |
+| `tools/` | Mock camera for testing and the generators for `catalog.js` and `commands.js` |
+| `PARAMETERS.md` | Every setting in a scene file, per model |
+| `PRIVACY.md`, `SECURITY.md`, `SIGNING.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Privacy, security, code signing, license (MIT) and open source components |
 
-## Hoe het werkt
+## How it works
 
 ```
-Panasonic Scene (app op je laptop)
-  ├─ venster met de interface  ──►  http://127.0.0.1:8765  (ingebouwde server)
-  └─ ingebouwde server         ──►  http://<camera-ip>/cgi-bin/aw_cam?cmd=…&res=1
+Panasonic Scene (app on your computer)
+  ├─ window with the interface ──►  http://127.0.0.1:8765  (built-in server)
+  └─ built-in server           ──►  http://<camera-ip>/cgi-bin/aw_cam?cmd=…&res=1
                                     http://<camera-ip>/cgi-bin/aw_ptz?cmd=…&res=1
 ```
 
-Alles draait lokaal. Er is geen internet nodig, behalve voor de optionele controle op updates via de GitHub-releases.
+Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in *Downloads › Panasonic Scene* and are never overwritten.
 
-## Een nieuwe versie publiceren
+## Releasing a new version
 
-1. Eenmalig: maak de **publieke** repo `seppeva/panasonicscene`, push deze bestanden naar `main` en zet *Settings › Pages › Deploy from branch › `main` / root* aan. De pagina staat dan op `https://seppeva.github.io/panasonicscene/`.
-2. Maak een tag en push hem:
-   ```bash
-   git tag v2.0.0
-   git push origin v2.0.0
-   ```
-3. GitHub Actions bouwt dan automatisch:
-   - `PanasonicScene-macOS-AppleSilicon.dmg` / `.zip`
-   - `PanasonicScene-macOS-Intel.dmg` / `.zip`
-   - `PanasonicScene-Windows-Setup.exe`
-   - `PanasonicScene-Windows-Portable.zip`
+Change `VERSION = "x.y.z"` in `app/panasonic_scene.py` and push to `main`. GitHub Actions then builds:
 
-   Daarna maakt Actions een Release aan. De downloadknoppen wijzen naar `releases/latest/download/…` en werken dus meteen. Het versienummer in de app wordt uit de tag gehaald.
+- `PanasonicScene-macOS-AppleSilicon.dmg` / `.zip`
+- `PanasonicScene-macOS-Intel.dmg` / `.zip`
+- `PanasonicScene-Windows-Setup.exe`
+- `PanasonicScene-Windows-Portable.zip`
+- `SHA256SUMS.txt` and `build-info-*.txt`
 
-Elke release bevat `SHA256SUMS.txt`; de installatiescripts controleren de download daarmee. Zonder ondertekening toont macOS of Windows de eerste keer een melding. Hoe je ondertekening aanzet (Apple-notarisatie gaat automatisch zodra de secrets er zijn), staat in [SIGNING.md](SIGNING.md).
+It then publishes release `vX.Y.Z`. The download buttons point to `releases/latest/download/…`, so they work right away. Pushing a tag `vX.Y.Z` works too.
 
-## Eigen domein koppelen (later)
-- Subdomein, bv. `panasonicscene.seppevanaken.be`: zet bij je DNS-beheerder een **CNAME** naar `seppeva.github.io` en vul het domein in onder *Settings › Pages › Custom domain*.
-- `seppevanaken.be/panasonicscene`: kan alleen als het hoofddomein ook via een GitHub Pages-site van `seppeva` loopt.
+Without code signing, macOS and Windows show a warning the first time; the Terminal and PowerShell install commands avoid it. See [SIGNING.md](SIGNING.md) to enable signing (Apple notarization runs automatically once the secrets are set).
 
-De installatieregels op de pagina passen zich vanzelf aan het adres aan.
+## The website
 
-## Ontwikkelen zonder camera's
+Turn it on under *Settings › Pages › Deploy from branch › `main` / (root)*. It is then served at `https://seppeva.github.io/panasonicscene/`. To use your own domain later:
+
+- Subdomain, e.g. `panasonicscene.seppevanaken.be`: add a **CNAME** record pointing to `seppeva.github.io` at your DNS provider and enter the domain under *Settings › Pages › Custom domain*.
+- `seppevanaken.be/panasonicscene`: only possible if the main domain is also served by a GitHub Pages site of `seppeva`.
+
+The install commands on the page adapt to the address automatically.
+
+## Developing without cameras
 
 ```bash
-pip install pywebview            # optioneel; zonder pywebview opent de app in je browser
+pip install pywebview            # optional; without it the app opens in your browser
 python3 tools/mock_camera.py 127.0.0.11 8080 AW-UE150 "CAM 1" &
 python3 tools/mock_camera.py 127.0.0.12 8080 AW-UE160 "CAM 2" &
-python3 app/panasonic_scene.py   # of --browser / --headless
-# in de app: scan 127.0.0.10-13 op poort 8080
+python3 app/panasonic_scene.py   # or --browser / --headless
+# in the app: scan 127.0.0.10-13 on port 8080
 ```
 
-## Bestandsformaat (`.pscene.json`)
+## File format (`.pscene.json`)
 
 ```json
 {
@@ -75,27 +74,19 @@ python3 app/panasonic_scene.py   # of --browser / --headless
 }
 ```
 
-Bestanden worden opgeslagen in *Downloads › Panasonic Scene* (bestaande bestanden worden nooit overschreven). `raw` is exact het antwoord van de camera en wordt bij import opnieuw als commando gestuurd. Import gebeurt in drie rondes:
+`raw` is exactly what the camera answered; on import it is sent back as a command, in three passes (in order with modes first, retry what failed, simplify multi-field commands). Every value is then read back and compared. On an AW-UE160 the scene is also stored with `OSL:90` (SCENE FILE STORE).
 
-1. alles in volgorde, met de modi eerst;
-2. wat faalde nog eens;
-3. commando's met meerdere velden vereenvoudigd.
+## Which settings?
 
-Daarna wordt alles teruggelezen en vergeleken. Bij een AW-UE160 wordt de scène ook opgeslagen met `OSL:90` (SCENE FILE STORE).
-
-## Welke parameters?
-
-Per model exact de lijst met commando's die volgens de Panasonic *Interface Specifications* bij een scène horen:
-
-| Model | Parameters |
+| Model | Settings |
 |---|---|
 | UE150 | 111 |
 | UE150A | 110 |
 | UE160 | 198 |
 | UE100 | 98 |
-| UE80-reeks | 85 |
+| UE80 series | 85 |
 
-De volledige lijst staat in [PARAMETERS.md](PARAMETERS.md).
+The full list is in [PARAMETERS.md](PARAMETERS.md).
 
 ---
-Niet officieel van Panasonic. Gebruik op eigen risico en test niet terwijl een camera on air is.
+Not affiliated with Panasonic. Use at your own risk and don't test on a camera that is on air.

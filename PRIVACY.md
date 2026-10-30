@@ -1,28 +1,29 @@
-# Privacyverklaring Panasonic Scene
+# Privacy statement for Panasonic Scene
 
-*Laatst bijgewerkt: 30 oktober 2026*
+*Last updated: 30 October 2026*
 
-Panasonic Scene is gratis, open-source software van Seppe Van Aken (België). Deze verklaring legt uit welke gegevens de app en de downloadpagina verwerken. Kort samengevat: **de app verzamelt niets over jou**. Er zijn geen accounts, geen analytics, geen cookies en geen tracking.
+Panasonic Scene is free, open source software by Seppe Van Aken (Belgium). This statement explains what data the app and the download page process. In short: **the app collects nothing about you**. There are no accounts, no analytics, no cookies and no tracking.
 
-**Contact:** Seppe Van Aken, CONTACT_EMAIL_INVULLEN
+**Contact:** Seppe Van Aken, CONTACT_EMAIL_TO_FILL_IN
 
-## 1. De app op je computer
-- **Alles blijft lokaal.** De app praat enkel met de camera's op je eigen netwerk. Er worden geen gegevens naar de maker of naar andere partijen gestuurd.
-- **Lokaal bewaard op je computer:** de lijst met gevonden camera's (IP-adres, model en titel) en je instellingen, zodat ze er de volgende keer nog staan. Je kan die lijst in de app wissen.
-- **Camera-wachtwoorden** worden nooit opgeslagen. Ze blijven enkel in het geheugen zolang de app open is.
-- **Scene files en back-ups** worden opgeslagen in de map *Downloads › Panasonic Scene* op je computer. Bestaande bestanden worden nooit overschreven.
-- **Controle op updates:** als je online bent, vraagt de app bij GitHub (GitHub, Inc.) op wat de laatste versie is. Daarbij ziet GitHub, zoals bij elk bezoek aan een website, je IP-adres. Er wordt niets over jou of je camera's meegestuurd. Je kan dit uitzetten via **Instellingen › Controleren op nieuwe versies**.
+## 1. The app on your computer
+- **Everything stays local.** The app only talks to the cameras on your own network. No data is sent to the developer or to anyone else.
+- **Stored on your computer:** the list of cameras you found (IP address, model and title) and your settings, so they are still there next time. You can clear the list in the app.
+- **Camera login:** the camera user name and password are only kept in memory while the app is open. If you tick *Remember on this computer*, they are stored in the app's local storage on your computer only. They are sent only to your own cameras.
+- **Camera web pages:** when you open a camera's live or settings page, your default browser opens a link to that camera on your local network, including the camera login if you entered one.
+- **Scene files and backups** are saved in the folder *Downloads › Panasonic Scene* on your computer. Existing files are never overwritten.
+- **Update check:** when you are online, the app asks GitHub (GitHub, Inc.) for the latest version number. Like with any website visit, GitHub sees your IP address. Nothing about you or your cameras is sent. You can turn this off in *Settings › Check for new versions*.
 
-## 2. De downloadpagina
-- De pagina wordt gehost door **GitHub Pages** en de downloads komen van **GitHub Releases** (GitHub, Inc., VS). GitHub verwerkt technische gegevens zoals je IP-adres om de pagina te leveren en te beveiligen. Zie de [privacyverklaring van GitHub](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
-- De pagina vraagt bij GitHub het nummer en de grootte van de laatste versie op, om die te tonen.
-- De pagina gebruikt **geen cookies, geen analytics en geen lettertypes of scripts van derden**. De lettertypes worden zelf gehost.
+## 2. The download page
+- The page is hosted by **GitHub Pages** and the downloads come from **GitHub Releases** (GitHub, Inc., USA). GitHub processes technical data such as your IP address to deliver and protect the page. See [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
+- The page asks GitHub for the number and size of the latest version so it can show them.
+- The page uses **no cookies, no analytics and no third-party fonts or scripts**. The fonts are self-hosted.
 
-## 3. Rechtsgrond en bewaring
-De maker van Panasonic Scene ontvangt zelf geen persoonsgegevens. Voor de hosting en de versiecontrole via GitHub geldt het gerechtvaardigd belang (art. 6.1.f AVG): de software en de pagina veilig en up-to-date aanbieden. GitHub bewaart zijn gegevens volgens zijn eigen beleid.
+## 3. Legal basis and retention
+The developer of Panasonic Scene does not receive any personal data. Hosting and the version check through GitHub rely on legitimate interest (Article 6(1)(f) GDPR): offering the software and the page securely and up to date. GitHub keeps its data according to its own policy.
 
-## 4. Jouw rechten
-Je hebt recht op inzage, correctie, verwijdering, beperking en bezwaar. Omdat de maker geen gegevens over jou heeft, kan je de lokale gegevens zelf wissen (camera-lijst wissen of de app verwijderen). Voor gegevens bij GitHub kan je bij GitHub terecht. Je kan ook een klacht indienen bij de **Gegevensbeschermingsautoriteit**, Drukpersstraat 35, 1000 Brussel, [www.gegevensbeschermingsautoriteit.be](https://www.gegevensbeschermingsautoriteit.be).
+## 4. Your rights
+You have the right to access, correct, erase, restrict and object. Because the developer holds no data about you, you can delete the local data yourself (clear the camera list, untick *Remember on this computer*, or uninstall the app). For data held by GitHub, contact GitHub. You can also lodge a complaint with the Belgian **Data Protection Authority** (Gegevensbeschermingsautoriteit), Drukpersstraat 35, 1000 Brussels, [www.dataprotectionauthority.be](https://www.dataprotectionauthority.be).
 
-## 5. Wijzigingen
-Wijzigt deze verklaring, dan staat de nieuwe versie op deze pagina en in de broncode op GitHub.
+## 5. Changes
+If this statement changes, the new version is published on this page and in the source code on GitHub.

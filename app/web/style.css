@@ -160,3 +160,43 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
   .checklist ol,.muted{color:#333}
   .kbd{background:#fff;color:#000;border-color:#999}
 }
+
+/* ---------- v2.1 additions ---------- */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hint{color:var(--muted);font-size:12.5px;margin:8px 0;max-width:80ch}
+.hint b{color:var(--text-2)}
+.nowrap{white-space:nowrap}
+.indent{margin-left:24px}
+input.bad{border-color:var(--err)}
+.ask-body{color:var(--text-2);max-width:62ch}
+.ask-body ul{padding-left:18px;margin:6px 0}
+.ask-body p{margin:6px 0}
+dialog#askDlg{width:520px}
+button.danger-solid{background:var(--err);color:#fff}
+button.danger-solid:hover{background:#ea6a61}
+
+.subtabs{display:flex;gap:2px;border-bottom:1px solid var(--rule-soft);margin:-6px 0 16px}
+.subtabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);height:34px;padding:0 12px;font-weight:500}
+.subtabs button:hover{background:none;color:var(--text)}
+.subtabs button.active{color:var(--text);border-bottom-color:var(--accent)}
+.subtab{display:none}.subtab.active{display:block}
+
+.checklist-cams{display:flex;flex-direction:column;margin-top:4px}
+label.camline{display:grid;grid-template-columns:20px 120px 1fr auto;gap:10px;padding:6px 4px;border-bottom:1px solid var(--rule-soft);margin:0}
+label.camline:last-child{border-bottom:0}
+.steps-list{margin:0;padding-left:20px;color:var(--text-2)}
+.steps-list li{margin:6px 0}
+label.btnlike{display:inline-flex;flex-direction:row;align-items:center;height:30px;padding:0 14px;border-radius:var(--r);background:var(--accent);color:#fff;font-size:13px;font-weight:500;cursor:pointer}
+label.btnlike.ghostlike{background:var(--raised);color:var(--text);border:1px solid var(--rule)}
+
+.qgroup{margin-bottom:10px}
+.qgroup h3{margin:12px 0 4px;color:var(--text-2);font-size:12.5px}
+.urlrow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--rule-soft);flex-wrap:wrap}
+.qlabel{min-width:210px;color:var(--text);display:inline-flex;align-items:center;gap:8px}
+.qlabel input.num{width:64px;height:26px}
+code.url{flex:1;min-width:260px;background:var(--field);border:1px solid var(--rule-soft);border-radius:4px;padding:4px 8px;color:var(--text-2);overflow-x:auto;white-space:nowrap;user-select:all}
+tr.clickable{cursor:pointer}
+tr.cmd-detail td{background:#202327}
+.cmdbox{padding:6px 2px}
+.cmdbox .row{margin:6px 0}
+.cmdbox label{min-width:160px}

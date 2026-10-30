@@ -31,7 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Scene"
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 DEFAULT_PORT = 8765
 
 
@@ -113,12 +113,12 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
                 return {"ok": True, "status": r.status, "body": body}
         except urllib.error.HTTPError as e:
             if e.code == 401:
-                return {"ok": False, "status": 401, "error": "Authenticatie vereist of fout wachtwoord"}
+                return {"ok": False, "status": 401, "error": "Login required or wrong password"}
             last_err = f"HTTP {e.code}"
         except Exception as e:
             last_err = str(getattr(e, "reason", e))
         time.sleep(0.15)
-    return {"ok": False, "status": 0, "error": last_err or "onbekende fout"}
+    return {"ok": False, "status": 0, "error": last_err or "unknown error"}
 
 
 def save_dir():
@@ -133,7 +133,7 @@ def safe_name(name):
     base = os.path.basename(str(name or "bestand"))
     base = re.sub(r"[^A-Za-z0-9._ -]+", "_", base).strip(" .") or "bestand"
     if not re.search(r"\.(json|zip|s15|html|csv)$", base, re.I):
-        raise ValueError("Bestandstype niet toegelaten")
+        raise ValueError("File type not allowed")
     return base[:150]
 
 
@@ -158,6 +158,15 @@ def reveal(path=None):
         subprocess.Popen(["explorer", "/select,", target] if os.path.isfile(target) else ["explorer", target])
     else:
         subprocess.Popen(["xdg-open", os.path.dirname(target) if os.path.isfile(target) else target])
+
+
+def open_camera_page(url):
+    """Open de webpagina van een camera in de standaardbrowser (enkel http(s) naar een privé-IP)."""
+    u = urllib.parse.urlsplit(url)
+    if u.scheme not in ("http", "https") or not u.hostname or not target_allowed(u.hostname):
+        raise ValueError("Only camera addresses on the local network can be opened")
+    webbrowser.open(url)
+    return {"ok": True}
 
 
 def local_ipv4s():
@@ -185,7 +194,7 @@ def expand_targets(spec):
         if "/" in part:
             net = ipaddress.ip_network(part, strict=False)
             if net.num_addresses > 1024:
-                raise ValueError("Bereik te groot (max /22)")
+                raise ValueError("Range too large (max /22)")
             out += [str(h) for h in net.hosts()]
         elif "-" in part:
             a, b = part.split("-", 1)
@@ -268,7 +277,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.host_ok() or not self.origin_ok():
-            return self.send_json(403, {"ok": False, "error": "Niet toegelaten"})
+            return self.send_json(403, {"ok": False, "error": "Not allowed"})
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/ping":
             # publiek: enkel om te zien of de app al draait
@@ -283,7 +292,7 @@ class Handler(BaseHTTPRequestHandler):
         root = os.path.realpath(WEB_DIR)
         full = os.path.realpath(os.path.join(root, path.lstrip("/")))
         if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
-            return self.send_json(404, {"ok": False, "error": "niet gevonden"})
+            return self.send_json(404, {"ok": False, "error": "not found"})
         with open(full, "rb") as f:
             data = f.read()
         if full.endswith("index.html"):
@@ -297,19 +306,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if not self.host_ok() or not self.origin_ok():
-            return self.send_json(403, {"ok": False, "error": "Niet toegelaten"})
+            return self.send_json(403, {"ok": False, "error": "Not allowed"})
         if not self.token_ok():
             return self.send_json(401, {"ok": False, "error": "token"})
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
-            return self.send_json(415, {"ok": False, "error": "JSON verwacht"})
+            return self.send_json(415, {"ok": False, "error": "JSON expected"})
         path = urllib.parse.urlparse(self.path).path
         try:
             n = int(self.headers.get("Content-Length") or 0)
             if n > (60_000_000 if path == "/api/save" else 2_000_000):
-                raise ValueError("Verzoek te groot")
+                raise ValueError("Request too large")
             req = json.loads(self.rfile.read(n) or b"{}")
         except Exception as e:
-            return self.send_json(400, {"ok": False, "error": f"Ongeldig verzoek: {e}"})
+            return self.send_json(400, {"ok": False, "error": f"Invalid request: {e}"})
         try:
             if path == "/api/batch":
                 return self.send_json(200, self.batch(req))
@@ -324,11 +333,13 @@ class Handler(BaseHTTPRequestHandler):
                     p = None  # enkel binnen de eigen map
                 reveal(p)
                 return self.send_json(200, {"ok": True})
+            if path == "/api/open_url":
+                return self.send_json(200, open_camera_page(str(req.get("url", ""))))
             if path == "/api/quit":
                 self.send_json(200, {"ok": True})
                 threading.Timer(0.3, lambda: os._exit(0)).start()
                 return
-            return self.send_json(404, {"ok": False, "error": "onbekend endpoint"})
+            return self.send_json(404, {"ok": False, "error": "unknown endpoint"})
         except ValueError as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         except Exception as e:
@@ -337,14 +348,14 @@ class Handler(BaseHTTPRequestHandler):
     def batch(self, req):
         ip = str(req.get("ip", "")).strip()
         if not target_allowed(ip):
-            raise ValueError(f"Doel-IP {ip!r} niet toegelaten (enkel privé-adressen)")
+            raise ValueError(f"Target IP {ip!r} not allowed (private addresses only)")
         port = int(req.get("port") or 80)
         user, pw = req.get("user") or None, req.get("pass") or None
         delay = max(0, min(2000, int(req.get("delayMs", 20)))) / 1000.0
         timeout = float(req.get("timeout", 3.0))
         items = req.get("items") or []
         if len(items) > 1000:
-            raise ValueError("Max 1000 commando's per batch")
+            raise ValueError("At most 1000 commands per batch")
         results = []
         with cam_lock(ip):
             for i, it in enumerate(items):
@@ -366,7 +377,7 @@ class Handler(BaseHTTPRequestHandler):
     def scan(self, req):
         targets = expand_targets(req.get("range", ""))
         if not targets:
-            raise ValueError("Geen (toegelaten) adressen in bereik")
+            raise ValueError("No (allowed) addresses in range")
         port = int(req.get("port") or 80)
         user, pw = req.get("user") or None, req.get("pass") or None
         with ThreadPoolExecutor(max_workers=64) as ex:
@@ -394,7 +405,19 @@ def start_server(preferred):
             return srv, port
         except OSError:
             continue
-    raise SystemExit("Geen vrije poort gevonden tussen %d en %d" % (preferred, preferred + 10))
+    raise SystemExit("No free port between %d and %d" % (preferred, preferred + 10))
+
+
+def app_data_dir():
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    elif sys.platform.startswith("win"):
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    d = os.path.join(base, APP_NAME)
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
 def open_window(url):
@@ -410,7 +433,11 @@ def open_window(url):
     except Exception:
         pass
     webview.create_window(APP_NAME, url, width=1320, height=900, min_size=(900, 600))
-    webview.start()  # blokkeert tot het venster sluit
+    try:
+        # Niet-privé modus + vaste map: camera-lijst en instellingen blijven bewaard tussen sessies
+        webview.start(private_mode=False, storage_path=app_data_dir())
+    except TypeError:
+        webview.start()
     return True
 
 
@@ -431,7 +458,7 @@ def main():
         return
     srv, port = start_server(a.port)
     url = f"http://127.0.0.1:{port}/"
-    print(f"{APP_NAME} {VERSION} draait op {url}  (stoppen: venster sluiten of Ctrl+C)")
+    print(f"{APP_NAME} {VERSION} running at {url}  (stop: close the window or Ctrl+C)")
     try:
         if a.headless:
             while True:

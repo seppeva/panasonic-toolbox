@@ -1,24 +1,24 @@
-# Ondertekening (optioneel, voor geen beveiligingsmeldingen)
+# Code signing (optional, removes the first-launch warnings)
 
-Zonder ondertekening werkt alles, maar macOS en Windows tonen de eerste keer een waarschuwing. De installatieregels op de downloadpagina (Terminal/PowerShell) vermijden die melding nu al.
+Everything works without signing, but macOS and Windows show a warning the first time. The install commands on the download page (Terminal/PowerShell) already avoid that warning.
 
-## macOS: Apple Developer ID + notarisatie
-Kost een Apple Developer Program-lidmaatschap (99 USD/jaar; in de eurozone € 99). Daarna doet de workflow alles automatisch.
+## macOS: Apple Developer ID and notarization
+Requires an Apple Developer Program membership (USD 99 per year; € 99 in the euro area). The workflow then does everything automatically.
 
-1. Word lid op developer.apple.com/programs als *Individual*.
-2. Maak in Xcode of op developer.apple.com een **Developer ID Application**-certificaat aan en exporteer het (met private key) als `.p12` met een wachtwoord.
-3. Maak op appleid.apple.com een **app-specifiek wachtwoord** aan.
-4. Voeg in GitHub, onder **Settings › Secrets and variables › Actions**, deze secrets toe:
-   | Secret | Waarde |
+1. Enroll at developer.apple.com/programs as an *Individual*.
+2. Create a **Developer ID Application** certificate in Xcode or on developer.apple.com and export it (including the private key) as a `.p12` file with a password.
+3. Create an **app-specific password** at appleid.apple.com.
+4. In GitHub, under **Settings › Secrets and variables › Actions**, add these secrets:
+   | Secret | Value |
    |---|---|
-   | `APPLE_CERT_P12_BASE64` | `base64 -i certificaat.p12 \| pbcopy` |
-   | `APPLE_CERT_PASSWORD` | wachtwoord van de .p12 |
-   | `APPLE_ID` | je Apple ID (e-mail) |
-   | `APPLE_APP_PASSWORD` | het app-specifieke wachtwoord |
-   | `APPLE_TEAM_ID` | je Team ID (10 tekens, zie developer.apple.com › Membership) |
-5. Maak een nieuwe tag. De app en de .dmg worden ondertekend (hardened runtime), genotariseerd en "gestapled".
+   | `APPLE_CERT_P12_BASE64` | `base64 -i certificate.p12 \| pbcopy` |
+   | `APPLE_CERT_PASSWORD` | the .p12 password |
+   | `APPLE_ID` | your Apple ID (email) |
+   | `APPLE_APP_PASSWORD` | the app-specific password |
+   | `APPLE_TEAM_ID` | your Team ID (10 characters, see developer.apple.com › Membership) |
+5. Push a new version. The app and the .dmg are signed (hardened runtime), notarized and stapled.
 
 ## Windows
-- **SignPath Foundation** (gratis voor open-sourceprojecten met een OSI-licentie zoals MIT): aanvragen via signpath.org/apply. Na goedkeuring voeg je een stap toe die het installatieprogramma via de SignPath GitHub Action laat ondertekenen. SignPath vraagt om een vermelding "Free code signing provided by SignPath.io, certificate by SignPath Foundation" en een ondertekeningsbeleid.
-- **Azure Artifact Signing** (voorheen Trusted Signing) is voor individuele ontwikkelaars momenteel enkel beschikbaar in de VS en Canada. Organisaties in de EU kunnen wel, mits ze minstens drie jaar actief zijn.
-- **Zelf een certificaat kopen** (OV of EV) kan ook, maar sinds maart 2026 zijn die hooguit 460 dagen geldig en zit de sleutel verplicht op hardware (token of cloud-HSM).
+- **SignPath Foundation** (free for open source projects with an OSI license such as MIT): apply at signpath.org/apply. Once approved, add a step that signs the installer through the SignPath GitHub Action. SignPath asks for the credit "Free code signing provided by SignPath.io, certificate by SignPath Foundation" and a code signing policy.
+- **Azure Artifact Signing** (formerly Trusted Signing) is currently only available to individual developers in the USA and Canada. Organizations in the EU are eligible if they have a verifiable history of at least three years.
+- **Buying a certificate** (OV or EV) is also possible, but since March 2026 they are valid for at most 460 days and the key must be kept in hardware (token or cloud HSM).
