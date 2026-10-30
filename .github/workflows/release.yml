@@ -1,10 +1,22 @@
 name: Build & release
 
-# Maak een release door een tag te pushen:  git tag v2.0.0 && git push origin v2.0.0
+# Een release ontstaat automatisch bij elke push naar main die de app wijzigt.
+# Het versienummer komt uit app/panasonic_scene.py (VERSION = "x.y.z"); de tag vX.Y.Z wordt aangemaakt.
+# Een tag pushen (git tag v2.1.0 && git push origin v2.1.0) werkt ook en gaat dan voor.
 on:
   push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'installer/**'
+      - 'assets/icon.*'
+      - '.github/workflows/release.yml'
     tags: ['v*']
   workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -147,9 +159,16 @@ jobs:
 
   release:
     needs: build
-    if: always() && startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Versie bepalen
+        id: v
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then V="${GITHUB_REF_NAME#v}"; else V="$(grep -m1 '^VERSION = ' app/panasonic_scene.py | sed -E 's/VERSION = "(.*)"/\1/')"; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Versie: $V"
       - uses: actions/download-artifact@v4
         with:
           path: out
@@ -159,8 +178,16 @@ jobs:
           cd out
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      - name: Controleren of de belangrijkste downloads er zijn
+        run: |
+          test -f out/PanasonicScene-macOS-AppleSilicon.dmg
+          test -f out/PanasonicScene-Windows-Setup.exe
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: Panasonic Scene ${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: out/*
           generate_release_notes: true
           body: |
