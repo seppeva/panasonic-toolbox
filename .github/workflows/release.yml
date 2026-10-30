@@ -41,7 +41,7 @@ jobs:
     env:
       HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -162,7 +162,7 @@ jobs:
     if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Versie bepalen
         id: v
         run: |
