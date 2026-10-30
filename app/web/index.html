@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ps-token" content="__PS_TOKEN__">
 <title>Panasonic Scene</title>
 <meta name="description" content="Exporteer en importeer scene files (shading) van Panasonic PTZ-camera's, en wijs camera's toe aan een AW-RP150.">
 <link rel="icon" href="icon.svg">
@@ -164,7 +165,7 @@
     <div class="card">
       <h2>Stappenplan voor het paneel</h2>
       <p class="muted">Per camera: verbindingstype op LAN en het IP-adres invullen. Print het of zet het op je telefoon naast het paneel.</p>
-      <div class="row"><button id="rpChecklistBtn" class="secondary">Maak stappenplan</button><button id="rpPrintBtn" class="ghost">Print</button></div>
+      <div class="row"><button id="rpChecklistBtn" class="secondary">Maak stappenplan</button><button id="rpPrintBtn" class="ghost">Afdrukken</button><button id="rpSaveBtn" class="ghost">Bewaar als bestand</button></div>
       <div id="rpChecklist" class="checklist"></div>
     </div>
     <div class="card">
@@ -211,11 +212,14 @@
     <h3>Instellingen</h3>
     <label>Pauze tussen commando's (ms) <input id="setDelay" type="number" min="0" max="500" value="20"></label>
     <label>Wachttijd na scènewissel (ms) <input id="setSceneWait" type="number" min="500" max="8000" value="2000"></label>
+    <label class="check"><input type="checkbox" id="setUpdates"> Controleren op nieuwe versies (vraagt de laatste versie op bij GitHub; er wordt niets over jou of je camera's verstuurd)</label>
     <p class="muted small" id="aboutText"></p>
+    <p class="small"><a href="https://github.com/seppeva/panasonicscene/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonicscene/blob/main/LICENSE" target="_blank" rel="noopener">Licentie</a> &nbsp; <a href="https://github.com/seppeva/panasonicscene/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Open-sourcecomponenten</a></p>
     <div class="row between"><button type="button" class="danger" id="quitBtn">App afsluiten</button><span class="row"><button value="cancel" class="ghost">Annuleer</button><button value="ok" id="saveSettings">Bewaar</button></span></div>
   </form>
 </dialog>
 
+<div class="toast hidden" id="toast" role="status"><span id="toastText"></span><button class="ghost small" id="toastOpen">Toon in map</button><button class="icon" id="toastClose" aria-label="Sluiten">×</button></div>
 <div class="log-drawer hidden" id="logBox"><div class="log-head"><strong>Logboek</strong><button class="ghost small" id="logClose">Sluiten</button></div><pre id="log"></pre></div>
 
 <script src="catalog.js"></script>

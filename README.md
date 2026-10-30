@@ -2,13 +2,13 @@
 
 Desktop-app voor **macOS en Windows** om **scene files (alle shading-instellingen van een scène)** van Panasonic PTZ-camera's te exporteren en terug te importeren. Dat kan een AW-RP120/RP150 zelf niet. De app heeft ook een hulpmiddel om camera's snel toe te wijzen op een **AW-RP150**.
 
-Download- en uitlegpagina: **https://seppevanaken.be/panasonicscene**
+Download- en uitlegpagina: **https://seppeva.github.io/panasonicscene/** (later eventueel op een eigen domein, zie onderaan)
 
 ## Opbouw van deze repo
 
 | Pad | Wat |
 |---|---|
-| `index.html`, `install.sh`, `install.ps1`, `assets/` | De webpagina op seppevanaken.be/panasonicscene (GitHub Pages) met downloadknop, uitleg en installatiescripts |
+| `index.html`, `privacy.html`, `install.sh`, `install.ps1`, `assets/` | De webpagina (GitHub Pages) met downloadknop, uitleg, privacyverklaring en installatiescripts |
 | `app/panasonic_scene.py` | De app: lokale server op `127.0.0.1:8765` + eigen venster (pywebview) |
 | `app/web/` | De interface (HTML/JS/CSS) en `catalog.js` met alle scène-parameters per model |
 | `app/panasonic_scene.spec` | PyInstaller-configuratie (macOS .app en Windows .exe) |
@@ -16,6 +16,7 @@ Download- en uitlegpagina: **https://seppevanaken.be/panasonicscene**
 | `.github/workflows/release.yml` | Bouwt de Mac- en Windows-versies en zet ze in een GitHub Release |
 | `tools/` | Mock-camera voor tests en de generatoren van `catalog.js` |
 | `PARAMETERS.md` | Alle parameters in een scene file, per model |
+| `PRIVACY.md`, `SECURITY.md`, `SIGNING.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Privacyverklaring, beveiliging, ondertekening, licentie (MIT) en open-sourcecomponenten |
 
 ## Hoe het werkt
 
@@ -30,7 +31,7 @@ Alles draait lokaal. Er is geen internet nodig, behalve voor de optionele contro
 
 ## Een nieuwe versie publiceren
 
-1. Eenmalig: maak de **publieke** repo `seppeva/panasonicscene`, push deze bestanden naar `main` en zet *Settings › Pages › Deploy from branch › `main` / root* aan. Als `seppevanaken.be` al je GitHub Pages-domein is, verschijnt de pagina vanzelf op `seppevanaken.be/panasonicscene`.
+1. Eenmalig: maak de **publieke** repo `seppeva/panasonicscene`, push deze bestanden naar `main` en zet *Settings › Pages › Deploy from branch › `main` / root* aan. De pagina staat dan op `https://seppeva.github.io/panasonicscene/`.
 2. Maak een tag en push hem:
    ```bash
    git tag v2.0.0
@@ -44,7 +45,13 @@ Alles draait lokaal. Er is geen internet nodig, behalve voor de optionele contro
 
    Daarna maakt Actions een Release aan. De downloadknoppen wijzen naar `releases/latest/download/…` en werken dus meteen. Het versienummer in de app wordt uit de tag gehaald.
 
-De builds zijn niet ondertekend (geen Apple Developer ID of Windows-certificaat). Daardoor toont macOS of Windows de eerste keer een melding. De webpagina legt uit hoe je die wegklikt. De installatie via Terminal of PowerShell slaat die melding over.
+Elke release bevat `SHA256SUMS.txt`; de installatiescripts controleren de download daarmee. Zonder ondertekening toont macOS of Windows de eerste keer een melding. Hoe je ondertekening aanzet (Apple-notarisatie gaat automatisch zodra de secrets er zijn), staat in [SIGNING.md](SIGNING.md).
+
+## Eigen domein koppelen (later)
+- Subdomein, bv. `panasonicscene.seppevanaken.be`: zet bij je DNS-beheerder een **CNAME** naar `seppeva.github.io` en vul het domein in onder *Settings › Pages › Custom domain*.
+- `seppevanaken.be/panasonicscene`: kan alleen als het hoofddomein ook via een GitHub Pages-site van `seppeva` loopt.
+
+De installatieregels op de pagina passen zich vanzelf aan het adres aan.
 
 ## Ontwikkelen zonder camera's
 
@@ -68,7 +75,7 @@ python3 app/panasonic_scene.py   # of --browser / --headless
 }
 ```
 
-`raw` is exact het antwoord van de camera en wordt bij import opnieuw als commando gestuurd. Import gebeurt in drie rondes:
+Bestanden worden opgeslagen in *Downloads › Panasonic Scene* (bestaande bestanden worden nooit overschreven). `raw` is exact het antwoord van de camera en wordt bij import opnieuw als commando gestuurd. Import gebeurt in drie rondes:
 
 1. alles in volgorde, met de modi eerst;
 2. wat faalde nog eens;

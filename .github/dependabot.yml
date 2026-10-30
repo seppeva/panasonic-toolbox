@@ -1,0 +1,9 @@
+# Houdt GitHub Actions en de Python-bouwafhankelijkheden up-to-date (beveiligingsupdates).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+  - package-ecosystem: pip
+    directory: /app
+    schedule: { interval: monthly }

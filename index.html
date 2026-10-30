@@ -6,10 +6,13 @@
 <title>Panasonic Scene: scene files exporteren en importeren voor Panasonic PTZ-camera's</title>
 <meta name="description" content="Desktop-app voor Mac en Windows om de scene files (shading) van Panasonic PTZ-camera's te bewaren, te kopiëren en terug te zetten.">
 <link rel="icon" href="app/web/icon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <style>
+/* IBM Plex (SIL Open Font License) wordt zelf gehost: geen verbinding met Google of andere derden. */
+@font-face{font-family:"IBM Plex Sans";font-weight:400;font-style:normal;font-display:swap;src:url(assets/fonts/IBMPlexSans-Regular.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans";font-weight:400;font-style:italic;font-display:swap;src:url(assets/fonts/IBMPlexSans-Italic.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans";font-weight:500;font-style:normal;font-display:swap;src:url(assets/fonts/IBMPlexSans-Medium.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Sans";font-weight:600;font-style:normal;font-display:swap;src:url(assets/fonts/IBMPlexSans-SemiBold.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-weight:400;font-style:normal;font-display:swap;src:url(assets/fonts/IBMPlexMono-Regular.woff2) format("woff2")}
 :root{
   --page:#ffffff; --band:#f3f4f6; --ink:#16191d; --text:#3d4550; --muted:#6b7380; --rule:#dde1e6;
   --action:#1d5fd0; --action-hover:#174fb0;
@@ -183,7 +186,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <ol class="steps">
           <li><div><h3>Laptop in dezelfde IP-range zetten</h3><p>Geef je laptop een vast adres in de range van de camera's, bijvoorbeeld 192.168.0.200 met subnetmasker 255.255.255.0, en sluit hem aan op dezelfde switch.</p></div></li>
           <li><div><h3>Camera's zoeken</h3><p>Open Panasonic Scene en kies <em>Scan netwerk</em>. Elke PTZ verschijnt met model, titel en actieve scène. De controller zelf wordt niet als camera getoond.</p></div></li>
-          <li><div><h3>Exporteren</h3><p>Selecteer een of meer camera's en kies de actieve scène of scènes 1 tot 4 (tot 8 op de AW-UE160). Per camera krijg je een <span class="mono">.pscene.json</span>-bestand; meerdere camera's worden samen in een ZIP gezet.</p></div></li>
+          <li><div><h3>Exporteren</h3><p>Selecteer een of meer camera's en kies de actieve scène of scènes 1 tot 4 (tot 8 op de AW-UE160). Per camera krijg je een <span class="mono">.pscene.json</span>-bestand in de map Downloads › Panasonic Scene; meerdere camera's worden samen in een ZIP gezet.</p></div></li>
           <li><div><h3>Importeren</h3><p>Open het bestand, kies doelcamera en doelscène en start de import. De app bewaart eerst de huidige instellingen als back-up en leest na afloop alles terug ter controle.</p></div></li>
         </ol>
       </div>
@@ -205,7 +208,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
             <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-macOS-AppleSilicon.dmg">Mac met Apple-chip (M1–M4) <span class="size" data-asset="PanasonicScene-macOS-AppleSilicon.dmg"></span></a>
             <p class="alt">Oudere Mac met Intel-processor? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-macOS-Intel.dmg">Download de Intel-versie</a></p>
             <p class="term-label">Of installeer via Terminal. Zo krijg je geen beveiligingsmelding bij het openen:</p>
-            <div class="term"><code>curl -fsSL https://seppevanaken.be/panasonicscene/install.sh | bash</code><button type="button" data-copy>Kopiëren</button></div>
+            <div class="term"><code data-cmd="install.sh">curl -fsSL https://seppeva.github.io/panasonicscene/install.sh | bash</code><button type="button" data-copy>Kopiëren</button></div>
             <details>
               <summary>De app de eerste keer openen</summary>
               <ol>
@@ -222,7 +225,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
             <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-Windows-Setup.exe">Installatieprogramma <span class="size" data-asset="PanasonicScene-Windows-Setup.exe"></span></a>
             <p class="alt">Liever zonder installatie? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-Windows-Portable.zip">Download de portable versie</a></p>
             <p class="term-label">Of installeer via PowerShell:</p>
-            <div class="term"><code>irm https://seppevanaken.be/panasonicscene/install.ps1 | iex</code><button type="button" data-copy>Kopiëren</button></div>
+            <div class="term"><code data-cmd="install.ps1">irm https://seppeva.github.io/panasonicscene/install.ps1 | iex</code><button type="button" data-copy>Kopiëren</button></div>
             <details>
               <summary>De app de eerste keer openen</summary>
               <ol>
@@ -292,7 +295,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 <footer>
   <div class="wrap">
     <span>Panasonic Scene is gemaakt door <a href="https://seppevanaken.be">Seppe Van Aken</a>. <a href="https://github.com/seppeva/panasonicscene">Broncode op GitHub</a></span>
-    <span>Panasonic is een handelsmerk van Panasonic Holdings Corporation.</span>
+    <span><a href="privacy.html">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonicscene/blob/main/LICENSE">Licentie (MIT)</a> &nbsp; Panasonic is een handelsmerk van Panasonic Holdings Corporation.</span>
   </div>
 </footer>
 
@@ -342,6 +345,13 @@ async function detect() {
     }
   } catch { /* zonder versie-info blijft de pagina bruikbaar */ }
 })();
+// Installatieregels volgen het adres waarop deze pagina draait (github.io nu, later je eigen domein).
+if (location.protocol === 'https:') {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  document.querySelectorAll('[data-cmd]').forEach(c => {
+    c.textContent = c.dataset.cmd.endsWith('.sh') ? `curl -fsSL ${base}install.sh | bash` : `irm ${base}install.ps1 | iex`;
+  });
+}
 document.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
   const t = b.parentElement.querySelector('code').textContent;
   try { await navigator.clipboard.writeText(t); b.textContent = 'Gekopieerd'; setTimeout(() => { b.textContent = 'Kopiëren'; }, 1800); } catch { }

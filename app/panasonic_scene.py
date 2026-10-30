@@ -12,9 +12,13 @@ via /cgi-bin/aw_cam en /cgi-bin/aw_ptz.
 Starten vanuit broncode:  python3 panasonic_scene.py   [--browser] [--port 8765]
 """
 import argparse
+import base64
+import re
+import subprocess
 import ipaddress
 import json
 import os
+import secrets
 import socket
 import sys
 import threading
@@ -47,9 +51,23 @@ STATIC_TYPES = {
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",
+    ".woff2": "font/woff2",
 }
 
 CONFIG = {"origins": set(), "allow_public": False, "port": DEFAULT_PORT}
+# Willekeurige sleutel per sessie: enkel de eigen interface (die de sleutel in de pagina krijgt)
+# kan de API gebruiken. Beschermt tegen andere websites/processen die naar 127.0.0.1 sturen.
+SESSION_TOKEN = secrets.token_urlsafe(32)
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+                               "img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.github.com; "
+                               "object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Cross-Origin-Opener-Policy": "same-origin",
+}
 _cam_locks = {}
 _cam_locks_guard = threading.Lock()
 
@@ -101,6 +119,45 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
             last_err = str(getattr(e, "reason", e))
         time.sleep(0.15)
     return {"ok": False, "status": 0, "error": last_err or "onbekende fout"}
+
+
+def save_dir():
+    home = os.path.expanduser("~")
+    d = os.path.join(home, "Downloads") if os.path.isdir(os.path.join(home, "Downloads")) else home
+    d = os.path.join(d, "Panasonic Scene")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def safe_name(name):
+    base = os.path.basename(str(name or "bestand"))
+    base = re.sub(r"[^A-Za-z0-9._ -]+", "_", base).strip(" .") or "bestand"
+    if not re.search(r"\.(json|zip|s15|html|csv)$", base, re.I):
+        raise ValueError("Bestandstype niet toegelaten")
+    return base[:150]
+
+
+def save_file(name, data):
+    d = save_dir()
+    stem, ext = os.path.splitext(safe_name(name))
+    path = os.path.join(d, stem + ext)
+    n = 1
+    while os.path.exists(path):  # nooit overschrijven
+        path = os.path.join(d, f"{stem} ({n}){ext}")
+        n += 1
+    with open(path, "xb") as f:
+        f.write(data)
+    return path
+
+
+def reveal(path=None):
+    target = path if path and os.path.exists(path) else save_dir()
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", target] if os.path.isfile(target) else ["open", target])
+    elif sys.platform.startswith("win"):
+        subprocess.Popen(["explorer", "/select,", target] if os.path.isfile(target) else ["explorer", target])
+    else:
+        subprocess.Popen(["xdg-open", os.path.dirname(target) if os.path.isfile(target) else target])
 
 
 def local_ipv4s():
@@ -157,13 +214,19 @@ def probe(ip, port, user, password):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanasonicScene/" + VERSION
+    server_version = "PanasonicScene"
+    sys_version = ""
 
     def log_message(self, fmt, *args):
         if os.environ.get("PSCENE_VERBOSE"):
             sys.stderr.write("[app] " + (fmt % args) + "\n")
 
-    # Alleen de eigen interface (zelfde origin) of expliciet toegelaten dev-origins.
+    # ---- beveiliging ----
+    def host_ok(self):
+        """DNS-rebinding: enkel verzoeken naar 127.0.0.1/localhost op onze eigen poort."""
+        host = (self.headers.get("Host") or "").lower()
+        return host in (f"127.0.0.1:{CONFIG['port']}", f"localhost:{CONFIG['port']}")
+
     def origin_ok(self):
         origin = self.headers.get("Origin")
         if not origin:
@@ -171,14 +234,21 @@ class Handler(BaseHTTPRequestHandler):
         own = {f"http://127.0.0.1:{CONFIG['port']}", f"http://localhost:{CONFIG['port']}"}
         return origin in own or origin in CONFIG["origins"]
 
+    def token_ok(self):
+        return secrets.compare_digest(self.headers.get("X-PS-Token", ""), SESSION_TOKEN)
+
     def cors(self):
         origin = self.headers.get("Origin")
-        if origin and origin in CONFIG["origins"]:
+        if origin and origin in CONFIG["origins"]:  # enkel voor ontwikkeling (--allow-origin)
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
-            self.send_header("Access-Control-Allow-Private-Network", "true")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-PS-Token")
+
+    def end_headers(self):
+        for k, v in SECURITY_HEADERS.items():
+            self.send_header(k, v)
+        super().end_headers()
 
     def send_json(self, code, obj):
         data = json.dumps(obj).encode()
@@ -191,39 +261,51 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_OPTIONS(self):
-        self.send_response(204 if self.origin_ok() else 403)
+        self.send_response(204 if self.host_ok() and self.origin_ok() else 403)
         self.cors()
         self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_GET(self):
-        if not self.origin_ok():
-            return self.send_json(403, {"ok": False, "error": "Origin niet toegelaten"})
+        if not self.host_ok() or not self.origin_ok():
+            return self.send_json(403, {"ok": False, "error": "Niet toegelaten"})
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/ping":
+            # publiek: enkel om te zien of de app al draait
+            return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION})
+        if path == "/api/info":
+            if not self.token_ok():
+                return self.send_json(401, {"ok": False, "error": "token"})
             return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION,
                                         "localIps": local_ipv4s(), "platform": sys.platform})
         if path in ("", "/"):
             path = "/index.html"
-        full = os.path.abspath(os.path.join(WEB_DIR, path.lstrip("/")))
-        if not full.startswith(os.path.abspath(WEB_DIR)) or not os.path.isfile(full):
+        root = os.path.realpath(WEB_DIR)
+        full = os.path.realpath(os.path.join(root, path.lstrip("/")))
+        if os.path.commonpath([root, full]) != root or not os.path.isfile(full):
             return self.send_json(404, {"ok": False, "error": "niet gevonden"})
         with open(full, "rb") as f:
             data = f.read()
+        if full.endswith("index.html"):
+            data = data.replace(b"__PS_TOKEN__", SESSION_TOKEN.encode())
         self.send_response(200)
         self.send_header("Content-Type", STATIC_TYPES.get(os.path.splitext(full)[1].lower(), "application/octet-stream"))
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-store" if full.endswith(".html") else "no-cache")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
 
     def do_POST(self):
-        if not self.origin_ok():
-            return self.send_json(403, {"ok": False, "error": "Origin niet toegelaten"})
+        if not self.host_ok() or not self.origin_ok():
+            return self.send_json(403, {"ok": False, "error": "Niet toegelaten"})
+        if not self.token_ok():
+            return self.send_json(401, {"ok": False, "error": "token"})
+        if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return self.send_json(415, {"ok": False, "error": "JSON verwacht"})
         path = urllib.parse.urlparse(self.path).path
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            if n > 2_000_000:
+            if n > (60_000_000 if path == "/api/save" else 2_000_000):
                 raise ValueError("Verzoek te groot")
             req = json.loads(self.rfile.read(n) or b"{}")
         except Exception as e:
@@ -233,6 +315,15 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, self.batch(req))
             if path == "/api/scan":
                 return self.send_json(200, self.scan(req))
+            if path == "/api/save":
+                data = base64.b64decode(req.get("dataB64") or "", validate=True)
+                return self.send_json(200, {"ok": True, "path": save_file(req.get("name"), data), "dir": save_dir()})
+            if path == "/api/reveal":
+                p = req.get("path")
+                if p and os.path.commonpath([save_dir(), os.path.realpath(p)]) != save_dir():
+                    p = None  # enkel binnen de eigen map
+                reveal(p)
+                return self.send_json(200, {"ok": True})
             if path == "/api/quit":
                 self.send_json(200, {"ok": True})
                 threading.Timer(0.3, lambda: os._exit(0)).start()
@@ -313,6 +404,11 @@ def open_window(url):
     except Exception:
         webbrowser.open(url)
         return False
+    try:
+        webview.settings["ALLOW_DOWNLOADS"] = True
+        webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+    except Exception:
+        pass
     webview.create_window(APP_NAME, url, width=1320, height=900, min_size=(900, 600))
     webview.start()  # blokkeert tot het venster sluit
     return True

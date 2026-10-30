@@ -6,6 +6,9 @@ HERE = os.path.abspath(SPECPATH)
 ROOT = os.path.dirname(HERE)
 VERSION = re.search(r'VERSION = "([^"]+)"', open(os.path.join(HERE, 'panasonic_scene.py')).read()).group(1)
 NAME = 'Panasonic Scene'
+# Ondertekening (enkel als het certificaat in de build beschikbaar is, zie SIGNING.md)
+SIGN_ID = os.environ.get('MAC_SIGN_IDENTITY') or None
+ENTITLEMENTS = os.path.join(HERE, 'entitlements.plist') if SIGN_ID else None
 
 a = Analysis(
     [os.path.join(HERE, 'panasonic_scene.py')],
@@ -18,7 +21,8 @@ pyz = PYZ(a.pure)
 
 if sys.platform == 'darwin':
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=NAME, console=False,
-              icon=os.path.join(ROOT, 'assets', 'icon.icns'))
+              icon=os.path.join(ROOT, 'assets', 'icon.icns'),
+              codesign_identity=SIGN_ID, entitlements_file=ENTITLEMENTS)
     coll = COLLECT(exe, a.binaries, a.datas, name=NAME)
     app = BUNDLE(
         coll,

@@ -1,4 +1,4 @@
-/* Panasonic PTZ Scene Files — seppevanaken.be/panasonicscene
+/* Panasonic Scene — interface van de lokale app
  * Praat via de lokale bridge (bridge/panasonic_scene_bridge.py) met de camera's.
  */
 'use strict';
@@ -96,13 +96,16 @@ function decode(p, raw) {
 }
 
 /* ------------------------------------------------------------------ bridge */
+const TOKEN = document.querySelector('meta[name="ps-token"]')?.content || '';
+let tokenReloaded = false;
 async function bridgeFetch(path, body, timeoutMs = 120000) {
   const ctl = new AbortController();
   const to = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const opts = { signal: ctl.signal };
-    if (body !== undefined) { opts.method = 'POST'; opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
+    const opts = { signal: ctl.signal, headers: { 'X-PS-Token': TOKEN } };
+    if (body !== undefined) { opts.method = 'POST'; opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     const r = await fetch(state.bridgeUrl.replace(/\/$/, '') + path, opts);
+    if (r.status === 401 && !tokenReloaded) { tokenReloaded = true; location.reload(); } // app herstart: nieuwe sessiesleutel
     const j = await r.json().catch(() => ({ ok: false, error: 'Ongeldig antwoord van bridge' }));
     if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
     return j;
@@ -112,7 +115,7 @@ async function checkBridge() {
   const dot = $('#bridgeDot'), txt = $('#bridgeText');
   dot.className = 'dot'; txt.textContent = 'Verbinden…';
   try {
-    const j = await bridgeFetch('/api/ping', undefined, 4000);
+    const j = await bridgeFetch('/api/info', undefined, 4000);
     state.bridgeOk = true; state.localIps = j.localIps || [];
     state.version = j.version;
     dot.className = 'dot ok'; txt.textContent = 'Verbonden'; txt.title = `Panasonic Scene ${j.version}`;
@@ -197,7 +200,7 @@ function makeFile(cam, scenes) {
   const prof = profileFor(cam.model);
   return {
     format: FORMAT_ID, version: 1,
-    generator: 'seppevanaken.be/panasonicscene',
+    generator: 'Panasonic Scene ' + (state.version || ''),
     created: new Date().toISOString(),
     camera: { ip: cam.ip, port: cam.port || 80, model: cam.model, title: cam.title || '', profile: prof.fam },
     scenes,
@@ -211,12 +214,32 @@ function fileName(cam, scenes, suffix = '') {
 }
 
 /* ------------------------------------------------------------------ downloads + zip */
-function download(name, blobOrText, type = 'application/json') {
+const IN_APP = TOKEN && !TOKEN.startsWith('__');
+async function download(name, blobOrText, type = 'application/json') {
   const blob = blobOrText instanceof Blob ? blobOrText : new Blob([blobOrText], { type });
+  if (IN_APP) {
+    // In de app: zelf opslaan in Downloads/Panasonic Scene (werkt in elk venster, nooit overschrijven)
+    try {
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      const j = await bridgeFetch('/api/save', { name, dataB64: btoa(bin) });
+      log(`Opgeslagen: ${j.path}`);
+      toast(`Opgeslagen in ${j.dir}`, j.path);
+      return j.path;
+    } catch (e) { log(`Opslaan mislukt: ${e.message}`, 'FOUT'); alert(`Opslaan mislukt: ${e.message}`); return null; }
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+let toastTimer;
+$('#toastClose').onclick = () => $('#toast').classList.add('hidden');
+function toast(text, path) {
+  $('#toastText').textContent = text;
+  $('#toastOpen').onclick = () => bridgeFetch('/api/reveal', { path }).catch(() => { });
+  $('#toast').classList.remove('hidden');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.add('hidden'), 8000);
 }
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 const crc32 = u8 => { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_T[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
@@ -267,13 +290,14 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'import') renderImports();
 }));
 $('#bridgeSettingsBtn').onclick = () => {
-  $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
+  $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait; $('#setUpdates').checked = store.get('updateCheck', true);
   $('#aboutText').textContent = `Panasonic Scene ${state.version || ''}. Draait lokaal op ${location.host}. IP-adressen van deze laptop: ${state.localIps.join(', ') || '–'}`;
   $('#settingsDlg').showModal();
 };
 $('#saveSettings').onclick = () => {
   state.delayMs = +$('#setDelay').value || 0; state.sceneWait = +$('#setSceneWait').value || 2000;
   store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
+  store.set('updateCheck', $('#setUpdates').checked);
 };
 $('#quitBtn').onclick = async () => {
   if (!confirm('Panasonic Scene afsluiten?')) return;
@@ -286,12 +310,13 @@ setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 30
 /* Nieuwe versie beschikbaar? (laatste GitHub-release; stil overslaan als je offline bent) */
 const REPO = 'seppeva/panasonicscene';
 async function checkUpdate() {
+  if (!store.get('updateCheck', true)) return;
   try {
     const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { cache: 'no-store' }); if (!r.ok) return;
     const rel = await r.json(); const latest = String(rel.tag_name || '').replace(/^v/, '');
     const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
     if (latest && state.version && newer(latest, state.version)) {
-      $('#updateText').innerHTML = `Nieuwe versie ${esc(latest)} beschikbaar (je hebt ${esc(state.version)}). <a href="https://seppevanaken.be/panasonicscene/" target="_blank" rel="noopener">Download de update</a>`;
+      $('#updateText').innerHTML = `Nieuwe versie ${esc(latest)} beschikbaar (je hebt ${esc(state.version)}). <a href="https://github.com/${REPO}/releases/latest" target="_blank" rel="noopener">Download de update</a>`;
       $('#updateBox').classList.remove('hidden');
     }
   } catch { /* offline op de set: geen probleem */ }
@@ -684,6 +709,12 @@ $('#rpChecklistBtn').onclick = () => {
     </ol></div>`).join('');
 };
 $('#rpPrintBtn').onclick = () => { if (!$('#rpChecklist').innerHTML) $('#rpChecklistBtn').click(); window.print(); };
+$('#rpSaveBtn').onclick = () => {
+  if (!$('#rpChecklist').innerHTML) $('#rpChecklistBtn').click();
+  if (!$('#rpChecklist').innerHTML) return;
+  const page = `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8"><title>RP150-stappenplan</title><style>body{font:15px/1.5 -apple-system,'Segoe UI',sans-serif;max-width:760px;margin:30px auto;color:#111}.cam{border-top:1px solid #bbb;padding:10px 0;break-inside:avoid}h4{margin:0 0 4px}.kbd{border:1px solid #999;border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:13px;font-weight:600}.muted,.small{color:#555}</style></head><body><h1>RP150-stappenplan</h1>${$('#rpChecklist').innerHTML}</body></html>`;
+  download('RP150-stappenplan.html', page, 'text/html');
+};
 
 /* ---- Network.s15 (experimenteel): heuristische analyse ---- */
 const s15 = { a: null, b: null, name: '', layout: null };

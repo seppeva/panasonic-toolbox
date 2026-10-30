@@ -26,6 +26,8 @@ jobs:
             arch: x64
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.arch == 'Intel' }}
+    env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,8 +53,35 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r app/requirements.txt
 
+      - name: macOS — certificaat laden (enkel als secrets ingesteld zijn)
+        if: matrix.target == 'mac' && env.HAS_APPLE_CERT == 'true'
+        env:
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/build.keychain-db"; KP="$(uuidgen)"
+          echo "$APPLE_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID="$(security find-identity -v -p codesigning "$KC" | grep 'Developer ID Application' | head -1 | sed -E 's/.*"(.*)"/\1/')"
+          echo "MAC_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
       - name: PyInstaller
         run: pyinstaller --noconfirm --clean --distpath dist --workpath build app/panasonic_scene.spec
+
+      - name: Build-info (versies van gebundelde pakketten + architectuur)
+        shell: bash
+        run: |
+          { echo "Panasonic Scene build ${{ matrix.target }}-${{ matrix.arch }}"; python -c "import platform,sys;print(platform.platform(), platform.machine(), sys.version)"; pip freeze; } > "dist/build-info-${{ matrix.target }}-${{ matrix.arch }}.txt"
+          if [[ "${{ matrix.target }}" == "mac" ]]; then
+            file "dist/Panasonic Scene.app/Contents/MacOS/Panasonic Scene" | tee -a "dist/build-info-${{ matrix.target }}-${{ matrix.arch }}.txt"
+            if [[ "${{ matrix.arch }}" == "AppleSilicon" ]]; then file "dist/Panasonic Scene.app/Contents/MacOS/Panasonic Scene" | grep -q arm64; fi
+          fi
 
       - name: Rooktest (server start en antwoordt)
         shell: bash
@@ -64,13 +93,37 @@ jobs:
           curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Scene</title>"
           curl -sf -X POST http://127.0.0.1:8799/api/quit || true
 
+      - name: macOS — notariseren (enkel met Apple Developer-account)
+        if: matrix.target == 'mac' && env.MAC_SIGN_IDENTITY != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cd dist
+          codesign --verify --deep --strict --verbose=2 "Panasonic Scene.app"
+          ditto -c -k --keepParent "Panasonic Scene.app" notarize.zip
+          xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+          xcrun stapler staple "Panasonic Scene.app"
+          rm notarize.zip
+
       - name: macOS — DMG en ZIP
         if: matrix.target == 'mac'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd dist
           ditto -c -k --sequesterRsrc --keepParent "Panasonic Scene.app" "PanasonicScene-macOS-${{ matrix.arch }}.zip"
           mkdir dmg && cp -R "Panasonic Scene.app" dmg/ && ln -s /Applications dmg/Applications
-          hdiutil create -volname "Panasonic Scene" -srcfolder dmg -ov -format UDZO "PanasonicScene-macOS-${{ matrix.arch }}.dmg"
+          DMG="PanasonicScene-macOS-${{ matrix.arch }}.dmg"
+          hdiutil create -volname "Panasonic Scene" -srcfolder dmg -ov -format UDZO "$DMG"
+          if [[ -n "$MAC_SIGN_IDENTITY" ]]; then
+            codesign --sign "$MAC_SIGN_IDENTITY" --timestamp "$DMG"
+            xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            xcrun stapler staple "$DMG"
+          fi
 
       - name: Windows — installer en portable ZIP
         if: matrix.target == 'win'
@@ -87,6 +140,7 @@ jobs:
         with:
           name: build-${{ matrix.target }}-${{ matrix.arch }}
           path: |
+            dist/build-info-*.txt
             dist/*.dmg
             dist/*.zip
             dist/*Setup.exe
@@ -100,8 +154,15 @@ jobs:
         with:
           path: out
           merge-multiple: true
-      - run: ls -la out
+      - name: Checksums (SHA256SUMS.txt)
+        run: |
+          cd out
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           files: out/*
           generate_release_notes: true
+          body: |
+            Download via https://seppeva.github.io/panasonicscene/
+            Controleer de integriteit met SHA256SUMS.txt (de installatiescripts doen dat automatisch).
