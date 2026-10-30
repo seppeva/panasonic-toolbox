@@ -111,11 +111,17 @@ async function bridgeFetch(path, body, timeoutMs = 120000) {
     return j;
   } finally { clearTimeout(to); }
 }
-async function checkBridge() {
+async function checkBridge(quiet = false) {
   const dot = $('#bridgeDot'), txt = $('#bridgeText');
-  dot.className = 'dot'; txt.textContent = 'Connecting…';
-  try {
-    const j = await bridgeFetch('/api/info', undefined, 4000);
+  if (!quiet) { dot.className = 'dot'; txt.textContent = 'Connecting…'; }
+  // a few tries before reporting a lost connection: the app can be busy for a moment (sleep, network change)
+  let j = null, err = null;
+  for (let i = 0; i < (quiet ? 1 : 3) && !j; i++) {
+    try { j = await bridgeFetch('/api/info', undefined, 8000); }
+    catch (e) { err = e; if (i < 2 && !quiet) await new Promise(r => setTimeout(r, 1000)); }
+  }
+  if (j) {
+    const wasDown = !state.bridgeOk; state.bridgeMiss = 0;
     state.bridgeOk = true; state.localIps = j.localIps || [];
     state.version = j.version;
     dot.className = 'dot ok'; txt.textContent = 'Connected'; txt.title = `Panasonic Toolbox ${j.version}`;
@@ -124,15 +130,19 @@ async function checkBridge() {
       const ip = state.localIps.find(i => i.startsWith('192.168.')) || state.localIps[0];
       $('#scanRange').value = ip.replace(/\.\d+$/, '.0/24');
     }
-    log(`App ${j.version} ready. This computer's IP addresses: ${state.localIps.join(', ') || '-'}`);
-    checkUpdate();
-  } catch (e) {
+    if (wasDown) { log(`App ${j.version} ready. This computer's IP addresses: ${state.localIps.join(', ') || '-'}`); checkUpdate(); }
+  } else if (quiet && state.bridgeOk && (state.bridgeMiss = (state.bridgeMiss || 0) + 1) < 2) {
+    return true; // one missed background check is not yet a lost connection
+  } else {
     state.bridgeOk = false;
-    dot.className = 'dot err'; txt.textContent = 'Not connected';
+    dot.className = 'dot err'; txt.textContent = 'Not connected'; txt.title = err ? err.message : '';
     $('#bridgeHelp').classList.remove('hidden');
   }
   return state.bridgeOk;
 }
+// keep watching: reconnect on its own when the app is back, and notice when it goes away
+setInterval(() => { if (document.visibilityState === 'visible') checkBridge(true); }, 10000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !state.bridgeOk) checkBridge(true); });
 function camAuth(cam) {
   return { user: cam.user ?? $('#authUser').value.trim(), pass: cam.pass ?? $('#authPass').value };
 }
@@ -339,7 +349,7 @@ $('#quitBtn').onclick = async () => {
   try { await bridgeFetch('/api/quit', {}); } catch { }
   document.body.innerHTML = '<p style="padding:40px;font:15px system-ui;color:#aaa">Panasonic Toolbox has quit. You can close this window.</p>';
 };
-$('#retryBridge').onclick = checkBridge;
+$('#retryBridge').onclick = () => checkBridge();
 setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 3000).then(() => { if (!state.bridgeOk) checkBridge(); }).catch(() => { if (state.bridgeOk) checkBridge(); }); }, 10000);
 
 /* New version available? (latest GitHub release; skipped silently when offline) */
@@ -1400,6 +1410,17 @@ $('#rpAddRow').onclick = () => {
   const last = state.rp[state.rp.length - 1];
   track('Add row', () => state.rp.push({ cam: last ? last.cam + 1 : 1, ip: last ? last.ip.replace(/\d+$/, n => +n + 1) : '192.168.0.11', port: 80, conn: 'lan' }));
   saveRp(); renderRp();
+};
+$('#rpAddRows').onclick = async () => {
+  const last = state.rp[state.rp.length - 1];
+  const ok = await ask({ title: 'Add several rows', ok: 'Add rows', body: `<div class="row wrap"><label class="w90">Number of rows <input id="askCount" type="number" min="1" max="200" value="4"></label><label class="w140">First CAM <input id="askCam" type="number" min="1" max="200" value="${last ? last.cam + 1 : 1}"></label><label class="w140">First IP <input id="askIp" class="mono" value="${esc(last ? ipStr(ipNum(last.ip) + 1) : '192.168.0.11')}"></label><label class="w90">IP step <input id="askStep" type="number" min="1" max="50" value="1"></label></div><p class="hint">The CAM numbers and IP addresses count up from the first one. You can change them afterwards, one by one or with the tools above the table.</p>` });
+  if (!ok) return;
+  const n = Math.max(1, Math.min(200, +$('#askCount').value || 1)), cam0 = Math.max(1, +$('#askCam').value || 1), step = Math.max(1, +$('#askStep').value || 1), ip0 = $('#askIp').value.trim();
+  if (!validIp(ip0)) return info('Invalid first IP address', esc(ip0));
+  const taken = state.rp.map(r => r.cam).filter(c => c >= cam0 && c < cam0 + n);
+  if (taken.length && !await ask({ title: 'CAM numbers already used', body: `<p>CAM ${taken.join(', ')} already exist${taken.length === 1 ? 's' : ''}. Add the rows anyway?</p>`, ok: 'Add anyway' })) return;
+  track(`Add ${n} rows`, () => { for (let i = 0; i < n; i++) state.rp.push({ cam: cam0 + i, ip: ipStr(ipNum(ip0) + i * step), port: 80, conn: 'lan' }); state.rp.sort((a, b) => a.cam - b.cam); });
+  saveRp(); renderRp(); if (s15.a) analyzeS15();
 };
 const s15 = { a: null, b: null, name: '', layout: null };
 $('#s15Input').onchange = async e => { const f = e.target.files[0]; if (!f) return; s15.a = new Uint8Array(await f.arrayBuffer()); s15.name = f.name; s15.b = null; s15.layout = null; analyzeS15(); e.target.value = ''; };

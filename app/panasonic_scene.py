@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 DEFAULT_PORT = 8765
 
 
@@ -242,7 +242,24 @@ def open_camera_page(url):
     return {"ok": True}
 
 
+_ips_cache = {"t": 0.0, "ips": []}
+_ips_guard = threading.Lock()
+
+
+def _hostname_ips(out):
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            out.add(info[4][0])
+    except OSError:
+        pass
+
+
 def local_ipv4s():
+    """This computer's IPv4 addresses. Cached for a few seconds; the host name lookup can hang for
+    seconds on macOS (mDNS), so it runs in a thread with a short limit and never blocks the app."""
+    with _ips_guard:
+        if time.time() - _ips_cache["t"] < 5:
+            return list(_ips_cache["ips"])
     ips = set()
     for probe in ("192.168.0.1", "10.0.0.1", "172.16.0.1", "8.8.8.8"):
         try:
@@ -252,12 +269,15 @@ def local_ipv4s():
             s.close()
         except OSError:
             pass
-    try:
-        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-            ips.add(info[4][0])
-    except OSError:
-        pass
-    return sorted(i for i in ips if not i.startswith("127."))
+    extra = set()
+    t = threading.Thread(target=_hostname_ips, args=(extra,), daemon=True)
+    t.start()
+    t.join(0.5)
+    ips |= extra
+    out = sorted(i for i in ips if not i.startswith("127.") and not i.startswith("0."))
+    with _ips_guard:
+        _ips_cache.update(t=time.time(), ips=out)
+    return out
 
 
 def expand_targets(spec):
