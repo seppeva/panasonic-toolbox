@@ -16,7 +16,9 @@ const store = {
 };
 
 const state = {
-  bridgeUrl: store.get('bridgeUrl', location.protocol === 'http:' && location.port === '8765' ? location.origin : 'http://127.0.0.1:8765'),
+  // De interface wordt geserveerd door de lokale app zelf: zelfde origin.
+  bridgeUrl: location.protocol.startsWith('http') ? location.origin : 'http://127.0.0.1:8765',
+  version: '',
   delayMs: store.get('delayMs', 20),
   sceneWait: store.get('sceneWait', 2000),
   bridgeOk: false,
@@ -96,7 +98,7 @@ async function bridgeFetch(path, body, timeoutMs = 120000) {
   const ctl = new AbortController();
   const to = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const opts = { signal: ctl.signal, targetAddressSpace: 'loopback' }; // Chrome Local Network Access hint
+    const opts = { signal: ctl.signal };
     if (body !== undefined) { opts.method = 'POST'; opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify(body); }
     const r = await fetch(state.bridgeUrl.replace(/\/$/, '') + path, opts);
     const j = await r.json().catch(() => ({ ok: false, error: 'Ongeldig antwoord van bridge' }));
@@ -110,16 +112,18 @@ async function checkBridge() {
   try {
     const j = await bridgeFetch('/api/ping', undefined, 4000);
     state.bridgeOk = true; state.localIps = j.localIps || [];
-    dot.className = 'dot ok'; txt.textContent = `Bridge verbonden · v${j.version}`;
+    state.version = j.version;
+    dot.className = 'dot ok'; txt.textContent = `Verbonden · v${j.version}`;
     $('#bridgeHelp').classList.add('hidden');
     if (!$('#scanRange').value && state.localIps.length) {
       const ip = state.localIps.find(i => i.startsWith('192.168.')) || state.localIps[0];
       $('#scanRange').value = ip.replace(/\.\d+$/, '.0/24');
     }
-    log(`Bridge OK (${state.bridgeUrl}), laptop-IP's: ${state.localIps.join(', ') || '-'}`);
+    log(`App v${j.version} OK, IP-adressen van deze laptop: ${state.localIps.join(', ') || '-'}`);
+    checkUpdate();
   } catch (e) {
     state.bridgeOk = false;
-    dot.className = 'dot err'; txt.textContent = 'Bridge niet verbonden';
+    dot.className = 'dot err'; txt.textContent = 'Niet verbonden';
     $('#bridgeHelp').classList.remove('hidden');
   }
   return state.bridgeOk;
@@ -260,15 +264,36 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
 }));
-$('#bridgeSettingsBtn').onclick = () => { $('#setBridgeUrl').value = state.bridgeUrl; $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait; $('#settingsDlg').showModal(); };
+$('#bridgeSettingsBtn').onclick = () => {
+  $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
+  $('#aboutText').textContent = `Panasonic Scene v${state.version || '?'} · draait lokaal op ${location.host}. Laptop-IP's: ${state.localIps.join(', ') || '–'}`;
+  $('#settingsDlg').showModal();
+};
 $('#saveSettings').onclick = () => {
-  state.bridgeUrl = $('#setBridgeUrl').value.trim() || 'http://127.0.0.1:8765';
   state.delayMs = +$('#setDelay').value || 0; state.sceneWait = +$('#setSceneWait').value || 2000;
-  store.set('bridgeUrl', state.bridgeUrl); store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
-  checkBridge();
+  store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
+};
+$('#quitBtn').onclick = async () => {
+  if (!confirm('Panasonic Scene afsluiten?')) return;
+  try { await bridgeFetch('/api/quit', {}); } catch { }
+  document.body.innerHTML = '<p style="padding:40px;font:16px system-ui;color:#aaa">De app is afgesloten. Je mag dit venster sluiten.</p>';
 };
 $('#retryBridge').onclick = checkBridge;
-$('#localAppLink').href = 'http://127.0.0.1:8765/';
+setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 3000).then(() => { if (!state.bridgeOk) checkBridge(); }).catch(() => { if (state.bridgeOk) checkBridge(); }); }, 10000);
+
+/* Nieuwe versie beschikbaar? (laatste GitHub-release; stil overslaan als je offline bent) */
+const REPO = 'seppeva/panasonicscene';
+async function checkUpdate() {
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { cache: 'no-store' }); if (!r.ok) return;
+    const rel = await r.json(); const latest = String(rel.tag_name || '').replace(/^v/, '');
+    const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+    if (latest && state.version && newer(latest, state.version)) {
+      $('#updateText').innerHTML = `Nieuwe versie ${esc(latest)} beschikbaar (je hebt ${esc(state.version)}). <a href="https://seppevanaken.be/panasonicscene/" target="_blank" rel="noopener">Download de update</a>`;
+      $('#updateBox').classList.remove('hidden');
+    }
+  } catch { /* offline op de set: geen probleem */ }
+}
 
 /* ------------------------------------------------------------------ UI: cameras */
 const saveCams = () => store.set('cameras', state.cameras.map(({ ip, port, model, title, selected }) => ({ ip, port, model, title, selected })));

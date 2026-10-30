@@ -9,7 +9,7 @@ from urllib.parse import urlparse, parse_qs
 
 HOST, PORT, MODEL, TITLE = sys.argv[1], int(sys.argv[2]), sys.argv[3], (sys.argv[4] if len(sys.argv) > 4 else "")
 root = os.path.join(os.path.dirname(__file__), "..")
-cat = json.loads(re.search(r"window\.PANA_CATALOG = (.*);\s*$", open(os.path.join(root, "catalog.js")).read(), re.S).group(1))
+cat = json.loads(re.search(r"window\.PANA_CATALOG = (.*);\s*$", open(os.path.join(root, "app", "web", "catalog.js")).read(), re.S).group(1))
 fam = "UE160" if "UE160" in MODEL else "UE80" if re.search(r"UE(80|50|40)", MODEL) else "UE150"
 params = {p["cmd"]: p for p in cat[fam]}
 NSCENE = 8 if fam == "UE160" else 4

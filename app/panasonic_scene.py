@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
 """
-Panasonic Scene Bridge
-======================
-Kleine lokale helper (alleen Python 3 standaardbibliotheek) die de web-app op
-https://seppevanaken.be/panasonicscene laat praten met Panasonic PTZ-camera's.
+Panasonic Scene — lokale app
+============================
+Exporteer en importeer scene files (shading) van Panasonic PTZ-camera's.
 
-Waarom nodig?  Een https-website mag in de browser niet rechtstreeks naar
-http://192.168.x.x verbinden (mixed content) en de camera's sturen geen
-CORS-headers mee, dus de browser zou de antwoorden toch niet mogen lezen.
-Deze bridge draait op je laptop op http://127.0.0.1:8765 , ontvangt de
-commando's van de app en stuurt ze door naar /cgi-bin/aw_cam en /cgi-bin/aw_ptz.
+Het programma start een kleine webserver op http://127.0.0.1:8765 en opent de
+interface in een eigen venster (pywebview) of, als dat niet lukt, in je
+standaardbrowser. Alle communicatie met de camera's gebeurt vanaf je laptop
+via /cgi-bin/aw_cam en /cgi-bin/aw_ptz.
 
-Starten:   python3 panasonic_scene_bridge.py
-Opties:    --port 8765   --allow-origin https://andere.site   --allow-public-ips
-
-De bridge luistert enkel op 127.0.0.1 en accepteert enkel verzoeken van de
-toegelaten websites. Standaard stuurt hij enkel door naar privé-IP-adressen
-(192.168.x.x, 10.x.x.x, 172.16-31.x.x, 169.254.x.x).
+Starten vanuit broncode:  python3 panasonic_scene.py   [--browser] [--port 8765]
 """
 import argparse
 import ipaddress
@@ -29,37 +22,41 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-VERSION = "1.0.0"
-DEFAULT_ORIGINS = {
-    "https://seppevanaken.be",
-    "https://www.seppevanaken.be",
-}
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+APP_NAME = "Panasonic Scene"
+VERSION = "2.0.0"
+DEFAULT_PORT = 8765
+
+
+def resource_dir():
+    # PyInstaller pakt bestanden uit in sys._MEIPASS
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "web")
+
+
+WEB_DIR = resource_dir()
 STATIC_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".json": "application/json",
+    ".webmanifest": "application/manifest+json",
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".ico": "image/x-icon",
-    ".md": "text/plain; charset=utf-8",
 }
 
-CONFIG = {"origins": set(DEFAULT_ORIGINS), "allow_public": False, "port": 8765}
-# Eén lock per camera: Panasonic-camera's houden niet van gelijktijdige commando's.
+CONFIG = {"origins": set(), "allow_public": False, "port": DEFAULT_PORT}
 _cam_locks = {}
 _cam_locks_guard = threading.Lock()
 
 
 def cam_lock(ip):
     with _cam_locks_guard:
-        if ip not in _cam_locks:
-            _cam_locks[ip] = threading.Lock()
-        return _cam_locks[ip]
+        return _cam_locks.setdefault(ip, threading.Lock())
 
 
 def target_allowed(ip):
@@ -68,10 +65,8 @@ def target_allowed(ip):
     except ValueError:
         return False
     if addr.is_loopback:
-        return True  # handig voor tests met een mock-camera
-    if CONFIG["allow_public"]:
-        return True
-    return addr.is_private or addr.is_link_local
+        return True  # testen met mock-camera's
+    return CONFIG["allow_public"] or addr.is_private or addr.is_link_local
 
 
 def build_opener(ip, port, user, password):
@@ -80,24 +75,21 @@ def build_opener(ip, port, user, password):
         mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
         mgr.add_password(None, f"http://{ip}:{port}/", user, password or "")
         handlers += [urllib.request.HTTPDigestAuthHandler(mgr), urllib.request.HTTPBasicAuthHandler(mgr)]
-    # Nooit een systeem-proxy gebruiken voor lokale camera's.
-    handlers.append(urllib.request.ProxyHandler({}))
+    handlers.append(urllib.request.ProxyHandler({}))  # nooit een systeem-proxy voor camera's
     return urllib.request.build_opener(*handlers)
 
 
 def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, retries=2):
-    """Stuur één AW-commando. kind = 'cam' (aw_cam) of 'ptz' (aw_ptz)."""
+    """Eén AW-commando. kind = 'cam' (aw_cam) of 'ptz' (aw_ptz)."""
     path = "aw_ptz" if kind == "ptz" else "aw_cam"
-    q = urllib.parse.quote(cmd, safe=":")
-    url = f"http://{ip}:{port}/cgi-bin/{path}?cmd={q}&res=1"
+    url = f"http://{ip}:{port}/cgi-bin/{path}?cmd={urllib.parse.quote(cmd, safe=':')}&res=1"
     opener = build_opener(ip, port, user, password)
     last_err = None
     for attempt in range(retries + 1):
         try:
             with opener.open(url, timeout=timeout) as r:
                 body = r.read().decode("ascii", "replace").strip()
-                # ER2 = camera bezig -> even wachten en opnieuw
-                if body.upper().startswith("ER2") and attempt < retries:
+                if body.upper().startswith("ER2") and attempt < retries:  # camera bezig
                     time.sleep(0.3)
                     continue
                 return {"ok": True, "status": r.status, "body": body}
@@ -105,7 +97,7 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
             if e.code == 401:
                 return {"ok": False, "status": 401, "error": "Authenticatie vereist of fout wachtwoord"}
             last_err = f"HTTP {e.code}"
-        except Exception as e:  # timeout, connection refused, ...
+        except Exception as e:
             last_err = str(getattr(e, "reason", e))
         time.sleep(0.15)
     return {"ok": False, "status": 0, "error": last_err or "onbekende fout"}
@@ -140,10 +132,9 @@ def expand_targets(spec):
             out += [str(h) for h in net.hosts()]
         elif "-" in part:
             a, b = part.split("-", 1)
-            base = a.rsplit(".", 1)
-            start = int(base[1])
+            base, start = a.rsplit(".", 1)
             end = int(b.rsplit(".", 1)[-1])
-            out += [f"{base[0]}.{i}" for i in range(start, end + 1)]
+            out += [f"{base}.{i}" for i in range(int(start), end + 1)]
         else:
             out.append(part)
     return [ip for ip in dict.fromkeys(out) if target_allowed(ip)]
@@ -151,17 +142,11 @@ def expand_targets(spec):
 
 def probe(ip, port, user, password):
     r = send_command(ip, port, "cam", "QID", user, password, timeout=0.8, retries=0)
-    if not r.get("ok") and r.get("status") != 401:
-        return None
-    info = {"ip": ip, "port": port}
     if r.get("status") == 401:
-        info["auth"] = True
-        info["model"] = "?"
-        return info
-    body = r["body"]
-    if not body.upper().startswith("OID:"):
+        return {"ip": ip, "port": port, "auth": True, "model": "?"}
+    if not r.get("ok") or not r["body"].upper().startswith("OID:"):
         return None
-    info["model"] = body[4:]
+    info = {"ip": ip, "port": port, "model": r["body"][4:]}
     t = send_command(ip, port, "cam", "QSJ:5C", user, password, timeout=1.0, retries=0)
     if t.get("ok") and t["body"].upper().startswith("OSJ:5C:"):
         info["title"] = t["body"][7:]
@@ -172,29 +157,28 @@ def probe(ip, port, user, password):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanasonicSceneBridge/" + VERSION
+    server_version = "PanasonicScene/" + VERSION
 
     def log_message(self, fmt, *args):
-        if os.environ.get("BRIDGE_VERBOSE"):
-            sys.stderr.write("[bridge] " + (fmt % args) + "\n")
+        if os.environ.get("PSCENE_VERBOSE"):
+            sys.stderr.write("[app] " + (fmt % args) + "\n")
 
-    # ---- CORS / Private Network Access ----
+    # Alleen de eigen interface (zelfde origin) of expliciet toegelaten dev-origins.
     def origin_ok(self):
         origin = self.headers.get("Origin")
         if not origin:
-            return True  # zelfde origin (app geserveerd door de bridge) of curl
+            return True
         own = {f"http://127.0.0.1:{CONFIG['port']}", f"http://localhost:{CONFIG['port']}"}
-        return origin in CONFIG["origins"] or origin in own
+        return origin in own or origin in CONFIG["origins"]
 
     def cors(self):
         origin = self.headers.get("Origin")
-        if origin and self.origin_ok():
+        if origin and origin in CONFIG["origins"]:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Access-Control-Allow-Private-Network", "true")
-            self.send_header("Access-Control-Max-Age", "600")
 
     def send_json(self, code, obj):
         data = json.dumps(obj).encode()
@@ -212,30 +196,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def read_json(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        if n > 2_000_000:
-            raise ValueError("Verzoek te groot")
-        return json.loads(self.rfile.read(n) or b"{}")
-
     def do_GET(self):
         if not self.origin_ok():
             return self.send_json(403, {"ok": False, "error": "Origin niet toegelaten"})
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/ping":
-            return self.send_json(200, {"ok": True, "name": "panasonic-scene-bridge", "version": VERSION,
-                                        "localIps": local_ipv4s(), "allowPublic": CONFIG["allow_public"]})
-        # Statische bestanden: de bridge kan de app ook zelf serveren (offline / Safari)
+            return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION,
+                                        "localIps": local_ipv4s(), "platform": sys.platform})
         if path in ("", "/"):
             path = "/index.html"
-        full = os.path.abspath(os.path.join(ROOT_DIR, path.lstrip("/")))
-        if not full.startswith(ROOT_DIR) or not os.path.isfile(full):
+        full = os.path.abspath(os.path.join(WEB_DIR, path.lstrip("/")))
+        if not full.startswith(os.path.abspath(WEB_DIR)) or not os.path.isfile(full):
             return self.send_json(404, {"ok": False, "error": "niet gevonden"})
-        ext = os.path.splitext(full)[1].lower()
         with open(full, "rb") as f:
             data = f.read()
         self.send_response(200)
-        self.send_header("Content-Type", STATIC_TYPES.get(ext, "application/octet-stream"))
+        self.send_header("Content-Type", STATIC_TYPES.get(os.path.splitext(full)[1].lower(), "application/octet-stream"))
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -245,14 +222,21 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(403, {"ok": False, "error": "Origin niet toegelaten"})
         path = urllib.parse.urlparse(self.path).path
         try:
-            req = self.read_json()
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > 2_000_000:
+                raise ValueError("Verzoek te groot")
+            req = json.loads(self.rfile.read(n) or b"{}")
         except Exception as e:
-            return self.send_json(400, {"ok": False, "error": f"Ongeldige JSON: {e}"})
+            return self.send_json(400, {"ok": False, "error": f"Ongeldig verzoek: {e}"})
         try:
             if path == "/api/batch":
                 return self.send_json(200, self.batch(req))
             if path == "/api/scan":
                 return self.send_json(200, self.scan(req))
+            if path == "/api/quit":
+                self.send_json(200, {"ok": True})
+                threading.Timer(0.3, lambda: os._exit(0)).start()
+                return
             return self.send_json(404, {"ok": False, "error": "onbekend endpoint"})
         except ValueError as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
@@ -265,7 +249,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError(f"Doel-IP {ip!r} niet toegelaten (enkel privé-adressen)")
         port = int(req.get("port") or 80)
         user, pw = req.get("user") or None, req.get("pass") or None
-        delay = max(0, min(2000, int(req.get("delayMs", 60)))) / 1000.0
+        delay = max(0, min(2000, int(req.get("delayMs", 20)))) / 1000.0
         timeout = float(req.get("timeout", 3.0))
         items = req.get("items") or []
         if len(items) > 1000:
@@ -282,7 +266,6 @@ class Handler(BaseHTTPRequestHandler):
                 r["cmd"] = it.get("cmd")
                 results.append(r)
                 if r.get("status") == 401:
-                    # zinloos om door te gaan zonder juiste login
                     results += [{"ok": False, "status": 401, "cmd": x.get("cmd"), "error": "auth"} for x in items[i + 1:]]
                     break
                 if delay and i < len(items) - 1:
@@ -295,37 +278,77 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Geen (toegelaten) adressen in bereik")
         port = int(req.get("port") or 80)
         user, pw = req.get("user") or None, req.get("pass") or None
-        found = []
         with ThreadPoolExecutor(max_workers=64) as ex:
-            for res in ex.map(lambda ip: probe(ip, port, user, pw), targets):
-                if res:
-                    found.append(res)
+            found = [r for r in ex.map(lambda ip: probe(ip, port, user, pw), targets) if r]
         found.sort(key=lambda x: tuple(int(p) for p in x["ip"].split(".")))
         return {"ok": True, "scanned": len(targets), "cameras": found}
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Lokale bridge voor de Panasonic Scene File app")
-    ap.add_argument("--port", type=int, default=8765)
-    ap.add_argument("--allow-origin", action="append", default=[],
-                    help="Extra website die de bridge mag gebruiken (bv. http://localhost:5500)")
-    ap.add_argument("--allow-public-ips", action="store_true",
-                    help="Ook niet-privé doel-IP's toelaten (normaal niet nodig)")
-    a = ap.parse_args()
-    CONFIG["port"] = a.port
-    CONFIG["origins"] |= set(o.rstrip("/") for o in a.allow_origin)
-    CONFIG["allow_public"] = a.allow_public_ips
-    srv = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
-    print(f"Panasonic Scene Bridge {VERSION}")
-    print(f"  Luistert op http://127.0.0.1:{a.port}")
-    print(f"  Toegelaten websites: {', '.join(sorted(CONFIG['origins']))}")
-    print(f"  Lokale IP-adressen van deze laptop: {', '.join(local_ipv4s()) or '-'}")
-    print(f"  Open nu https://seppevanaken.be/panasonicscene  (of offline: http://127.0.0.1:{a.port}/)")
-    print("  Stoppen: Ctrl+C")
+def running_instance(port):
+    """Draait de app al? Dan gewoon dat venster/die pagina openen."""
     try:
-        srv.serve_forever()
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                f"http://127.0.0.1:{port}/api/ping", timeout=0.6) as r:
+            return json.loads(r.read()).get("name") == "panasonic-scene"
+    except Exception:
+        return False
+
+
+def start_server(preferred):
+    for port in [preferred] + list(range(preferred + 1, preferred + 11)):
+        try:
+            srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            CONFIG["port"] = port
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            return srv, port
+        except OSError:
+            continue
+    raise SystemExit("Geen vrije poort gevonden tussen %d en %d" % (preferred, preferred + 10))
+
+
+def open_window(url):
+    """Eigen venster via pywebview; anders de standaardbrowser. Geeft True terug als er een venster was."""
+    try:
+        import webview  # pywebview (zit in de geïnstalleerde app)
+    except Exception:
+        webbrowser.open(url)
+        return False
+    webview.create_window(APP_NAME, url, width=1320, height=900, min_size=(900, 600))
+    webview.start()  # blokkeert tot het venster sluit
+    return True
+
+
+def main():
+    ap = argparse.ArgumentParser(description=APP_NAME)
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT)
+    ap.add_argument("--browser", action="store_true", help="Open in de standaardbrowser i.p.v. een eigen venster")
+    ap.add_argument("--headless", action="store_true", help="Enkel de server starten (voor tests)")
+    ap.add_argument("--allow-origin", action="append", default=[], help="Extra origin voor ontwikkeling")
+    ap.add_argument("--allow-public-ips", action="store_true")
+    # macOS geeft soms een '-psn_...' argument mee bij starten vanuit Finder
+    a, _unknown = ap.parse_known_args()
+    CONFIG["origins"] = set(o.rstrip("/") for o in a.allow_origin)
+    CONFIG["allow_public"] = a.allow_public_ips
+
+    if running_instance(a.port):
+        webbrowser.open(f"http://127.0.0.1:{a.port}/")
+        return
+    srv, port = start_server(a.port)
+    url = f"http://127.0.0.1:{port}/"
+    print(f"{APP_NAME} {VERSION} draait op {url}  (stoppen: venster sluiten of Ctrl+C)")
+    try:
+        if a.headless:
+            while True:
+                time.sleep(3600)
+        if a.browser or not open_window(url):
+            if a.browser:
+                webbrowser.open(url)
+            while True:  # browser-modus: blijf draaien tot Ctrl+C / proces stopt
+                time.sleep(3600)
     except KeyboardInterrupt:
-        print("\nGestopt.")
+        pass
+    finally:
+        srv.shutdown()
 
 
 if __name__ == "__main__":

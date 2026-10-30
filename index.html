@@ -3,231 +3,296 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panasonic PTZ Scene Files</title>
-<meta name="description" content="Exporteer en importeer scene files (shading) van Panasonic PTZ-camera's, en wijs camera's toe aan een AW-RP150.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171b22'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23ffb020' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23ffb020'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css">
+<title>Panasonic Scene — scene files voor Panasonic PTZ-camera's</title>
+<meta name="description" content="Gratis app voor Mac en Windows: exporteer en importeer scene files (shading) van Panasonic PTZ-camera's, en wijs camera's snel toe aan een AW-RP150.">
+<link rel="icon" href="app/web/icon.svg">
+<style>
+:root{--bg:#0f1217;--panel:#171b22;--panel2:#1d222b;--line:#2a313d;--text:#e7eaf0;--muted:#8d97a8;--accent:#ffb020;--ink:#1a1204;--ok:#3ccf7e;--red:#ff4d4d;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;--sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--sans)}
+a{color:var(--accent)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+code,.mono{font-family:var(--mono);font-size:.9em}
+nav{display:flex;justify-content:space-between;align-items:center;padding:18px 0}
+nav .logo{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--text);text-decoration:none}
+nav .logo img{width:30px;height:30px}
+nav .links a{color:var(--muted);text-decoration:none;margin-left:20px;font-size:14px}
+nav .links a:hover{color:var(--text)}
+
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;padding:56px 0 64px}
+.hero h1{font-size:46px;line-height:1.08;margin:0 0 18px;letter-spacing:-.5px}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero p.lead{font-size:19px;color:#c3cad6;margin:0 0 28px;max-width:560px}
+.dl{display:inline-flex;align-items:center;gap:12px;background:var(--accent);color:var(--ink);text-decoration:none;font-weight:750;font-size:18px;padding:16px 26px;border-radius:12px;box-shadow:0 8px 30px #ffb02033}
+.dl:hover{filter:brightness(1.07)}
+.dl svg{width:22px;height:22px}
+.dl small{display:block;font-weight:600;font-size:12.5px;opacity:.75}
+.meta{color:var(--muted);font-size:14px;margin-top:14px}
+.meta a{color:var(--muted)}
+.hero-art{position:relative}
+.hero-art img{width:100%;max-width:360px;display:block;margin:0 auto;filter:drop-shadow(0 30px 60px #000a)}
+
+section{padding:56px 0;border-top:1px solid var(--line)}
+section h2{font-size:30px;margin:0 0 10px;letter-spacing:-.3px}
+section .intro{color:var(--muted);max-width:720px;margin:0 0 32px;font-size:17px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.card h3{margin:0 0 8px;font-size:18px}
+.card p{margin:0;color:#b9c1ce;font-size:15px}
+.num{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:#2a2210;color:var(--accent);font-weight:800;margin-bottom:10px}
+
+.downloads{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.downloads>*,.cli code{min-width:0}
+.dlcard{display:flex;flex-direction:column;gap:12px}
+.dlcard .os{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
+.dlcard .os svg{width:24px;height:24px;fill:var(--text)}
+.btn{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-radius:9px;background:#232a35;color:var(--text);text-decoration:none;font-weight:600;font-size:15px;border:1px solid var(--line)}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--ink);border-color:var(--accent)}
+.btn span.sz{font-weight:500;opacity:.7;font-size:13px}
+.cli{display:flex;align-items:center;gap:8px;background:#0b0e12;border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+.cli code{flex:1;overflow-x:auto;white-space:nowrap;color:#d8dde6}
+.cli button{background:#232a35;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:5px 10px;font:600 13px var(--sans);cursor:pointer}
+.small{font-size:13.5px;color:var(--muted)}
+details{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-top:10px}
+details summary{cursor:pointer;font-weight:650}
+details ol,details ul{margin:10px 0 4px;padding-left:22px;color:#c3cad6}
+
+.diagram{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px}
+.diagram svg{width:100%;height:auto;display:block}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:22px}
+
+table.p{width:100%;border-collapse:collapse;font-size:15px}
+table.p td,table.p th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+table.p th{color:var(--muted);font-weight:600;font-size:13px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chips span{background:#0b0e12;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13.5px;color:#c3cad6}
+.faq details{background:var(--panel)}
+footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--muted);font-size:13.5px}
+
+@media (max-width:860px){
+  .hero{grid-template-columns:1fr;padding-top:24px}.hero-art{display:none}.hero h1{font-size:36px}
+  .grid3,.grid2,.downloads,.steps{grid-template-columns:1fr}
+  nav .links{display:none}
+}
+</style>
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <span class="lens" aria-hidden="true"></span>
+<div class="wrap">
+  <nav>
+    <a class="logo" href="#"><img src="app/web/icon.svg" alt="">Panasonic Scene</a>
+    <div class="links"><a href="#hoe">Hoe werkt het</a><a href="#download">Download</a><a href="#parameters">Parameters</a><a href="#faq">FAQ</a></div>
+  </nav>
+
+  <header class="hero">
     <div>
-      <h1>Panasonic PTZ Scene Files</h1>
-      <p class="sub">Shading exporteren &amp; importeren · AW-UE150 / UE150A / UE160 / UE100 / UE80-reeks</p>
+      <h1>Scene files van je <em>Panasonic PTZ's</em>: bewaren, kopiëren, terugzetten.</h1>
+      <p class="lead">Een AW-RP120 of RP150 kan de shading van een camera niet exporteren. Deze app wel: per camera of voor alle camera's tegelijk, en je zet ze met één klik terug op dezelfde of een andere camera.</p>
+      <a class="dl" id="mainDl" href="#download">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M6 11l6 6 6-6M4 21h16"/></svg>
+        <span><span id="mainDlLabel">Download</span><small id="mainDlSub">voor Mac en Windows · gratis</small></span>
+      </a>
+      <div class="meta"><span id="verText">Laatste versie</span> · <a href="#download">Andere downloads</a> · <a href="https://github.com/seppeva/panasonicscene">Broncode</a></div>
     </div>
-  </div>
-  <div class="bridge" id="bridgeBox">
-    <span class="dot" id="bridgeDot"></span>
-    <span id="bridgeText">Bridge: controleren…</span>
-    <button class="ghost small" id="bridgeSettingsBtn" title="Bridge-instellingen">⚙</button>
-  </div>
-</header>
-
-<div class="bridge-help hidden" id="bridgeHelp">
-  <div class="card warn">
-    <h3>De lokale bridge draait niet (of wordt geblokkeerd)</h3>
-    <p>Een website mag in de browser niet zelf met camera's op <code>http://192.168.x.x</code> praten. Daarom draait er een klein hulpprogramma op je laptop dat de commando's doorgeeft.</p>
-    <ol>
-      <li>Download <a href="bridge/panasonic_scene_bridge.py" download>panasonic_scene_bridge.py</a> (Python 3, geen extra installatie nodig).</li>
-      <li>Start in een terminal: <code>python3 panasonic_scene_bridge.py</code> &nbsp;(Windows: <code>py panasonic_scene_bridge.py</code>)</li>
-      <li>Laat het venster open en klik op <button class="small" id="retryBridge">Opnieuw verbinden</button></li>
-    </ol>
-    <p class="muted">Chrome of Edge vraagt de eerste keer toestemming om “apparaten op je lokale netwerk” te gebruiken: kies <b>Toestaan</b>. Werkt het niet in jouw browser (bv. Safari)? Open dan de app rechtstreeks via de bridge: <a id="localAppLink" href="http://127.0.0.1:8765/">http://127.0.0.1:8765/</a>.</p>
-  </div>
+    <div class="hero-art"><img src="assets/icon-1024.png" alt="Panasonic Scene-icoon"></div>
+  </header>
 </div>
 
-<dialog id="settingsDlg">
-  <form method="dialog" class="dlg">
-    <h3>Instellingen</h3>
-    <label>Bridge-adres <input id="setBridgeUrl" value="http://127.0.0.1:8765"></label>
-    <label>Pauze tussen commando's (ms) <input id="setDelay" type="number" min="0" max="500" value="20"></label>
-    <label>Wachttijd na scènewissel (ms) <input id="setSceneWait" type="number" min="500" max="8000" value="2000"></label>
-    <div class="row end"><button value="cancel" class="ghost">Annuleer</button><button value="ok" id="saveSettings">Bewaar</button></div>
-  </form>
-</dialog>
+<section id="hoe">
+  <div class="wrap">
+    <h2>Hoe werkt het?</h2>
+    <p class="intro">Panasonic Scene is een klein programma op je laptop. Het praat via het netwerk rechtstreeks met de camera's, met dezelfde commando's die een RP150 gebruikt. Het heeft geen internet of cloud nodig: alles blijft op de set.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 1000 300" role="img" aria-label="Laptop met Panasonic Scene, via een netwerkswitch verbonden met PTZ-camera's en de RP150">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#ffb020"/></marker>
+        <g id="cam">
+          <rect x="0" y="0" width="150" height="58" rx="10" fill="#1d222b" stroke="#2a313d"/>
+          <circle cx="30" cy="29" r="15" fill="#0b0e12" stroke="#38424f" stroke-width="3"/><circle cx="30" cy="29" r="5" fill="#ffb020"/>
+        </g>
+        </defs>
+        <g font-family="system-ui,sans-serif" font-size="15" fill="#e7eaf0">
+          <rect x="30" y="95" width="220" height="130" rx="14" fill="#1d222b" stroke="#2a313d"/>
+          <rect x="62" y="115" width="156" height="78" rx="6" fill="#0b0e12" stroke="#38424f"/>
+          <circle cx="140" cy="154" r="20" fill="none" stroke="#ffb020" stroke-width="5"/><circle cx="140" cy="154" r="6" fill="#ffb020"/>
+          <text x="140" y="214" text-anchor="middle" font-weight="700">Laptop</text>
+          <text x="140" y="250" text-anchor="middle" fill="#8d97a8" font-size="13">Panasonic Scene-app</text>
+          <text x="140" y="268" text-anchor="middle" fill="#8d97a8" font-size="13">bv. 192.168.0.200</text>
 
-<nav class="tabs" role="tablist">
-  <button role="tab" data-tab="cams" class="active">1 · Camera's</button>
-  <button role="tab" data-tab="export">2 · Exporteren</button>
-  <button role="tab" data-tab="import">3 · Importeren</button>
-  <button role="tab" data-tab="rp150">RP150 toewijzen</button>
-  <button role="tab" data-tab="params">Parameterlijst</button>
-</nav>
+          <rect x="395" y="125" width="170" height="70" rx="10" fill="#1d222b" stroke="#2a313d"/>
+          <g fill="#3ccf7e"><rect x="415" y="168" width="14" height="10" rx="2"/><rect x="437" y="168" width="14" height="10" rx="2"/><rect x="459" y="168" width="14" height="10" rx="2"/><rect x="481" y="168" width="14" height="10" rx="2"/><rect x="503" y="168" width="14" height="10" rx="2"/><rect x="525" y="168" width="14" height="10" rx="2"/></g>
+          <text x="480" y="153" text-anchor="middle" font-weight="700">Netwerkswitch</text>
+          <line x1="250" y1="160" x2="393" y2="160" stroke="#ffb020" stroke-width="3" marker-end="url(#ar)" marker-start="url(#ar)"/>
+          <text x="322" y="148" text-anchor="middle" fill="#8d97a8" font-size="12.5">LAN-kabel</text>
 
-<main>
-<!-- ============ CAMERAS ============ -->
-<section id="tab-cams" class="tab active">
-  <div class="grid2">
-    <div class="card">
-      <h2>Camera's zoeken</h2>
-      <p class="muted">Zet je laptop in dezelfde IP-range als de PTZ's (bv. 192.168.0.200 / 255.255.255.0) en scan het netwerk.</p>
-      <div class="row wrap">
-        <label class="grow">IP-bereik <input id="scanRange" placeholder="192.168.0.0/24 of 192.168.0.10-60"></label>
-        <label class="w90">Poort <input id="scanPort" type="number" value="80"></label>
-      </div>
-      <div class="row wrap">
-        <label class="grow">Gebruiker <span class="muted">(enkel als “User Auth” aan staat)</span><input id="authUser" autocomplete="off"></label>
-        <label class="grow">Wachtwoord <input id="authPass" type="password" autocomplete="off"></label>
-      </div>
-      <div class="row">
-        <button id="scanBtn">Scan netwerk</button>
-        <span id="scanStatus" class="muted"></span>
-      </div>
+          <use href="#cam" x="720" y="20"/><text x="805" y="45" font-weight="700">PTZ 1</text><text x="805" y="64" fill="#8d97a8" font-size="12.5">192.168.0.11</text>
+          <use href="#cam" x="720" y="100"/><text x="805" y="125" font-weight="700">PTZ 2</text><text x="805" y="144" fill="#8d97a8" font-size="12.5">192.168.0.12</text>
+          <use href="#cam" x="720" y="180"/><text x="805" y="205" font-weight="700">PTZ 3</text><text x="805" y="224" fill="#8d97a8" font-size="12.5">192.168.0.13</text>
+          <rect x="720" y="250" width="150" height="40" rx="10" fill="#241d0e" stroke="#4d3a12"/><text x="795" y="276" text-anchor="middle" font-weight="700" fill="#f1d29a">AW-RP150</text>
+          <g stroke="#ffb020" stroke-width="2.5" fill="none"><path d="M565 150 C 640 150, 640 49, 718 49"/><path d="M565 160 L 718 129"/><path d="M565 170 C 640 170, 640 209, 718 209"/><path d="M565 180 C 640 180, 640 270, 718 270" stroke="#4d3a12"/></g>
+          <text x="480" y="222" text-anchor="middle" fill="#8d97a8" font-size="12.5">HTTP-commando's (aw_cam / aw_ptz)</text>
+        </g>
+      </svg>
     </div>
-    <div class="card">
-      <h2>Camera manueel toevoegen</h2>
-      <div class="row wrap">
-        <label class="grow">IP-adres(sen) <input id="addIp" placeholder="192.168.0.11, 192.168.0.12"></label>
-        <label class="w90">Poort <input id="addPort" type="number" value="80"></label>
-      </div>
-      <div class="row"><button id="addBtn" class="secondary">Toevoegen</button></div>
-      <p class="muted small">Ook de controller (RP150/RP120) heeft een IP in dezelfde range, maar die antwoordt niet als camera en wordt dus niet getoond.</p>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="row between">
-      <h2>Camera's <span class="count" id="camCount">0</span></h2>
-      <div class="row">
-        <button class="ghost small" id="refreshBtn">Status vernieuwen</button>
-        <button class="ghost small" id="clearCamsBtn">Lijst wissen</button>
-      </div>
-    </div>
-    <table class="tbl" id="camTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="selAll" title="Alles selecteren"></th><th>IP</th><th>Model</th><th>Titel</th><th>Profiel</th><th>Actieve scène</th><th>Status</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <p class="empty muted" id="camEmpty">Nog geen camera's. Scan het netwerk of voeg er manueel toe.</p>
-  </div>
-</section>
-
-<!-- ============ EXPORT ============ -->
-<section id="tab-export" class="tab">
-  <div class="card">
-    <h2>Scene file exporteren</h2>
-    <p class="muted">Leest alle shading-parameters die bij een scène horen uit de geselecteerde camera's en bewaart ze als <code>.pscene.json</code>-bestand.</p>
-    <div class="row wrap">
-      <fieldset class="seg">
-        <legend>Welke scène(s)?</legend>
-        <label><input type="radio" name="expMode" value="active" checked> Enkel de actieve scène <span class="muted">(beeld verandert niet)</span></label>
-        <label><input type="radio" name="expMode" value="pick"> Kies scènes: <span id="expScenes" class="chips"></span></label>
-      </fieldset>
-    </div>
-    <div class="note warn hidden" id="expWarn">⚠ Om andere scènes uit te lezen moet de camera even naar die scène schakelen: het beeld verandert tijdens het uitlezen. Doe dit niet terwijl de camera on air is. Na afloop gaat de camera terug naar de oorspronkelijke scène.</div>
-    <div class="row wrap">
-      <label class="check"><input type="checkbox" id="expZip" checked> Meerdere camera's: bundel in één ZIP</label>
-    </div>
-    <div class="row">
-      <button id="exportBtn">Exporteer geselecteerde camera's</button>
-      <span class="muted" id="expSel"></span>
-    </div>
-  </div>
-  <div class="card hidden" id="expResultCard">
-    <h2>Resultaat</h2>
-    <div id="expResult"></div>
-  </div>
-</section>
-
-<!-- ============ IMPORT ============ -->
-<section id="tab-import" class="tab">
-  <div class="card">
-    <h2>Scene file importeren</h2>
-    <div class="drop" id="dropZone">
-      <p><b>Sleep hier .pscene.json- of .zip-bestanden</b> of <label class="link">kies bestanden<input type="file" id="fileInput" accept=".json,.zip,application/json,application/zip" multiple hidden></label></p>
-      <p class="muted small">Bestanden die je in deze sessie exporteerde staan hieronder ook al klaar.</p>
-    </div>
-  </div>
-  <div class="card">
-    <div class="row between"><h2>Te importeren scènes <span class="count" id="impCount">0</span></h2><button class="ghost small" id="clearFilesBtn">Wis lijst</button></div>
-    <table class="tbl" id="impTable">
-      <thead><tr><th class="w30"></th><th>Bron</th><th>Scène in bestand</th><th>→ Doelcamera</th><th>→ Doelscène</th><th>Params</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <p class="empty muted" id="impEmpty">Nog geen bestanden geladen.</p>
-    <div class="opts">
-      <label class="check"><input type="checkbox" id="optBackup" checked> Eerst een back-up van de doelscène maken (wordt mee gedownload)</label>
-      <label class="check"><input type="checkbox" id="optRestore" checked> Daarna terug naar de oorspronkelijke actieve scène</label>
-      <label class="check"><input type="checkbox" id="optStore" checked> AW-UE160: wijzigingen opslaan in de scene file (SCENE FILE STORE)</label>
-      <label class="check"><input type="checkbox" id="optVerify" checked> Na import controleren (terug uitlezen en vergelijken)</label>
-      <label class="check"><input type="checkbox" id="optForce"> Ook parameters proberen die niet in het profiel van de doelcamera zitten (ander model)</label>
-    </div>
-    <div class="note warn">⚠ Importeren verandert het beeld van de doelcamera meteen. Als de doelscène niet de actieve scène is, schakelt de camera tijdelijk naar die scène.</div>
-    <div class="row"><button id="importBtn">Start import</button><span class="muted" id="impStatus"></span></div>
-  </div>
-  <div class="card hidden" id="impResultCard"><h2>Resultaat</h2><div id="impResult"></div></div>
-</section>
-
-<!-- ============ RP150 ============ -->
-<section id="tab-rp150" class="tab">
-  <div class="card">
-    <h2>Camera's snel toewijzen aan een AW-RP150</h2>
-    <p class="muted">De RP150 heeft geen netwerk-API om zijn instellingen te wijzigen. Twee snelle routes: (A) een stappenplan voor het paneel, gegenereerd uit je camera-lijst, of (B) het bestand <code>Network.s15</code> van de SD-kaart bewerken en terug inladen.</p>
-    <div class="row wrap">
-      <button id="rpFromCams" class="secondary">Neem gevonden camera's over</button>
-      <label class="w140">Sorteer op <select id="rpSort"><option value="ip">IP-adres</option><option value="title">Titel</option></select></label>
-      <label class="w140">Eerste CAM-nr <input id="rpStart" type="number" min="1" max="200" value="1"></label>
-      <button id="rpAddRow" class="ghost">+ Rij</button>
-    </div>
-    <table class="tbl" id="rpTable">
-      <thead><tr><th>CAM</th><th>IP-adres</th><th>Poort</th><th>Model / titel</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-    <p class="empty muted" id="rpEmpty">Nog geen toewijzingen.</p>
-  </div>
-  <div class="grid2">
-    <div class="card">
-      <h2>A · Stappenplan voor het paneel</h2>
-      <p class="muted">Per camera: verbindingstype op LAN en het IP-adres invullen. Print het of zet het op je telefoon naast het paneel.</p>
-      <div class="row"><button id="rpChecklistBtn" class="secondary">Maak stappenplan</button><button id="rpPrintBtn" class="ghost">Print</button></div>
-      <div id="rpChecklist" class="checklist"></div>
-    </div>
-    <div class="card">
-      <h2>B · Network.s15 bewerken <span class="tag">experimenteel</span></h2>
-      <ol class="small">
-        <li>Op de RP150: <b>[SYSTEM] › CONNECT SETTING › DATA SAVE</b> (SD-kaart).</li>
-        <li>Laad hier <code>\PRIVATE\MEIGROUP\PAVCN\SBG\SYSCAM\RP150\DATA\Network.s15</code>.</li>
-        <li>Controleer de herkende tabel, pas de toewijzing toe en download het nieuwe bestand.</li>
-        <li>Terug op de SD-kaart zetten en op de RP150: <b>CONNECT SETTING › DATA LOAD › YES+NW</b>.</li>
-      </ol>
-      <div class="row wrap">
-        <label class="link">Network.s15 laden<input type="file" id="s15Input" hidden></label>
-        <label class="link">Tweede versie laden (om het verbindingstype te leren)<input type="file" id="s15Input2" hidden></label>
-      </div>
-      <div id="s15Out"></div>
+    <div class="steps">
+      <div class="card"><div class="num">1</div><h3>Zelfde IP-range</h3><p>Geef je laptop een adres in de range van de camera's (bv. 192.168.0.200 / 255.255.255.0) en sluit hem aan op dezelfde switch als de PTZ's en het paneel.</p></div>
+      <div class="card"><div class="num">2</div><h3>Camera's zoeken</h3><p>Open de app en klik op <b>Scan netwerk</b>. Model, titel en actieve scène van elke PTZ verschijnen vanzelf. De RP150 wordt genegeerd.</p></div>
+      <div class="card"><div class="num">3</div><h3>Exporteren</h3><p>Kies één of meer camera's en de scène(s). Elke camera wordt een <code>.pscene.json</code>-bestand. Meerdere camera's komen in één ZIP.</p></div>
+      <div class="card"><div class="num">4</div><h3>Importeren</h3><p>Sleep het bestand terug in de app, kies de doelcamera en de scène, en klik op <b>Start import</b>. De app maakt eerst een back-up en controleert het resultaat daarna.</p></div>
     </div>
   </div>
 </section>
 
-<!-- ============ PARAMS ============ -->
-<section id="tab-params" class="tab">
-  <div class="card">
-    <div class="row between wrap">
-      <h2>Parameters in een scene file</h2>
-      <div class="row wrap">
-        <label class="w180">Camera-profiel <select id="paramFam"></select></label>
-        <label class="w180">Zoek <input id="paramFilter" placeholder="bv. matrix, knee, OSD:A4"></label>
-        <button class="ghost" id="paramCsv">CSV</button>
+<section id="download">
+  <div class="wrap">
+    <h2>Downloaden &amp; installeren</h2>
+    <p class="intro">Gratis, zonder account. Je hoeft niets anders te installeren: de app bevat alles wat hij nodig heeft. <span id="verText2"></span></p>
+    <div class="downloads">
+      <div class="card dlcard">
+        <div class="os"><svg viewBox="0 0 24 24"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.86-.76-1.47.02-2.83.86-3.59 2.17-1.53 2.66-.39 6.6 1.1 8.76.73 1.06 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.14.84-1.22 1.18-2.41 1.2-2.47-.03-.01-2.3-.88-2.3-3.5zM14.2 6.13c.6-.74 1.01-1.75.9-2.77-.87.04-1.93.58-2.55 1.31-.56.64-1.05 1.68-.92 2.67.97.07 1.96-.49 2.57-1.21z"/></svg>macOS <span class="small">11 Big Sur of nieuwer</span></div>
+        <a class="btn primary" id="dlMacArm" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-macOS-AppleSilicon.dmg">Apple Silicon (M1–M4) · .dmg <span class="sz" data-asset="PanasonicScene-macOS-AppleSilicon.dmg"></span></a>
+        <a class="btn" id="dlMacIntel" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-macOS-Intel.dmg">Intel-Mac · .dmg <span class="sz" data-asset="PanasonicScene-macOS-Intel.dmg"></span></a>
+        <div class="small">Of installeer in één keer via Terminal (geen beveiligingsmelding):</div>
+        <div class="cli"><code>curl -fsSL https://seppevanaken.be/panasonicscene/install.sh | bash</code><button data-copy>Kopieer</button></div>
+        <details><summary>Eerste keer openen op een Mac</summary>
+          <ol>
+            <li>Open de .dmg en sleep <b>Panasonic Scene</b> naar <b>Programma's</b>.</li>
+            <li>De app is (nog) niet door Apple ondertekend. Daarom zegt macOS de eerste keer dat de app “niet geopend kan worden”. Klik op <b>Gereed</b>.</li>
+            <li>Ga naar <b>Systeeminstellingen › Privacy en beveiliging</b>, scroll naar beneden en klik bij Panasonic Scene op <b>Open toch</b>.</li>
+            <li>Vraagt macOS of de app <b>apparaten op je lokale netwerk</b> mag zoeken? Kies <b>Sta toe</b>, anders ziet de app je camera's niet.</li>
+          </ol>
+          <p class="small">Met het Terminal-commando hierboven sla je stap 2 en 3 over.</p>
+        </details>
+      </div>
+      <div class="card dlcard">
+        <div class="os"><svg viewBox="0 0 24 24"><path d="M3 5.5l7.5-1v7H3zm0 13l7.5 1v-7H3zm8.5 1.1L21 21v-8.5h-9.5zm0-15.2V11.5H21V3z"/></svg>Windows <span class="small">10 en 11</span></div>
+        <a class="btn primary" id="dlWin" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-Windows-Setup.exe">Installer · .exe <span class="sz" data-asset="PanasonicScene-Windows-Setup.exe"></span></a>
+        <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-Windows-Portable.zip">Portable (zonder installatie) · .zip <span class="sz" data-asset="PanasonicScene-Windows-Portable.zip"></span></a>
+        <div class="small">Of installeer in één keer via PowerShell:</div>
+        <div class="cli"><code>irm https://seppevanaken.be/panasonicscene/install.ps1 | iex</code><button data-copy>Kopieer</button></div>
+        <details><summary>Eerste keer openen op Windows</summary>
+          <ol>
+            <li>Start de installer. Er zijn geen beheerdersrechten nodig.</li>
+            <li>Toont Windows “Windows heeft uw pc beschermd”? Klik op <b>Meer info</b> › <b>Toch uitvoeren</b>. De app is niet met een betaald certificaat ondertekend.</li>
+            <li>Vraagt de Windows Firewall om toegang? Sta <b>Privénetwerken</b> toe.</li>
+            <li>Je vindt de app daarna in het Startmenu als <b>Panasonic Scene</b>.</li>
+          </ol>
+        </details>
       </div>
     </div>
-    <p class="muted" id="paramInfo"></p>
-    <table class="tbl dense" id="paramTable">
-      <thead><tr><th>Groep</th><th>Parameter</th><th>Zet-commando</th><th>Opvragen</th><th>Waardebereik / opmerking</th></tr></thead>
-      <tbody></tbody>
-    </table>
   </div>
 </section>
-</main>
 
-<div class="log-wrap">
-  <details id="logBox"><summary>Logboek <span id="logCount" class="count">0</span></summary><pre id="log"></pre></details>
-</div>
+<section>
+  <div class="wrap">
+    <h2>Wat kan de app?</h2>
+    <p class="intro">Alles wat verandert als je op het paneel van scène 1 naar scène 2 gaat, zit in het bestand.</p>
+    <div class="grid3">
+      <div class="card"><h3>Exporteren per camera of in bulk</h3><p>Alleen de actieve scène (het beeld verandert niet) of alle scènes: 1–4, of 1–8 op een UE160. Na afloop gaat de camera terug naar zijn oorspronkelijke scène.</p></div>
+      <div class="card"><h3>Importeren met vangnet</h3><p>Vooraf vergelijken wat er verandert, automatische back-up van de doelscène, en achteraf een controle. Ook naar een andere camera of naar alle camera's tegelijk.</p></div>
+      <div class="card"><h3>Ander model? Geen probleem</h3><p>Importeer je een UE150-look in een UE80? Dan zet de app alles wat beide camera's kennen en meldt hij wat werd overgeslagen.</p></div>
+      <div class="card"><h3>RP150 snel invullen</h3><p>Neem de gevonden camera's over als CAM 1…n. Je krijgt een printbaar stappenplan (verbindingstype LAN + IP), of je laat de app het <code>Network.s15</code>-bestand van de SD-kaart aanpassen (experimenteel).</p></div>
+      <div class="card"><h3>Werkt offline</h3><p>Geen internet nodig op de set. Bestanden blijven op je laptop. De app kijkt enkel of er een nieuwere versie is als je online bent.</p></div>
+      <div class="card"><h3>Login-ondersteuning</h3><p>Staat “User Auth” aan op de camera's? Vul gebruiker en wachtwoord één keer in, de app regelt de rest (Basic/Digest).</p></div>
+    </div>
+  </div>
+</section>
 
-<footer class="foot">
-  <span>Gebaseerd op Panasonic “HD/4K Integrated Camera Interface Specifications” (scene-commandolijsten per model). Niet officieel van Panasonic.</span>
+<section id="parameters">
+  <div class="wrap">
+    <h2>Wat zit er in een scene file?</h2>
+    <p class="intro">Per model exact de lijst met commando's die Panasonic in de officiële <i>Interface Specifications</i> als “belonging to the scene” vermeldt. In de app zie je ze allemaal onder <b>Parameterlijst</b>, met een CSV-export.</p>
+    <div class="grid2">
+      <div class="card">
+        <table class="p">
+          <tr><th>Camera</th><th>Parameters</th></tr>
+          <tr><td>AW-UE150 / UE155 / HE145</td><td>111</td></tr>
+          <tr><td>AW-UE150A</td><td>110</td></tr>
+          <tr><td>AW-UE160 <span class="small">(8 scene files)</span></td><td>198</td></tr>
+          <tr><td>AW-UE100</td><td>98</td></tr>
+          <tr><td>AW-UE80 / UE50 / UE40 / UE30</td><td>85</td></tr>
+          <tr><td>Andere (HE130, UE70, UE20, UE4 …)</td><td>wat de camera kent</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Onder meer</h3>
+        <div class="chips">
+          <span>Picture level</span><span>Iris mode &amp; auto-iris</span><span>Shutter</span><span>Gain / super gain / AGC</span><span>ND &amp; Day/Night</span>
+          <span>Witbalans, kleurtemperatuur, R/B gain</span><span>ATW</span><span>Chroma level &amp; phase</span><span>Master/R/G/B pedestal</span>
+          <span>Detail &amp; skin detail</span><span>Gamma &amp; black gamma</span><span>Knee &amp; white clip</span><span>DRS</span><span>DNR</span>
+          <span>Linear matrix</span><span>16-assige color correction</span><span>HDR/HLG paint</span><span>Flare (UE160)</span>
+        </div>
+        <p class="small" style="margin-top:14px">Niet in een scène: iris-positie, zoom/focus, presets, netwerk- en uitgangsinstellingen. <a href="https://github.com/seppeva/panasonicscene/blob/main/PARAMETERS.md">Volledige lijst per model →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <div class="wrap">
+    <h2>Veelgestelde vragen</h2>
+    <details><summary>De scan vindt geen camera's</summary><ul><li>Staat je laptop in dezelfde range (bv. 192.168.0.x) met subnetmasker 255.255.255.0?</li><li>Wifi uit, of zorg dat de bekabelde verbinding voorrang krijgt.</li><li>Mac: heb je “apparaten op je lokale netwerk” toegestaan? Controleer dit in Systeeminstellingen › Privacy en beveiliging › Lokaal netwerk.</li><li>Windows: sta Panasonic Scene toe op privénetwerken in de firewall.</li></ul></details>
+    <details><summary>Verandert het beeld als ik exporteer?</summary><p>Niet als je “Enkel de actieve scène” kiest. Om andere scènes uit te lezen moet de camera even naar die scène schakelen. Doe dat dus niet terwijl hij on air is.</p></details>
+    <details><summary>Overschrijft importeren mijn instellingen definitief?</summary><p>Ja, de doelscène krijgt de waarden uit het bestand. Daarom maakt de app standaard eerst een back-up-bestand van die scène, zodat je ze altijd kan terugzetten.</p></details>
+    <details><summary>Werkt het samen met het RP150-paneel?</summary><p>Ja. Het paneel en de app praten allebei met de camera's. Wijzigingen via de app zie je ook op het paneel. Draai tijdens een import best niet tegelijk aan de knoppen.</p></details>
+    <details><summary>Is dit een officieel Panasonic-product?</summary><p>Nee. De app gebruikt de publiek gedocumenteerde Panasonic-commando's, maar is een onafhankelijk hulpmiddel. Gebruik op eigen risico.</p></details>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Panasonic Scene · door <a href="https://seppevanaken.be">Seppe Van Aken</a> · <a href="https://github.com/seppeva/panasonicscene">GitHub</a> · Panasonic is een handelsmerk van Panasonic Holdings Corporation.</div>
 </footer>
 
-<script src="catalog.js"></script>
-<script src="app.js"></script>
+<script>
+'use strict';
+const REPO = 'seppeva/panasonicscene';
+const BASE = `https://github.com/${REPO}/releases/latest/download/`;
+const DL = {
+  macArm: { file: 'PanasonicScene-macOS-AppleSilicon.dmg', label: 'Download voor Mac', sub: 'Apple Silicon · .dmg' },
+  macIntel: { file: 'PanasonicScene-macOS-Intel.dmg', label: 'Download voor Mac', sub: 'Intel · .dmg' },
+  win: { file: 'PanasonicScene-Windows-Setup.exe', label: 'Download voor Windows', sub: 'Windows 10/11 · installer' },
+};
+async function detect() {
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return 'win';
+  if (/Mac/i.test(ua)) {
+    try {
+      if (navigator.userAgentData?.getHighEntropyValues) {
+        const v = await navigator.userAgentData.getHighEntropyValues(['architecture']);
+        if (v.architecture === 'x86') return 'macIntel';
+      }
+    } catch { }
+    return 'macArm'; // Safari verbergt de chip; de meeste Macs zijn Apple Silicon
+  }
+  return null;
+}
+(async () => {
+  const os = await detect();
+  const a = document.getElementById('mainDl');
+  if (os) {
+    a.href = BASE + DL[os].file;
+    document.getElementById('mainDlLabel').textContent = DL[os].label;
+    document.getElementById('mainDlSub').textContent = DL[os].sub + ' · gratis';
+  }
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+    if (!r.ok) throw 0;
+    const rel = await r.json();
+    const v = String(rel.tag_name || '').replace(/^v/, '');
+    const d = rel.published_at ? new Date(rel.published_at).toLocaleDateString('nl-BE', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    document.getElementById('verText').textContent = `Versie ${v}${d ? ' · ' + d : ''}`;
+    document.getElementById('verText2').textContent = `Huidige versie: ${v}.`;
+    for (const as of rel.assets || []) {
+      const el = document.querySelector(`[data-asset="${as.name}"]`);
+      if (el) el.textContent = (as.size / 1048576).toFixed(0) + ' MB';
+    }
+  } catch { document.getElementById('verText').textContent = 'Mac & Windows'; }
+})();
+document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+  const t = b.parentElement.querySelector('code').textContent;
+  try { await navigator.clipboard.writeText(t); b.textContent = 'Gekopieerd ✓'; setTimeout(() => b.textContent = 'Kopieer', 1800); } catch { }
+});
+</script>
 </body>
 </html>
