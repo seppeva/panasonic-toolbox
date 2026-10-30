@@ -16,6 +16,7 @@
   <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Toolbox</span></div>
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Cameras</span></button>
+    <button role="tab" data-tab="live"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><circle cx="15.5" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg><span>Live</span></button>
     <button role="tab" data-tab="netsetup"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="2"/><circle cx="4" cy="15.5" r="2"/><circle cx="16" cy="15.5" r="2"/><path d="M10 6.5v4M10 10.5L4.8 13.8M10 10.5l5.2 3.3"/></svg><span>Network setup</span></button>
     <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Export</span></button>
     <button role="tab" data-tab="import"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Import</span></button>
@@ -178,6 +179,66 @@
   </div>
 </section>
 
+<!-- ================= LIVE ================= -->
+<section id="tab-live" class="tab">
+  <header class="page-head"><h1>Live</h1><p>Watch a camera and control it, like on its own web page.</p></header>
+  <div class="live-top row wrap">
+    <label class="w180">Camera <select id="liveCam"></select></label>
+    <label class="w140">Picture <select id="liveRes"><option value="640x360">640 × 360</option><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="320x180">320 × 180 (light)</option></select></label>
+    <span class="grow live-status muted" id="liveStatus"></span>
+    <span class="row live-quick">
+      <button class="ghost small" id="livePower" title="Power on or standby">Power</button>
+      <button class="ghost small toggle" id="liveTallyR" title="Red tally">Red tally</button>
+      <button class="ghost small toggle" id="liveTallyG" title="Green tally">Green tally</button>
+    </span>
+  </div>
+  <div class="live-wrap">
+    <div class="live-left">
+    <div class="live-video">
+      <img id="liveImg" alt="Live picture of the selected camera">
+      <div class="live-msg" id="liveMsg">Choose a camera.</div>
+      <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
+    </div>
+      <div class="live-block live-presets">
+        <div class="row between"><h3>Presets</h3><label class="check small"><input type="checkbox" id="presetStore"> Store the current position</label></div>
+        <div class="preset-row"><div class="preset-grid" id="presetGrid"></div><label class="w90">Presets <select id="presetPage"></select></label></div>
+      </div>
+    </div>
+
+    <div class="live-panel">
+      <div class="live-block">
+        <h3>Pan / tilt</h3>
+        <div class="ptpad" id="ptPad">
+          <button data-pt="-1,1" aria-label="Up left">↖</button><button data-pt="0,1" aria-label="Up">↑</button><button data-pt="1,1" aria-label="Up right">↗</button>
+          <button data-pt="-1,0" aria-label="Left">←</button><button data-home title="Home position" aria-label="Home">⌂</button><button data-pt="1,0" aria-label="Right">→</button>
+          <button data-pt="-1,-1" aria-label="Down left">↙</button><button data-pt="0,-1" aria-label="Down">↓</button><button data-pt="1,-1" aria-label="Down right">↘</button>
+        </div>
+        <label>Speed <input type="range" id="ptSpeed" min="1" max="49" value="25"></label>
+      </div>
+      <div class="live-block">
+        <h3>Zoom</h3>
+        <div class="hold-row"><button data-hold="Z,-1">Wide</button><button data-hold="Z,1">Tele</button></div>
+        <label>Speed <input type="range" id="zSpeed" min="1" max="49" value="25"></label>
+      </div>
+      <div class="live-block">
+        <h3>Focus</h3>
+        <div class="hold-row"><button data-hold="F,-1">Near</button><button data-hold="F,1">Far</button></div>
+        <div class="hold-row"><button class="toggle" id="liveAF">Auto focus</button><button id="liveOPAF" title="One-push auto focus">Push AF</button></div>
+      </div>
+      <div class="live-block">
+        <h3>Iris</h3>
+        <div class="hold-row"><button data-iris="-1">Close</button><span class="iris-val mono" id="liveIris">–</span><button data-iris="1">Open</button></div>
+        <div class="hold-row"><button class="toggle" id="liveAI">Auto iris</button><button class="toggle" id="liveNight" title="Night mode: IR cut filter out">Night</button></div>
+      </div>
+      <div class="live-block">
+        <h3>White and black</h3>
+        <div class="hold-row"><button id="liveAWB">AWB</button><button id="liveABB">ABB</button></div>
+      </div>
+      <p class="hint small">Keyboard: arrow keys pan and tilt, + and − zoom, 1 to 9 recall presets. The picture needs JPEG streaming switched on in the camera (Video over IP).</p>
+    </div>
+  </div>
+</section>
+
 <!-- ================= SHOWS ================= -->
 <section id="tab-shows" class="tab">
   <header class="page-head"><h1>Shows</h1><p>A show puts the right scene files on the right cameras in the right scenes with one click. Make one on the Import page with <b>Save as show</b>.</p></header>
@@ -230,6 +291,17 @@
         <label class="w180">Selected rows <select id="rpBulkConn"><option value="">Set connection…</option><option value="lan">LAN</option><option value="none">None (NoAsign)</option></select></label>
       </div>
     </div>
+    <div class="row wrap bulkbar">
+      <span class="bulklabel small">Change IP addresses of <b id="rpBulkScope">all rows</b></span>
+      <label class="w140">First IP <input id="rpBulkIp" class="mono" placeholder="192.168.0.11"></label>
+      <label class="w90">Step <input id="rpBulkStep" type="number" min="1" max="50" value="1"></label>
+      <button class="secondary" id="rpBulkFill">Number in CAM order</button>
+      <span class="bulksep"></span>
+      <label class="w140">New network <input id="rpBulkNet" class="mono" placeholder="10.0.1"></label>
+      <button class="secondary" id="rpBulkNetBtn" title="Keeps the last number of every address and replaces the first three">Move to network</button>
+      <span class="bulksep"></span>
+      <button class="ghost" id="rpBulkPaste">Paste a list…</button>
+    </div>
     <table class="tbl" id="rpTable">
       <thead><tr><th class="w30"><input type="checkbox" id="rpSelAll" aria-label="Select all rows"></th><th>CAM</th><th>IP address</th><th>Port</th><th>Connection</th><th>Camera</th><th></th></tr></thead>
       <tbody></tbody>
@@ -257,7 +329,9 @@
       <div class="row between wrap"><h2>Script for Companion <span class="count" id="scriptCount">0</span></h2><button class="ghost small" id="scriptClear">Clear</button></div>
       <p class="hint">Runs the commands below on every ticked camera. In Companion add the internal action <b>System: Run shell path</b> with <span class="mono">powershell -ExecutionPolicy Bypass -File "path\to\script.ps1"</span> (Windows) or <span class="mono">bash "/path/to/script.sh"</span> (Mac).</p>
       <ol id="scriptList" class="script-list"></ol>
+      <div class="row between wrap"><span class="muted small">Run on these cameras</span><span class="row"><button class="ghost small" id="scriptAll">Select all</button><button class="ghost small" id="scriptNone">None</button></span></div>
       <div class="row wrap" id="scriptCams"></div>
+      <label class="check"><input type="checkbox" id="scriptLogin"><span><b>Put the camera login in the script.</b> <span class="muted">Only needed when User Auth is on in the cameras. Leave it off to keep the password out of the file: the script then uses the environment variables <span class="mono">PANASONIC_USER</span> and <span class="mono">PANASONIC_PASS</span> if they are set on the Companion computer.</span></span></label>
       <div class="row wrap"><label class="grow">Script name <input id="scriptName" value="panasonic-action"></label><button id="scriptPs1">Save PowerShell script</button><button class="secondary" id="scriptSh">Save Mac/Linux script</button></div>
     </div>
     <div class="card">

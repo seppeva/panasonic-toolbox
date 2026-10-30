@@ -306,6 +306,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
   if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); }
+  if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
   $('.content').scrollTop = 0;
 }));
 $$('.subtabs button').forEach(b => b.addEventListener('click', () => {
@@ -1091,6 +1092,11 @@ function renderScript() {
   $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span></label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you tick here.</span>';
   $$('#scriptCams input').forEach(i => i.onchange = () => store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)));
 }
+const setScriptCams = on => { $$('#scriptCams input').forEach(i => i.checked = on); store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); };
+$('#scriptAll').onclick = () => setScriptCams(true);
+$('#scriptNone').onclick = () => setScriptCams(false);
+$('#scriptLogin').checked = store.get('scriptLogin', false);
+$('#scriptLogin').onchange = e => store.set('scriptLogin', e.target.checked);
 $('#scriptClear').onclick = () => { state.script = []; saveScript(); renderScript(); };
 function scriptTargets() {
   const ips = $$('#scriptCams input:checked').map(x => x.value);
@@ -1100,6 +1106,7 @@ function scriptName(ext) { return ($('#scriptName').value.trim() || 'panasonic-a
 $('#scriptPs1').onclick = () => {
   const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
+  const withLogin = $('#scriptLogin').checked && !!user;
   const lines = [
     `# Panasonic Toolbox script: ${$('#scriptName').value.trim()}`,
     `# Generated ${new Date().toLocaleString('en-GB')}. Runs ${state.script.length} command(s) on ${cams.length} camera(s).`,
@@ -1108,7 +1115,9 @@ $('#scriptPs1').onclick = () => {
     `$ProgressPreference = 'SilentlyContinue'`,
     `$cameras = @(${cams.map(c => `'${c.ip}${c.port !== 80 ? ':' + c.port : ''}'`).join(', ')})`,
     `$commands = @(`, ...state.script.map((s, i) => `  @{ path = '${s.t === 'ptz' ? 'aw_ptz' : 'aw_cam'}'; cmd = '${encCmd(s.cmd)}' }${i < state.script.length - 1 ? ',' : ''}  # ${s.name.replace(/[\r\n]/g, ' ')}`), `)`,
-    user ? `$cred = New-Object System.Management.Automation.PSCredential('${user.replace(/'/g, "''")}', (ConvertTo-SecureString '${pass.replace(/'/g, "''")}' -AsPlainText -Force))` : `$cred = $null`,
+    ...(withLogin ? [`$user = '${user.replace(/'/g, "''")}'`, `$pass = '${pass.replace(/'/g, "''")}'`] : [`# Camera login (only needed when User Auth is on): set the environment variables PANASONIC_USER and PANASONIC_PASS`, `$user = $env:PANASONIC_USER`, `$pass = $env:PANASONIC_PASS`]),
+    `$cred = $null`,
+    `if ($user) { $cred = New-Object System.Management.Automation.PSCredential($user, (ConvertTo-SecureString ([string]$pass) -AsPlainText -Force)) }`,
     `foreach ($cam in $cameras) {`,
     `  foreach ($c in $commands) {`,
     `    $url = "http://$cam/cgi-bin/$($c.path)?cmd=$($c.cmd)&res=1"`,
@@ -1118,19 +1127,22 @@ $('#scriptPs1').onclick = () => {
     `}`,
   ];
   download(scriptName('.ps1'), lines.join('\r\n') + '\r\n', 'text/plain');
-  if (user) toast('Note: the camera login is stored in the script as plain text.');
+  if (withLogin) toast('Note: the camera login is stored in the script as plain text.');
 };
 $('#scriptSh').onclick = () => {
   const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
-  const auth = user ? ` --digest -u '${(user + ':' + pass).replace(/'/g, "'\\''")}'` : '';
+  const withLogin = $('#scriptLogin').checked && !!user;
   const lines = [
     '#!/bin/bash',
     `# Panasonic Toolbox script: ${$('#scriptName').value.trim()}`,
     `# Companion: System > Run shell path:  bash "<path to this file>"`,
+    ...(withLogin ? [`PANASONIC_USER='${user.replace(/'/g, "'\\''")}'`, `PANASONIC_PASS='${pass.replace(/'/g, "'\\''")}'`] : ['# Camera login (only needed when User Auth is on): export PANASONIC_USER and PANASONIC_PASS']),
+    'AUTH=()',
+    '[ -n "$PANASONIC_USER" ] && AUTH=(--digest -u "$PANASONIC_USER:$PANASONIC_PASS")',
     `CAMERAS=(${cams.map(c => `"${c.ip}${c.port !== 80 ? ':' + c.port : ''}"`).join(' ')})`,
     `for CAM in "\${CAMERAS[@]}"; do`,
-    ...state.script.map(s => `  curl -s -m 3${auth} "http://$CAM/cgi-bin/${s.t === 'ptz' ? 'aw_ptz' : 'aw_cam'}?cmd=${encCmd(s.cmd)}&res=1" > /dev/null  # ${s.name.replace(/[\r\n]/g, ' ')}`),
+    ...state.script.map(s => `  curl -s -m 3 "\${AUTH[@]}" "http://$CAM/cgi-bin/${s.t === 'ptz' ? 'aw_ptz' : 'aw_cam'}?cmd=${encCmd(s.cmd)}&res=1" > /dev/null  # ${s.name.replace(/[\r\n]/g, ' ')}`),
     `done`,
   ];
   download(scriptName('.sh'), lines.join('\n') + '\n', 'text/plain');
@@ -1309,7 +1321,7 @@ function renderRp() {
     tr.innerHTML = `<td><input type="checkbox" ${r.sel ? 'checked' : ''} aria-label="Select row"></td><td><input data-k="cam" type="number" min="1" max="200" value="${r.cam}" class="num" aria-label="CAM number"></td><td><input data-k="ip" value="${esc(r.ip)}" class="mono${validIp(r.ip) ? '' : ' bad'}" style="width:150px" aria-label="IP address"></td><td><input data-k="port" type="number" value="${r.port || 80}" class="num" aria-label="Port"></td>
       <td><select data-k="conn" aria-label="Connection"><option value="lan">LAN</option><option value="none">None (NoAsign)</option></select></td><td>${esc(r.label || '')}</td><td class="end"><button class="icon" aria-label="Remove row">×</button></td>`;
     $('select', tr).value = r.conn || 'lan';
-    $('input[type=checkbox]', tr).onchange = e => { r.sel = e.target.checked; saveRp(); };
+    $('input[type=checkbox]', tr).onchange = e => { r.sel = e.target.checked; saveRp(); renderRp(); };
     $$('[data-k]', tr).forEach(el => el.onchange = () => {
       const k = el.dataset.k; const v = k === 'cam' ? +el.value : k === 'port' ? (+el.value || 80) : el.value.trim();
       track(`Edit CAM ${r.cam}`, () => { state.rp[i] = { ...r, [k]: v }; });
@@ -1320,7 +1332,53 @@ function renderRp() {
   });
   $('#rpEmpty').classList.toggle('hidden', state.rp.length > 0);
   $('#rpSelAll').checked = state.rp.length > 0 && state.rp.every(r => r.sel);
+  const n = state.rp.filter(r => r.sel).length;
+  $('#rpBulkScope').textContent = n ? `${n} selected row${n > 1 ? 's' : ''}` : 'all rows';
 }
+/* ---- bulk IP changes: selected rows, or all rows when none are selected ---- */
+const ipStr = n => [n >>> 24 & 255, n >>> 16 & 255, n >>> 8 & 255, n & 255].join('.');
+const rpTargets = () => { const sel = state.rp.filter(r => r.sel); return (sel.length ? sel : state.rp).slice().sort((a, b) => a.cam - b.cam); };
+function rpBulk(label, fn) {
+  if (!state.rp.length) return info('No rows yet', 'Take the found cameras or add rows first.');
+  track(label, () => { state.rp = state.rp.map(r => ({ ...r })); fn(rpTargets().map(t => state.rp.find(r => r.cam === t.cam && r.ip === t.ip))); });
+  saveRp(); renderRp(); if (s15.a) analyzeS15();
+}
+$('#rpBulkFill').onclick = () => {
+  const first = $('#rpBulkIp').value.trim(), step = Math.max(1, +$('#rpBulkStep').value || 1);
+  if (!validIp(first)) return info('Fill in the first IP address', 'For example 192.168.0.11. The rows get that address and the next ones, in CAM order.');
+  let n = ipNum(first);
+  const rows = rpTargets();
+  if ((n & 255) + step * (rows.length - 1) > 254) return info('Not enough addresses', `From ${esc(first)} with step ${step} there is no room for ${rows.length} cameras in this network.`);
+  rpBulk(`Number ${rows.length} IP address${rows.length > 1 ? 'es' : ''} from ${first}`, rs => rs.forEach(r => { r.ip = ipStr(n); n += step; }));
+};
+$('#rpBulkNetBtn').onclick = () => {
+  const net = $('#rpBulkNet').value.trim().replace(/\.$/, '');
+  if (!/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(net) || net.split('.').some(x => +x > 255)) return info('Fill in the new network', 'The first three numbers of the new addresses, for example 10.0.1. The last number of every address stays the same.');
+  rpBulk(`Move to network ${net}`, rs => rs.forEach(r => { r.ip = net + '.' + (r.ip.split('.')[3] || '1'); }));
+};
+$('#rpBulkPaste').onclick = async () => {
+  const ok = await ask({ title: 'Paste IP addresses', ok: 'Apply', body: `<p>One camera per line, for example a column copied from Excel. A line with only an IP address goes to the next row in CAM order; a line like <code>3 192.168.0.13</code> sets CAM 3 (and adds that row if it doesn't exist yet).</p><label>IP addresses<textarea id="askList" class="mono" rows="10" placeholder="192.168.0.11&#10;192.168.0.12&#10;5 192.168.0.20"></textarea></label>` });
+  if (!ok) return;
+  const lines = $('#askList').value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const bad = [], plain = [], byCam = [];
+  for (const l of lines) {
+    const t = l.split(/[\s,;\t]+/).filter(Boolean);
+    const ip = t.find(x => validIp(x)); const cam = t.find(x => /^\d{1,3}$/.test(x));
+    if (!ip) bad.push(l); else if (cam && t.length > 1) byCam.push({ cam: +cam, ip }); else plain.push(ip);
+  }
+  if (bad.length) return info('Some lines have no valid IP address', esc(bad.slice(0, 5).join(', ')));
+  track(`Paste ${lines.length} IP address${lines.length > 1 ? 'es' : ''}`, () => {
+    state.rp = state.rp.map(r => ({ ...r }));
+    const rows = state.rp.length ? rpTargets().map(t => state.rp.find(r => r.cam === t.cam && r.ip === t.ip)) : [];
+    plain.forEach((ip, i) => {
+      if (rows[i]) rows[i].ip = ip;
+      else { const last = Math.max(0, ...state.rp.map(r => r.cam)); state.rp.push({ cam: last + 1, ip, port: 80, conn: 'lan' }); }
+    });
+    for (const b of byCam) { const r = state.rp.find(x => x.cam === b.cam); if (r) r.ip = b.ip; else state.rp.push({ cam: b.cam, ip: b.ip, port: 80, conn: 'lan' }); }
+    state.rp.sort((a, b) => a.cam - b.cam);
+  });
+  saveRp(); renderRp(); if (s15.a) analyzeS15();
+};
 $('#rpSelAll').onchange = e => { state.rp.forEach(r => r.sel = e.target.checked); saveRp(); renderRp(); };
 $('#rpBulkConn').onchange = e => {
   const v = e.target.value; e.target.value = ''; if (!v) return;
@@ -1465,6 +1523,186 @@ function analyzeS15() {
       (lanVal == null ? '<br><br>The connection type could not be set automatically. Set CNNCT MD to LAN on the controller for each CAM, or open a second version of the file as explained above.' : ''));
   };
 }
+
+/* ------------------------------------------------------------------ live view and control */
+const live = { cam: null, sid: null, moving: null, poll: null, irisVal: null, keys: new Set() };
+function renderLiveCams() {
+  const sel = $('#liveCam'); const cur = sel.value || store.get('liveCam', '');
+  sel.innerHTML = state.cameras.length ? state.cameras.map(c => `<option value="${esc(c.ip)}">${esc(c.title || c.model || c.ip)} · ${esc(c.ip)}</option>`).join('') : '<option value="">No cameras yet</option>';
+  sel.value = state.cameras.some(c => c.ip === cur) ? cur : (state.cameras[0]?.ip || '');
+}
+const liveActive = () => $('#tab-live').classList.contains('active');
+function liveEnter() { renderLiveCams(); liveStart(); }
+function liveLeave() { liveStop(); liveClose(); clearInterval(live.poll); live.poll = null; }
+function liveMsg(text) { $('#liveMsg').textContent = text || ''; $('#liveMsg').classList.toggle('hidden', !text); }
+async function liveClose() {
+  const sid = live.sid; live.sid = null;
+  $('#liveImg').removeAttribute('src');
+  if (sid) try { await bridgeFetch('/api/stream/close', { id: sid }); } catch { }
+}
+async function liveStart() {
+  await liveClose();
+  const cam = state.cameras.find(c => c.ip === $('#liveCam').value);
+  live.cam = cam || null;
+  $('#tab-live').classList.toggle('nocam', !cam);
+  if (!cam) { liveMsg('Find cameras on the Cameras page first.'); $('#liveStatus').textContent = ''; return; }
+  store.set('liveCam', cam.ip);
+  renderLiveScenes(); renderPresets();
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  liveMsg('Connecting to the picture…');
+  try {
+    const a = camAuth(cam);
+    const j = await bridgeFetch('/api/stream/open', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, res: $('#liveRes').value });
+    live.sid = j.id;
+    const img = $('#liveImg'); const sid = j.id;
+    img.src = `/api/stream/${encodeURIComponent(sid)}`;
+    const t0 = Date.now();
+    const wait = () => { if (live.sid !== sid) return; if (img.naturalWidth > 0) return liveMsg(''); if (Date.now() - t0 > 8000) return liveMsg('No picture. Check that JPEG streaming is on in the camera (Video over IP), and the login if User Auth is on. The controls still work.'); setTimeout(wait, 300); };
+    img.onerror = () => { if (live.sid === sid) liveMsg('No picture from this camera. The controls still work.'); };
+    wait();
+  } catch (e) { liveMsg('Picture failed: ' + e.message); }
+  liveRead();
+  clearInterval(live.poll); live.poll = setInterval(() => { if (liveActive() && !live.moving && document.visibilityState === 'visible') liveRead(); }, 4000);
+}
+$('#liveCam').onchange = liveStart;
+$('#liveRes').onchange = () => { store.set('liveRes', $('#liveRes').value); liveStart(); };
+$('#liveRes').value = store.get('liveRes', '640x360');
+
+async function liveSend(t, cmd) {
+  if (!live.cam) return null;
+  try {
+    const [r] = await batch(live.cam, [{ type: t, cmd }], { delayMs: 0 });
+    if (!r.ok) $('#liveStatus').textContent = `${cmd}: ${r.error || 'no response'}`;
+    else if (isErr(r.body)) $('#liveStatus').textContent = `${cmd}: not accepted (${r.body})`;
+    return r;
+  } catch (e) { $('#liveStatus').textContent = 'Failed: ' + e.message; return null; }
+}
+const setToggle = (sel, on) => { $(sel).classList.toggle('on', !!on); $(sel).setAttribute('aria-pressed', on ? 'true' : 'false'); };
+async function liveRead() {
+  const cam = live.cam; if (!cam) return;
+  let res;
+  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }], { delayMs: 0 }); }
+  catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
+  if (cam !== live.cam) return;
+  const b = i => (res[i]?.ok ? (res[i].body || '').trim() : '');
+  const power = b(0).toLowerCase();
+  live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';
+  $('#livePower').textContent = live.power === 'standby' ? 'Power on' : 'Standby';
+  setToggle('#liveAF', b(1).toLowerCase() === 'd11'); setToggle('#liveAI', b(2).toLowerCase() === 'd31'); setToggle('#liveNight', b(3).toLowerCase() === 'd61');
+  setToggle('#liveTallyR', b(4) === 'OLR:1'); setToggle('#liveTallyG', b(5) === 'OLG:1');
+  const sc = /^OSF:(\d)/.exec(b(6)); if (sc) { cam.scene = +sc[1] + 1; $$('#liveScenes button').forEach(x => x.classList.toggle('on', +x.dataset.scene === cam.scene)); }
+  const ir = /^i(\d{2})$/i.exec(b(7)); live.irisVal = ir ? +ir[1] : null; $('#liveIris').textContent = ir ? ir[1] : '–';
+  $('#liveStatus').textContent = `${cam.model || ''} ${live.power ? '· ' + live.power : ''}`;
+}
+
+// press and hold: pan/tilt, zoom and focus move while the button is held and stop on release
+const spd = id => Math.max(1, Math.min(49, +$(id).value || 25));
+function ptCmd(dx, dy) { const s = spd('#ptSpeed'); return `#PTS${pad2(50 + dx * s)}${pad2(50 + dy * s)}`; }
+function liveMove(kind, cmd) {
+  if (live.moving && live.moving.kind !== kind) liveStop();
+  live.moving = { kind }; liveSend('ptz', cmd);
+}
+function liveStop() {
+  const m = live.moving; live.moving = null; if (!m) return;
+  liveSend('ptz', m.kind === 'PT' ? '#PTS5050' : `#${m.kind}50`);
+}
+function holdButton(btn, start) {
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); btn.classList.add('pressed'); start(); });
+  const end = () => { if (btn.classList.contains('pressed')) { btn.classList.remove('pressed'); liveStop(); } };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => btn.addEventListener(ev, end));
+}
+$$('#ptPad [data-pt]').forEach(b => { const [dx, dy] = b.dataset.pt.split(',').map(Number); holdButton(b, () => liveMove('PT', ptCmd(dx, dy))); });
+$('#ptPad [data-home]').onclick = () => liveSend('ptz', '#APC80008000');
+$$('[data-hold]').forEach(b => { const [k, d] = b.dataset.hold.split(','); holdButton(b, () => liveMove(k, `#${k}${pad2(50 + +d * spd(k === 'Z' ? '#zSpeed' : '#ptSpeed'))}`)); });
+window.addEventListener('blur', liveStop);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') liveStop(); });
+
+// iris: one step per click, repeating while held
+$$('[data-iris]').forEach(b => {
+  let timer = null;
+  const step = async () => {
+    if (live.irisVal == null) { const r = await liveSend('ptz', '#I'); const m = /^i(\d{2})$/i.exec(r?.body || ''); live.irisVal = m ? +m[1] : 50; }
+    live.irisVal = Math.max(1, Math.min(99, live.irisVal + 3 * +b.dataset.iris));
+    $('#liveIris').textContent = pad2(live.irisVal);
+    if ($('#liveAI').classList.contains('on')) { await liveSend('ptz', '#D30'); setToggle('#liveAI', false); }
+    liveSend('ptz', '#I' + pad2(live.irisVal));
+  };
+  b.addEventListener('pointerdown', e => { e.preventDefault(); step(); timer = setInterval(step, 250); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { clearInterval(timer); timer = null; }));
+});
+
+const toggleCmd = (sel, t, on, off, after) => $(sel).onclick = async () => { const isOn = $(sel).classList.contains('on'); const r = await liveSend(t, isOn ? off : on); if (r?.ok && !isErr(r.body)) setToggle(sel, !isOn); after && after(); };
+toggleCmd('#liveAF', 'ptz', '#D11', '#D10');
+toggleCmd('#liveAI', 'ptz', '#D31', '#D30');
+toggleCmd('#liveNight', 'ptz', '#D61', '#D60');
+toggleCmd('#liveTallyR', 'cam', 'TLR:1', 'TLR:0');
+toggleCmd('#liveTallyG', 'cam', 'TLG:1', 'TLG:0');
+$('#liveOPAF').onclick = () => liveSend('cam', 'OSE:69:1');
+$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body})` : 'Auto white balance started'); };
+$('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
+$('#livePower').onclick = async () => {
+  if (!live.cam) return;
+  if (live.power !== 'standby') {
+    if (!await ask({ title: `Put ${esc(live.cam.title || live.cam.ip)} in standby?`, body: '<p>The camera stops sending a picture until you switch it on again.</p>', ok: 'Standby', danger: true })) return;
+    await liveSend('ptz', '#O0');
+  } else await liveSend('ptz', '#O1');
+  setTimeout(liveRead, 1500);
+};
+
+function renderLiveScenes() {
+  const cam = live.cam; const box = $('#liveScenes');
+  if (!cam) { box.innerHTML = ''; return; }
+  const n = cam.model ? profileFor(cam.model).scenes : 4;
+  box.innerHTML = Array.from({ length: n }, (_, i) => `<button data-scene="${i + 1}" class="${cam.scene === i + 1 ? 'on' : ''}" title="Load scene file ${i + 1}">Scene ${i + 1}</button>`).join('');
+  $$('button', box).forEach(b => b.onclick = async () => {
+    const r = await liveSend('cam', 'XSF:' + b.dataset.scene);
+    if (r?.ok && !isErr(r.body)) { cam.scene = +b.dataset.scene; $$('button', box).forEach(x => x.classList.toggle('on', x === b)); renderCams(); }
+  });
+}
+// presets: 12 per page, click to recall; with Store ticked, click saves the current position
+const PRESETS_PER_PAGE = 12;
+$('#presetPage').innerHTML = Array.from({ length: Math.ceil(100 / PRESETS_PER_PAGE) }, (_, i) => `<option value="${i}">${i * PRESETS_PER_PAGE + 1}–${Math.min(100, (i + 1) * PRESETS_PER_PAGE)}</option>`).join('');
+$('#presetPage').value = store.get('presetPage', 0);
+$('#presetPage').onchange = () => { store.set('presetPage', +$('#presetPage').value); renderPresets(); };
+$('#presetStore').onchange = () => $('#presetGrid').classList.toggle('storing', $('#presetStore').checked);
+function renderPresets() {
+  const page = +$('#presetPage').value || 0; const grid = $('#presetGrid');
+  grid.innerHTML = Array.from({ length: PRESETS_PER_PAGE }, (_, i) => page * PRESETS_PER_PAGE + i + 1).filter(n => n <= 100).map(n => `<button data-preset="${n}">${n}</button>`).join('');
+  $$('button', grid).forEach(b => b.onclick = () => livePreset(+b.dataset.preset));
+}
+async function livePreset(n) {
+  if (!live.cam) return;
+  if ($('#presetStore').checked) {
+    if (!await ask({ title: `Store preset ${n}?`, body: `<p>Preset ${n} of ${esc(live.cam.title || live.cam.ip)} is replaced by the current position.</p>`, ok: 'Store' })) return;
+    const r = await liveSend('ptz', '#M' + pad2(n - 1));
+    if (r?.ok && !isErr(r.body)) toast(`Preset ${n} stored`);
+    $('#presetStore').checked = false; $('#presetGrid').classList.remove('storing');
+  } else {
+    const r = await liveSend('ptz', '#R' + pad2(n - 1));
+    if (r?.ok && !isErr(r.body)) { $$('#presetGrid button').forEach(x => x.classList.toggle('on', +x.dataset.preset === n)); }
+  }
+}
+// keyboard on the Live page
+const KEY_PT = { ArrowUp: [0, 1], ArrowDown: [0, -1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+document.addEventListener('keydown', e => {
+  if (!liveActive() || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || $('dialog[open]')) return;
+  if (KEY_PT[e.key] || ['+', '=', '-', '_'].includes(e.key)) e.preventDefault();
+  if (e.repeat) return;
+  if (KEY_PT[e.key]) {
+    live.keys.add(e.key);
+    const dx = [...live.keys].reduce((s, k) => s + (KEY_PT[k]?.[0] || 0), 0), dy = [...live.keys].reduce((s, k) => s + (KEY_PT[k]?.[1] || 0), 0);
+    liveMove('PT', ptCmd(Math.sign(dx), Math.sign(dy)));
+  } else if (e.key === '+' || e.key === '=') liveMove('Z', '#Z' + pad2(50 + spd('#zSpeed')));
+  else if (e.key === '-' || e.key === '_') liveMove('Z', '#Z' + pad2(50 - spd('#zSpeed')));
+  else if (/^[1-9]$/.test(e.key)) livePreset(+e.key);
+});
+document.addEventListener('keyup', e => {
+  if (KEY_PT[e.key]) {
+    live.keys.delete(e.key);
+    if (!live.keys.size) liveStop();
+    else { const dx = [...live.keys].reduce((s, k) => s + KEY_PT[k][0], 0), dy = [...live.keys].reduce((s, k) => s + KEY_PT[k][1], 0); liveMove('PT', ptCmd(Math.sign(dx), Math.sign(dy))); }
+  } else if (['+', '=', '-', '_'].includes(e.key) && live.moving?.kind === 'Z') liveStop();
+});
 
 /* ------------------------------------------------------------------ init */
 renderCams(); renderRp(); renderParamTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo();

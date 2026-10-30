@@ -32,16 +32,39 @@ cur = {"scene": 1, "store": {}}
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
-        u = urlparse(self.path); cmd = parse_qs(u.query).get("cmd", [""])[0]
+        u = urlparse(self.path)
+        if u.path == "/cgi-bin/mjpeg":
+            return self.mjpeg()
+        cmd = parse_qs(u.query).get("cmd", [""])[0]
         body = self.handle_cmd(cmd, u.path.endswith("aw_ptz"))
         b = body.encode(); self.send_response(200); self.send_header("Content-Type", "text/plain")
         self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
+    def mjpeg(self):
+        import io, time
+        from PIL import Image, ImageDraw
+        self.send_response(200); self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=myboundary"); self.end_headers()
+        try:
+            while True:
+                im = Image.new("RGB", (640, 360), (30, 40, 55)); d = ImageDraw.Draw(im)
+                x = int(time.time() * 80) % 640
+                d.rectangle([x, 300, x + 60, 330], fill=(255, 176, 32))
+                d.text((20, 20), f"{MODEL} {TITLE}  scene {cur['scene']}", fill=(255, 255, 255))
+                d.text((20, 44), f"last: {last.get('ptz', '-')}", fill=(200, 220, 255))
+                d.text((20, 68), time.strftime("%H:%M:%S"), fill=(200, 200, 200))
+                b = io.BytesIO(); im.save(b, "JPEG", quality=70); jpg = b.getvalue()
+                self.wfile.write(b"--myboundary\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                time.sleep(0.1)
+        except Exception:
+            pass
     def handle_cmd(self, c, ptz):
         global extra
         with lock:
             st = scenes[cur["scene"]]
             if ptz:
+                last["ptz"] = c
                 if c == "#O": return "p1"
+                m = re.match(r"#(PTS)(\d{4})$|#([ZFI])(\d{2})$|#([RM])(\d{2})$|#O([01])$|#D([13])([01])$", c)
+                if m: return c[1:].lower()
                 if c == "#D6": return "d6" + st["#D6"]
                 m = re.match(r"#D6([01])$", c)
                 if m: st["#D6"] = m.group(1); return "d6" + m.group(1)
@@ -76,5 +99,6 @@ class H(BaseHTTPRequestHandler):
             return "ER1:" + c[:6]
 
 extra = {}
+last = {}
 print(f"Mock {MODEL} ({fam}, {len(params)} params) op http://{HOST}:{PORT}")
 ThreadingHTTPServer((HOST, PORT), H).serve_forever()

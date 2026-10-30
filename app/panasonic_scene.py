@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.3.0"
+VERSION = "2.4.0"
 DEFAULT_PORT = 8765
 
 
@@ -295,6 +295,30 @@ def probe(ip, port, user, password):
     return info
 
 
+# Live view: the page gets a random stream id; the server opens the camera's MJPEG stream (with the login)
+# and passes it through, so the camera login never ends up in a URL and the page needs no access to the camera.
+STREAMS = {}
+_streams_guard = threading.Lock()
+STREAM_RES = ("1920x1080", "1280x720", "640x360", "320x180")
+
+
+def open_stream(ip, port, user, password, res):
+    sid = secrets.token_urlsafe(18)
+    with _streams_guard:
+        for k in [k for k, v in STREAMS.items() if v["ip"] == ip or time.time() - v["t"] > 3600]:
+            STREAMS[k]["closed"] = True
+            del STREAMS[k]
+        STREAMS[sid] = {"ip": ip, "port": port, "user": user, "password": password, "res": res, "t": time.time(), "closed": False}
+    return sid
+
+
+def close_stream(sid):
+    with _streams_guard:
+        s = STREAMS.pop(sid, None)
+        if s:
+            s["closed"] = True
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "PanasonicToolbox"
     sys_version = ""
@@ -361,6 +385,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION,
                                         "localIps": local_ipv4s(), "platform": sys.platform,
                                         "saveDir": save_dir(), "nativeDialogs": WINDOW is not None})
+        if path.startswith("/api/stream/"):
+            with _streams_guard:
+                s = STREAMS.get(path.rsplit("/", 1)[-1])
+            if not s:
+                return self.send_json(404, {"ok": False, "error": "stream closed"})
+            return self.proxy_stream(s)
         if path in ("", "/"):
             path = "/index.html"
         root = os.path.realpath(WEB_DIR)
@@ -414,6 +444,15 @@ class Handler(BaseHTTPRequestHandler):
                                  str(req.get("gateway", "")), str(req.get("dns1", "0.0.0.0")), str(req.get("dns2", "0.0.0.0")),
                                  int(req.get("port") or 80), local_ipv4s())
                 return self.send_json(200, {"ok": True})
+            if path == "/api/stream/open":
+                ip, port = str(req.get("ip", "")), int(req.get("port") or 80)
+                if not target_allowed(ip):
+                    return self.send_json(400, {"ok": False, "error": "Only cameras on the local network"})
+                res = req.get("res") if req.get("res") in STREAM_RES else "640x360"
+                return self.send_json(200, {"ok": True, "id": open_stream(ip, port, req.get("user") or None, req.get("pass") or "", res)})
+            if path == "/api/stream/close":
+                close_stream(str(req.get("id", "")))
+                return self.send_json(200, {"ok": True})
             if path == "/api/folder":
                 if req.get("set"):
                     d = os.path.realpath(os.path.expanduser(str(req["set"])))
@@ -441,6 +480,54 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(400, {"ok": False, "error": str(e)})
         except Exception as e:
             return self.send_json(500, {"ok": False, "error": f"{type(e).__name__}: {e}"})
+
+    def proxy_stream(self, s):
+        """Passes the camera's MJPEG stream through. Falls back to JPEG snapshots for cameras without MJPEG."""
+        base = f"http://{s['ip']}:{s['port']}/cgi-bin"
+        opener = build_opener(s["ip"], s["port"], s["user"], s["password"])
+        try:
+            up = opener.open(f"{base}/mjpeg?resolution={s['res']}&quality=1", timeout=5)
+            ctype = up.headers.get("Content-Type", "")
+            if "multipart" not in ctype:
+                up.close()
+                raise ValueError("no mjpeg")
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return self.send_json(401, {"ok": False, "error": "Login required"})
+            up = None
+        except Exception:
+            up = None
+        self.send_response(200)
+        self.send_header("Cache-Control", "no-store")
+        try:
+            if up is not None:
+                self.send_header("Content-Type", up.headers.get("Content-Type"))
+                self.end_headers()
+                with up:
+                    while not s["closed"]:
+                        chunk = up.read1(65536) if hasattr(up, "read1") else up.read(16384)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                return
+            # snapshot fallback, about 5 frames per second
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.end_headers()
+            width = s["res"].split("x")[0]
+            fails = 0
+            while not s["closed"] and fails < 10:
+                try:
+                    with opener.open(f"{base}/camera?resolution={width}&quality=1", timeout=4) as r:
+                        jpg = r.read()
+                    fails = 0
+                    self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                except (BrokenPipeError, ConnectionResetError):
+                    raise
+                except Exception:
+                    fails += 1
+                time.sleep(0.2)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
 
     def batch(self, req):
         ip = str(req.get("ip", "")).strip()

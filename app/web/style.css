@@ -235,3 +235,49 @@ input.changed{border-color:var(--accent);background:var(--accent-soft)}
 #cmdTable td.acts button{margin-left:4px}
 #cmdTable td.acts .out{white-space:normal;max-width:180px;margin-top:4px}
 #eipTable input{width:130px} #eipTable input.num{width:70px}
+
+/* ---------- v2.4: live view ---------- */
+textarea{background:var(--field);border:1px solid var(--rule);color:var(--text);border-radius:var(--r);padding:8px 9px;font-family:var(--mono);font-size:12px;width:100%;resize:vertical;box-sizing:border-box}
+textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.bulkbar{background:var(--field);border:1px solid var(--rule-soft);border-radius:6px;padding:8px 12px;align-items:flex-end}
+.bulkbar .bulklabel{align-self:center;color:var(--text-2);margin-right:4px}
+.bulksep{width:1px;align-self:stretch;background:var(--rule);margin:0 4px}
+.live-top{margin:0 0 12px;align-items:flex-end}
+.live-status{align-self:center;font-size:12px}
+.live-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.live-video{position:relative;background:#000;border:1px solid var(--rule-soft);border-radius:8px;overflow:hidden;aspect-ratio:16/9}
+.live-video img{width:100%;height:100%;object-fit:contain;display:block}
+.live-video img:not([src]){visibility:hidden}
+.live-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;color:var(--muted);font-size:13px}
+.live-msg.hidden{display:none}
+.live-scenes{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;flex-wrap:wrap}
+.live-scenes button{background:rgba(20,22,26,.78);border:1px solid rgba(255,255,255,.14);color:var(--text);height:28px;padding:0 11px;backdrop-filter:blur(6px)}
+.live-scenes button.on{background:var(--accent);border-color:var(--accent)}
+.live-panel{display:flex;flex-direction:column;gap:10px}
+.live-block{background:var(--panel);border:1px solid var(--rule-soft);border-radius:8px;padding:10px 12px}
+.live-block h3{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.live-block .row.between h3{margin:0}
+.live-block label{margin-top:8px}
+.live-block input[type=range]{height:auto;padding:0;border:0;background:none;accent-color:var(--accent);width:100%}
+.ptpad{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;max-width:200px;margin:0 auto}
+.ptpad button,.hold-row button,.preset-grid button{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:38px;padding:0;font-size:15px;touch-action:none;user-select:none;-webkit-user-select:none}
+.ptpad button:hover,.hold-row button:hover,.preset-grid button:hover{background:#353a40}
+.ptpad button.pressed,.hold-row button.pressed,.preset-grid button:active{background:var(--accent);border-color:var(--accent)}
+.hold-row{display:flex;gap:6px;align-items:center;margin-top:6px}
+.hold-row:first-of-type{margin-top:0}
+.hold-row button{flex:1;font-size:13px;height:32px}
+.hold-row .iris-val{width:34px;text-align:center;color:var(--text-2)}
+button.toggle.on,.hold-row button.toggle.on{background:var(--accent-soft);border-color:var(--accent);color:#cfe0fb}
+.live-quick button.toggle.on#liveTallyR{background:rgba(224,87,77,.25);border-color:#e0574d;color:#fff}
+.live-quick button.toggle.on#liveTallyG{background:rgba(71,178,108,.25);border-color:#47b26c;color:#fff}
+.preset-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.preset-grid button{height:32px;font-size:13px}
+.preset-grid button.on{border-color:var(--accent);color:#cfe0fb}
+.preset-grid.storing button{border-color:#d9a13b;color:#ebc77f}
+#tab-live.nocam .live-panel{opacity:.5;pointer-events:none}
+@media (max-width:1050px){.live-wrap{grid-template-columns:1fr}}
+.live-left{display:flex;flex-direction:column;gap:12px;min-width:0}
+.preset-row{display:flex;gap:12px;align-items:flex-end}
+.live-presets .preset-grid{flex:1;grid-template-columns:repeat(12,1fr)}
+.live-presets label.w90{margin:0}
+@media (max-width:1250px){.live-presets .preset-grid{grid-template-columns:repeat(6,1fr)}}
