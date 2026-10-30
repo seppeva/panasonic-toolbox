@@ -61,7 +61,7 @@ jobs:
           "$BIN" --headless --port 8799 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8799/api/ping && break; sleep 1; done
           curl -sf http://127.0.0.1:8799/api/ping | grep -q panasonic-scene
-          curl -sf http://127.0.0.1:8799/ | grep -q "Panasonic PTZ Scene Files"
+          curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Scene</title>"
           curl -sf -X POST http://127.0.0.1:8799/api/quit || true
 
       - name: macOS — DMG en ZIP

@@ -3,28 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panasonic PTZ Scene Files</title>
+<title>Panasonic Scene</title>
 <meta name="description" content="Exporteer en importeer scene files (shading) van Panasonic PTZ-camera's, en wijs camera's toe aan een AW-RP150.">
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.webmanifest">
 </head>
 <body>
-<header class="top">
-  <div class="brand">
-    <span class="lens" aria-hidden="true"></span>
-    <div>
-      <h1>Panasonic PTZ Scene Files</h1>
-      <p class="sub">Shading exporteren &amp; importeren · AW-UE150 / UE150A / UE160 / UE100 / UE80-reeks</p>
-    </div>
+<div class="shell">
+<aside class="side">
+  <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Scene</span></div>
+  <nav class="tabs" role="tablist" aria-label="Onderdelen">
+    <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Camera's</span></button>
+    <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Exporteren</span></button>
+    <button role="tab" data-tab="import"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Importeren</span></button>
+    <button role="tab" data-tab="rp150"><svg viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg><span>RP150-toewijzing</span></button>
+    <button role="tab" data-tab="params"><svg viewBox="0 0 20 20"><path d="M4 5h12M4 10h12M4 15h8"/></svg><span>Parameterlijst</span></button>
+  </nav>
+  <div class="side-foot">
+    <div class="conn" id="bridgeBox"><span class="dot" id="bridgeDot"></span><span id="bridgeText">Verbinden…</span></div>
+    <button class="sidebtn" id="logToggle"><svg viewBox="0 0 20 20"><path d="M5 4.5h10M5 8h10M5 11.5h6"/><rect x="2.5" y="2" width="15" height="16" rx="2"/></svg><span>Logboek</span><span id="logCount" class="count">0</span></button>
+    <button class="sidebtn" id="bridgeSettingsBtn"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/></svg><span>Instellingen</span></button>
   </div>
-  <div class="bridge" id="bridgeBox">
-    <span class="dot" id="bridgeDot"></span>
-    <span id="bridgeText">Verbinden…</span>
-    <button class="ghost small" id="bridgeSettingsBtn" title="Instellingen">⚙</button>
-  </div>
-</header>
-
+</aside>
+<div class="content">
 <div class="bridge-help hidden" id="bridgeHelp">
   <div class="card warn">
     <h3>Geen verbinding met de Panasonic Scene-app</h3>
@@ -35,38 +37,21 @@
   <div class="note ok" id="updateText"></div>
 </div>
 
-<dialog id="settingsDlg">
-  <form method="dialog" class="dlg">
-    <h3>Instellingen</h3>
-    <label>Pauze tussen commando's (ms) <input id="setDelay" type="number" min="0" max="500" value="20"></label>
-    <label>Wachttijd na scènewissel (ms) <input id="setSceneWait" type="number" min="500" max="8000" value="2000"></label>
-    <p class="muted small" id="aboutText"></p>
-    <div class="row between"><button type="button" class="danger" id="quitBtn">App afsluiten</button><span class="row"><button value="cancel" class="ghost">Annuleer</button><button value="ok" id="saveSettings">Bewaar</button></span></div>
-  </form>
-</dialog>
-
-<nav class="tabs" role="tablist">
-  <button role="tab" data-tab="cams" class="active">1 · Camera's</button>
-  <button role="tab" data-tab="export">2 · Exporteren</button>
-  <button role="tab" data-tab="import">3 · Importeren</button>
-  <button role="tab" data-tab="rp150">RP150 toewijzen</button>
-  <button role="tab" data-tab="params">Parameterlijst</button>
-</nav>
-
 <main>
 <!-- ============ CAMERAS ============ -->
 <section id="tab-cams" class="tab active">
+  <header class="page-head"><h1>Camera's</h1><p>Zet je laptop in de IP-range van de camera's en zoek ze op het netwerk. Geselecteerde camera's gebruik je bij exporteren en importeren.</p></header>
   <div class="grid2">
     <div class="card">
       <h2>Camera's zoeken</h2>
-      <p class="muted">Zet je laptop in dezelfde IP-range als de PTZ's (bv. 192.168.0.200 / 255.255.255.0) en scan het netwerk.</p>
+      <p class="muted">Bijvoorbeeld laptop op 192.168.0.200, subnetmasker 255.255.255.0.</p>
       <div class="row wrap">
         <label class="grow">IP-bereik <input id="scanRange" placeholder="192.168.0.0/24 of 192.168.0.10-60"></label>
         <label class="w90">Poort <input id="scanPort" type="number" value="80"></label>
       </div>
       <div class="row wrap">
-        <label class="grow">Gebruiker <span class="muted">(enkel als “User Auth” aan staat)</span><input id="authUser" autocomplete="off"></label>
-        <label class="grow">Wachtwoord <input id="authPass" type="password" autocomplete="off"></label>
+        <label class="grow">Gebruiker<input id="authUser" autocomplete="off" placeholder="Alleen bij User Auth"></label>
+        <label class="grow">Wachtwoord <input id="authPass" type="password" autocomplete="off" placeholder="Alleen bij User Auth"></label>
       </div>
       <div class="row">
         <button id="scanBtn">Scan netwerk</button>
@@ -86,14 +71,14 @@
 
   <div class="card">
     <div class="row between">
-      <h2>Camera's <span class="count" id="camCount">0</span></h2>
+      <h2>Gevonden camera's <span class="count" id="camCount">0</span></h2>
       <div class="row">
         <button class="ghost small" id="refreshBtn">Status vernieuwen</button>
         <button class="ghost small" id="clearCamsBtn">Lijst wissen</button>
       </div>
     </div>
     <table class="tbl" id="camTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="selAll" title="Alles selecteren"></th><th>IP</th><th>Model</th><th>Titel</th><th>Profiel</th><th>Actieve scène</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th class="w30"><input type="checkbox" id="selAll" title="Alles selecteren"></th><th>IP</th><th>Model</th><th>Titel</th><th>Profiel</th><th>Actieve scène</th><th>Status</th><th><span class="hidden">Acties</span></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="empty muted" id="camEmpty">Nog geen camera's. Scan het netwerk of voeg er manueel toe.</p>
@@ -102,9 +87,9 @@
 
 <!-- ============ EXPORT ============ -->
 <section id="tab-export" class="tab">
+  <header class="page-head"><h1>Exporteren</h1><p>Leest alle shading-instellingen van een scène uit en bewaart ze als .pscene.json-bestand.</p></header>
   <div class="card">
-    <h2>Scene file exporteren</h2>
-    <p class="muted">Leest alle shading-parameters die bij een scène horen uit de geselecteerde camera's en bewaart ze als <code>.pscene.json</code>-bestand.</p>
+    <h2>Wat exporteren</h2>
     <div class="row wrap">
       <fieldset class="seg">
         <legend>Welke scène(s)?</legend>
@@ -112,7 +97,7 @@
         <label><input type="radio" name="expMode" value="pick"> Kies scènes: <span id="expScenes" class="chips"></span></label>
       </fieldset>
     </div>
-    <div class="note warn hidden" id="expWarn">⚠ Om andere scènes uit te lezen moet de camera even naar die scène schakelen: het beeld verandert tijdens het uitlezen. Doe dit niet terwijl de camera on air is. Na afloop gaat de camera terug naar de oorspronkelijke scène.</div>
+    <div class="note warn hidden" id="expWarn">Om andere scènes uit te lezen moet de camera even naar die scène schakelen: het beeld verandert tijdens het uitlezen. Doe dit niet terwijl de camera on air is. Na afloop gaat de camera terug naar de oorspronkelijke scène.</div>
     <div class="row wrap">
       <label class="check"><input type="checkbox" id="expZip" checked> Meerdere camera's: bundel in één ZIP</label>
     </div>
@@ -129,8 +114,9 @@
 
 <!-- ============ IMPORT ============ -->
 <section id="tab-import" class="tab">
+  <header class="page-head"><h1>Importeren</h1><p>Zet een opgeslagen scène terug op dezelfde of een andere camera.</p></header>
   <div class="card">
-    <h2>Scene file importeren</h2>
+    <h2>Bestanden</h2>
     <div class="drop" id="dropZone">
       <p><b>Sleep hier .pscene.json- of .zip-bestanden</b> of <label class="link">kies bestanden<input type="file" id="fileInput" accept=".json,.zip,application/json,application/zip" multiple hidden></label></p>
       <p class="muted small">Bestanden die je in deze sessie exporteerde staan hieronder ook al klaar.</p>
@@ -150,7 +136,7 @@
       <label class="check"><input type="checkbox" id="optVerify" checked> Na import controleren (terug uitlezen en vergelijken)</label>
       <label class="check"><input type="checkbox" id="optForce"> Ook parameters proberen die niet in het profiel van de doelcamera zitten (ander model)</label>
     </div>
-    <div class="note warn">⚠ Importeren verandert het beeld van de doelcamera meteen. Als de doelscène niet de actieve scène is, schakelt de camera tijdelijk naar die scène.</div>
+    <div class="note warn">Importeren verandert het beeld van de doelcamera meteen. Als de doelscène niet de actieve scène is, schakelt de camera tijdelijk naar die scène.</div>
     <div class="row"><button id="importBtn">Start import</button><span class="muted" id="impStatus"></span></div>
   </div>
   <div class="card hidden" id="impResultCard"><h2>Resultaat</h2><div id="impResult"></div></div>
@@ -158,8 +144,9 @@
 
 <!-- ============ RP150 ============ -->
 <section id="tab-rp150" class="tab">
+  <header class="page-head"><h1>RP150-toewijzing</h1><p>Wijs de gevonden camera's toe aan CAM-knoppen op een AW-RP150.</p></header>
   <div class="card">
-    <h2>Camera's snel toewijzen aan een AW-RP150</h2>
+    <h2>Toewijzing</h2>
     <p class="muted">De RP150 heeft geen netwerk-API om zijn instellingen te wijzigen. Twee snelle routes: (A) een stappenplan voor het paneel, gegenereerd uit je camera-lijst, of (B) het bestand <code>Network.s15</code> van de SD-kaart bewerken en terug inladen.</p>
     <div class="row wrap">
       <button id="rpFromCams" class="secondary">Neem gevonden camera's over</button>
@@ -175,13 +162,13 @@
   </div>
   <div class="grid2">
     <div class="card">
-      <h2>A · Stappenplan voor het paneel</h2>
+      <h2>Stappenplan voor het paneel</h2>
       <p class="muted">Per camera: verbindingstype op LAN en het IP-adres invullen. Print het of zet het op je telefoon naast het paneel.</p>
       <div class="row"><button id="rpChecklistBtn" class="secondary">Maak stappenplan</button><button id="rpPrintBtn" class="ghost">Print</button></div>
       <div id="rpChecklist" class="checklist"></div>
     </div>
     <div class="card">
-      <h2>B · Network.s15 bewerken <span class="tag">experimenteel</span></h2>
+      <h2>Network.s15 bewerken <span class="tag">Experimenteel</span></h2>
       <ol class="small">
         <li>Op de RP150: <b>[SYSTEM] › CONNECT SETTING › DATA SAVE</b> (SD-kaart).</li>
         <li>Laad hier <code>\PRIVATE\MEIGROUP\PAVCN\SBG\SYSCAM\RP150\DATA\Network.s15</code>.</li>
@@ -199,9 +186,10 @@
 
 <!-- ============ PARAMS ============ -->
 <section id="tab-params" class="tab">
+  <header class="page-head"><h1>Parameterlijst</h1><p>Alle instellingen die in een scene file zitten, per cameramodel.</p></header>
   <div class="card">
     <div class="row between wrap">
-      <h2>Parameters in een scene file</h2>
+      <h2>Profiel</h2>
       <div class="row wrap">
         <label class="w180">Camera-profiel <select id="paramFam"></select></label>
         <label class="w180">Zoek <input id="paramFilter" placeholder="bv. matrix, knee, OSD:A4"></label>
@@ -216,14 +204,19 @@
   </div>
 </section>
 </main>
-
-<div class="log-wrap">
-  <details id="logBox"><summary>Logboek <span id="logCount" class="count">0</span></summary><pre id="log"></pre></details>
 </div>
+</div>
+<dialog id="settingsDlg">
+  <form method="dialog" class="dlg">
+    <h3>Instellingen</h3>
+    <label>Pauze tussen commando's (ms) <input id="setDelay" type="number" min="0" max="500" value="20"></label>
+    <label>Wachttijd na scènewissel (ms) <input id="setSceneWait" type="number" min="500" max="8000" value="2000"></label>
+    <p class="muted small" id="aboutText"></p>
+    <div class="row between"><button type="button" class="danger" id="quitBtn">App afsluiten</button><span class="row"><button value="cancel" class="ghost">Annuleer</button><button value="ok" id="saveSettings">Bewaar</button></span></div>
+  </form>
+</dialog>
 
-<footer class="foot">
-  <span>Gebaseerd op Panasonic “HD/4K Integrated Camera Interface Specifications” (scene-commandolijsten per model). Niet officieel van Panasonic.</span>
-</footer>
+<div class="log-drawer hidden" id="logBox"><div class="log-head"><strong>Logboek</strong><button class="ghost small" id="logClose">Sluiten</button></div><pre id="log"></pre></div>
 
 <script src="catalog.js"></script>
 <script src="app.js"></script>

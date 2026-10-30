@@ -37,6 +37,8 @@ function log(msg, kind = '') {
   el.scrollTop = el.scrollHeight;
   $('#logCount').textContent = ++logN;
 }
+$('#logToggle').onclick = () => $('#logBox').classList.toggle('hidden');
+$('#logClose').onclick = () => $('#logBox').classList.add('hidden');
 
 /* ------------------------------------------------------------------ models */
 function profileFor(model) {
@@ -108,12 +110,12 @@ async function bridgeFetch(path, body, timeoutMs = 120000) {
 }
 async function checkBridge() {
   const dot = $('#bridgeDot'), txt = $('#bridgeText');
-  dot.className = 'dot'; txt.textContent = 'Bridge: controleren…';
+  dot.className = 'dot'; txt.textContent = 'Verbinden…';
   try {
     const j = await bridgeFetch('/api/ping', undefined, 4000);
     state.bridgeOk = true; state.localIps = j.localIps || [];
     state.version = j.version;
-    dot.className = 'dot ok'; txt.textContent = `Verbonden · v${j.version}`;
+    dot.className = 'dot ok'; txt.textContent = 'Verbonden'; txt.title = `Panasonic Scene ${j.version}`;
     $('#bridgeHelp').classList.add('hidden');
     if (!$('#scanRange').value && state.localIps.length) {
       const ip = state.localIps.find(i => i.startsWith('192.168.')) || state.localIps[0];
@@ -266,7 +268,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
 }));
 $('#bridgeSettingsBtn').onclick = () => {
   $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
-  $('#aboutText').textContent = `Panasonic Scene v${state.version || '?'} · draait lokaal op ${location.host}. Laptop-IP's: ${state.localIps.join(', ') || '–'}`;
+  $('#aboutText').textContent = `Panasonic Scene ${state.version || ''}. Draait lokaal op ${location.host}. IP-adressen van deze laptop: ${state.localIps.join(', ') || '–'}`;
   $('#settingsDlg').showModal();
 };
 $('#saveSettings').onclick = () => {
@@ -306,9 +308,9 @@ function renderCams() {
       <td class="mono">${esc(c.ip)}${c.port && c.port != 80 ? ':' + c.port : ''}</td>
       <td>${esc(c.model || '–')}</td><td>${esc(c.title || '')}</td>
       <td>${prof ? `<span class="pill ${prof.fam === 'GENERIC' ? 'info' : ''}">${esc(prof.fam)}</span> <span class="muted small">${paramsFor(c).length} par.</span>` : ''}</td>
-      <td>${c.scene == null ? '–' : c.scene === 0 ? 'OFF' : 'Scene ' + c.scene}${c.power && c.power !== 'aan' ? ` <span class="pill busy">${esc(c.power)}</span>` : ''}</td>
-      <td>${c.busy ? '<span class="pill busy">bezig…</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : ''}</td>
-      <td><button class="ghost small" data-act="del" title="Verwijder">✕</button></td>`;
+      <td>${c.scene == null ? '–' : c.scene === 0 ? 'Uit' : 'Scene ' + c.scene}</td>
+      <td>${c.busy ? '<span class="pill busy">Bezig</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : ''}</td>
+      <td class="end"><button class="icon" data-act="del" title="Verwijder uit lijst" aria-label="Verwijder">×</button></td>`;
     $('input', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
     $('[data-act=del]', tr).onclick = () => { state.cameras = state.cameras.filter(x => x !== c); saveCams(); renderCams(); };
     tb.appendChild(tr);
@@ -349,7 +351,7 @@ $('#scanBtn').onclick = async () => {
     log(`Scan ${range}: ${j.cameras.map(c => c.ip + ' ' + c.model).join(', ') || 'niets gevonden'}`);
     saveCams(); renderCams();
     await refreshAll(state.cameras.filter(c => j.cameras.some(f => f.ip === c.ip)));
-  } catch (e) { $('#scanStatus').textContent = 'Fout: ' + e.message; log('Scan mislukt: ' + e.message, '✖'); }
+  } catch (e) { $('#scanStatus').textContent = 'Fout: ' + e.message; log('Scan mislukt: ' + e.message, 'FOUT'); }
   finally { $('#scanBtn').disabled = false; }
 };
 $('#addBtn').onclick = async () => {
@@ -362,8 +364,8 @@ $('#addBtn').onclick = async () => {
 async function refreshAll(cams) {
   await Promise.all(cams.map(async c => {
     c.busy = true; renderCams();
-    try { await identify(c); c.status = 'ok'; c.statusKind = 'ok'; }
-    catch (e) { c.status = e.message; c.statusKind = 'err'; log(`${c.ip}: ${e.message}`, '✖'); }
+    try { await identify(c); c.status = 'Online'; c.statusKind = 'ok'; }
+    catch (e) { c.status = e.message; c.statusKind = 'err'; log(`${c.ip}: ${e.message}`, 'FOUT'); }
     c.busy = false; renderCams();
   }));
   saveCams(); renderCams();
@@ -418,13 +420,13 @@ $('#exportBtn').onclick = async () => {
       const name = fileName(cam, scenes);
       files.push({ name, text: JSON.stringify(file, null, 1), file });
       addImportFile(name, file);
-      const cnt = scenes.map(s => `scène ${s.scene}: ${s.params.length} parameters${s.unavailable.length ? ` (${s.unavailable.length} niet beschikbaar)` : ''}`).join(' · ');
-      row.className = 'note ok'; row.innerHTML = `✔ <b>${esc(cam.title || cam.model)}</b> ${esc(cam.ip)} — ${esc(cnt)} <button class="ghost small" data-dl>Download</button> <button class="ghost small" data-view>Bekijk</button>`;
+      const cnt = scenes.map(s => `Scene ${s.scene}: ${s.params.length} parameters${s.unavailable.length ? `, ${s.unavailable.length} niet beschikbaar in deze modus` : ''}`).join('. ');
+      row.className = 'note ok'; row.innerHTML = `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(cnt)}<span class="row-actions"><button class="ghost small" data-dl>Opnieuw downloaden</button><button class="ghost small" data-view>Waarden tonen</button></span>`;
       $('[data-dl]', row).onclick = () => download(name, JSON.stringify(file, null, 1));
       $('[data-view]', row).onclick = () => showSceneTable(row, file);
       log(`${cam.ip}: export ${cnt}`);
     } catch (e) {
-      row.className = 'note err'; row.textContent = `✖ ${cam.ip}: ${e.message}`; log(`${cam.ip}: export mislukt: ${e.message}`, '✖');
+      row.className = 'note err'; row.textContent = `${cam.ip}: export mislukt. ${e.message}`; log(`${cam.ip}: export mislukt: ${e.message}`, 'FOUT');
     }
     cam.busy = false; renderCams();
     $('.progress > i', out).style.width = (++done / total * 100) + '%';
@@ -460,7 +462,7 @@ async function handleFiles(list) {
         for (const z of await readZip(await f.arrayBuffer())) addImportFile(z.name, JSON.parse(z.text));
       } else addImportFile(f.name, JSON.parse(await f.text()));
       log(`Geladen: ${f.name}`);
-    } catch (e) { alert(`${f.name}: ${e.message}`); log(`${f.name}: ${e.message}`, '✖'); }
+    } catch (e) { alert(`${f.name}: ${e.message}`); log(`${f.name}: ${e.message}`, 'FOUT'); }
   }
 }
 $('#fileInput').onchange = e => { handleFiles([...e.target.files]); e.target.value = ''; };
@@ -472,7 +474,7 @@ $('#clearFilesBtn').onclick = () => { state.imports = []; renderImports(); };
 
 function renderImports() {
   const tb = $('#impTable tbody'); tb.innerHTML = '';
-  const camOpts = sel => `<option value="">— kies —</option><option value="*" ${sel === '*' ? 'selected' : ''}>★ alle geselecteerde camera's</option>` +
+  const camOpts = sel => `<option value="">Kies camera</option><option value="*" ${sel === '*' ? 'selected' : ''}>Alle geselecteerde camera's</option>` +
     state.cameras.map(c => `<option value="${esc(c.ip)}" ${sel === c.ip ? 'selected' : ''}>${esc(c.ip)} ${esc(c.title || c.model || '')}</option>`).join('');
   for (const it of state.imports) {
     const s = it.file.scenes[it.sceneIdx];
@@ -485,7 +487,7 @@ function renderImports() {
       <td><select data-k="target">${camOpts(it.target)}</select></td>
       <td><select data-k="targetScene"><option value="active" ${it.targetScene === 'active' ? 'selected' : ''}>actieve scène</option>${Array.from({ length: nsc }, (_, i) => `<option value="${i + 1}" ${it.targetScene === String(i + 1) ? 'selected' : ''}>Scene ${i + 1}</option>`).join('')}</select></td>
       <td>${s.params.length}</td>
-      <td class="row"><button class="ghost small" data-act="cmp" title="Vergelijk met de doelcamera">Vergelijk</button><button class="ghost small" data-act="del">✕</button></td>`;
+      <td class="row"><button class="ghost small" data-act="cmp" title="Vergelijk met de doelcamera">Vergelijk</button><button class="icon" data-act="del" title="Verwijder" aria-label="Verwijder">×</button></td>`;
     $('input', tr).onchange = e => it.include = e.target.checked;
     $$('select', tr).forEach(se => se.onchange = () => { it[se.dataset.k] = se.value; if (se.dataset.k === 'target') renderImports(); });
     $('[data-act=del]', tr).onclick = () => { state.imports = state.imports.filter(x => x !== it); renderImports(); };
@@ -543,13 +545,13 @@ $('#importBtn').onclick = async () => {
         const r = await importScene(cam, it.file.scenes[it.sceneIdx], it.targetScene, opts, msg => setRow('', `${esc(cam.ip)}: ${esc(msg)}`));
         if (r.backup) backups.push(r.backup);
         const bad = r.failed.length + r.mismatch.length;
-        setRow(bad ? 'warn' : 'ok', `${bad ? '⚠' : '✔'} <b>${esc(cam.title || cam.model)}</b> ${esc(cam.ip)} — scene ${r.scene}: ${r.applied} parameters gezet` +
+        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>Scene ${r.scene}: ${r.applied} parameters gezet` +
           (r.skipped.length ? `, ${r.skipped.length} overgeslagen (niet in profiel ${esc(profileFor(cam.model).fam)})` : '') +
           (r.failed.length ? `<br>Niet aanvaard door camera: ${r.failed.map(f => esc(f.name) + ' (' + esc(f.err) + ')').join(', ')}` : '') +
           (r.mismatch.length ? `<br>Wijkt af na controle: ${r.mismatch.map(m => esc(m.name)).join(', ')}` : '') +
           (r.stored ? '<br>Opgeslagen in scene file (UE160).' : ''));
         log(`${cam.ip}: import scene ${r.scene} — ${r.applied} gezet, ${r.failed.length} fout, ${r.mismatch.length} afwijkend`);
-      } catch (e) { setRow('err', `✖ ${esc(cam.ip)}: ${esc(e.message)}`); log(`${cam.ip}: import mislukt: ${e.message}`, '✖'); }
+      } catch (e) { setRow('err', `${esc(cam.ip)}: import mislukt. ${esc(e.message)}`); log(`${cam.ip}: import mislukt: ${e.message}`, 'FOUT'); }
     }
     cam.busy = false; try { await identify(cam); } catch { } renderCams();
   }));
@@ -630,7 +632,7 @@ function rangeText(p) {
   if (p.dec?.kind === 'lin') parts.push(`${p.dec.lo.toString(16).toUpperCase()}h…${p.dec.hi.toString(16).toUpperCase()}h = ${p.dec.vlo}…${p.dec.vhi}${p.dec.unit || ''}`);
   if (p.dec?.kind === 'enum') parts.push(Object.entries(p.dec.map).map(([k, v]) => `${k}=${v}`).join(', '));
   if (p.sup) parts.push(p.sup);
-  return parts.join(' · ');
+  return parts.join('; ');
 }
 $('#paramFam').onchange = renderParamTab; $('#paramFilter').oninput = renderParamTab;
 $('#paramCsv').onclick = () => {
@@ -645,7 +647,7 @@ function renderRp() {
   const tb = $('#rpTable tbody'); tb.innerHTML = '';
   state.rp.forEach((r, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="number" min="1" max="200" value="${r.cam}" style="width:70px"></td><td><input value="${esc(r.ip)}" class="mono" style="width:150px"></td><td><input type="number" value="${r.port || 80}" style="width:70px"></td><td>${esc(r.label || '')}</td><td><button class="ghost small">✕</button></td>`;
+    tr.innerHTML = `<td><input type="number" min="1" max="200" value="${r.cam}" style="width:70px"></td><td><input value="${esc(r.ip)}" class="mono" style="width:150px"></td><td><input type="number" value="${r.port || 80}" style="width:70px"></td><td>${esc(r.label || '')}</td><td class="end"><button class="icon" aria-label="Verwijder rij">×</button></td>`;
     const [cam, ip, port] = $$('input', tr);
     cam.onchange = () => { r.cam = +cam.value; saveRp(); };
     ip.onchange = () => { r.ip = ip.value.trim(); ip.style.borderColor = validIp(r.ip) ? '' : 'var(--err)'; saveRp(); };
@@ -661,7 +663,7 @@ $('#rpFromCams').onclick = () => {
   const by = $('#rpSort').value;
   cams.sort((a, b) => by === 'title' ? String(a.title || '').localeCompare(String(b.title || ''), 'nl', { numeric: true }) : ipNum(a.ip) - ipNum(b.ip));
   const start = +$('#rpStart').value || 1;
-  state.rp = cams.map((c, i) => ({ cam: start + i, ip: c.ip, port: c.port || 80, label: [c.model, c.title].filter(Boolean).join(' · ') }));
+  state.rp = cams.map((c, i) => ({ cam: start + i, ip: c.ip, port: c.port || 80, label: [c.model, c.title].filter(Boolean).join(', ') }));
   saveRp(); renderRp();
 };
 $('#rpAddRow').onclick = () => { const last = state.rp[state.rp.length - 1]; state.rp.push({ cam: last ? last.cam + 1 : 1, ip: last ? last.ip.replace(/\d+$/, n => +n + 1) : '192.168.0.11', port: 80 }); saveRp(); renderRp(); };
