@@ -186,7 +186,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <ol class="steps">
           <li><div><h3>Put your computer in the cameras' IP range</h3><p>Give your computer a fixed address in the range of the cameras, for example 192.168.0.200 with subnet mask 255.255.255.0, and connect it to the same switch.</p></div></li>
           <li><div><h3>Find the cameras</h3><p>Open Panasonic Toolbox and choose <em>Scan network</em>. Each PTZ shows up with its model, title and live scene. From the list you can also open a camera's live page or settings page, already logged in.</p></div></li>
-          <li><div><h3>Export</h3><p>Pick the cameras and either the live scene or scenes 1 to 4 (up to 8 on the AW-UE160). Each camera becomes a <span class="mono">.pscene.json</span> file in Downloads › Panasonic Toolbox; several cameras go into one ZIP. Before the app switches scenes, it asks you to confirm.</p></div></li>
+          <li><div><h3>Export</h3><p>Pick the cameras and either the live scene or scenes 1 to 4 (up to 8 on the AW-UE160). Each camera becomes a <span class="mono">.pscene.json</span> file in the folder you choose; several cameras go into one ZIP. Before the app switches scenes, it asks you to confirm.</p></div></li>
           <li><div><h3>Import</h3><p>Open a file and choose for each scene which camera and which scene it goes to. The app saves the current settings as a backup first and reads everything back afterwards to check.</p></div></li>
         </ol>
       </div>
@@ -205,10 +205,10 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <div class="dl-col">
             <h3>macOS</h3>
             <p class="os-req">macOS 11 Big Sur or later</p>
-            <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-macOS-AppleSilicon.dmg">Mac with Apple silicon (M1–M4) <span class="size" data-asset="PanasonicToolbox-macOS-AppleSilicon.dmg"></span></a>
-            <p class="alt">Older Mac with an Intel processor? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-macOS-Intel.dmg">Download the Intel version</a></p>
+            <a class="btn" href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-AppleSilicon.dmg">Mac with Apple silicon (M1–M4) <span class="size" data-asset="PanasonicToolbox-macOS-AppleSilicon.dmg"></span></a>
+            <p class="alt">Older Mac with an Intel processor? <a href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-Intel.dmg">Download the Intel version</a></p>
             <p class="term-label">Or install from Terminal. This avoids the security warning when opening the app:</p>
-            <div class="term"><code data-cmd="install.sh">curl -fsSL https://seppeva.github.io/panasonicscene/install.sh | bash</code><button type="button" data-copy>Copy</button></div>
+            <div class="term"><code data-cmd="install.sh">curl -fsSL https://seppeva.github.io/panasonic-toolbox/install.sh | bash</code><button type="button" data-copy>Copy</button></div>
             <details>
               <summary>Opening the app for the first time</summary>
               <ol>
@@ -222,10 +222,10 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <div class="dl-col">
             <h3>Windows</h3>
             <p class="os-req">Windows 10 or 11, 64-bit</p>
-            <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-Windows-Setup.exe">Installer <span class="size" data-asset="PanasonicToolbox-Windows-Setup.exe"></span></a>
-            <p class="alt">Prefer not to install? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-Windows-Portable.zip">Download the portable version</a></p>
+            <a class="btn" href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Setup.exe">Installer <span class="size" data-asset="PanasonicToolbox-Windows-Setup.exe"></span></a>
+            <p class="alt">Prefer not to install? <a href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Portable.zip">Download the portable version</a></p>
             <p class="term-label">Or install from PowerShell:</p>
-            <div class="term"><code data-cmd="install.ps1">irm https://seppeva.github.io/panasonicscene/install.ps1 | iex</code><button type="button" data-copy>Copy</button></div>
+            <div class="term"><code data-cmd="install.ps1">irm https://seppeva.github.io/panasonic-toolbox/install.ps1 | iex</code><button type="button" data-copy>Copy</button></div>
             <details>
               <summary>Opening the app for the first time</summary>
               <ol>
@@ -251,9 +251,13 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <div><dt>Export without touching the picture</dt><dd>Reading the live scene changes nothing on air. For other scenes the app asks first, switches briefly and returns to the scene that was live.</dd></div>
         <div><dt>Import with backup and check</dt><dd>See which values differ before you start. The destination scene is saved first and every value is read back afterwards.</dd></div>
         <div><dt>Any file to any camera and scene</dt><dd>Choose per scene which camera and which scene it goes to, or send one look to several cameras, even across models. Settings a camera doesn't support are skipped and reported.</dd></div>
-        <div><dt>HTTP commands for Companion</dt><dd>Search every Panasonic camera command, from zoom and presets to tally, and copy a ready-made link for a GET request in Bitfocus Companion or test it straight away.</dd></div>
+        <div><dt>HTTP commands and scripts for Companion</dt><dd>Search every Panasonic camera command, from zoom and presets to tally and night mode, and copy a ready-made link for a GET request in Bitfocus Companion. Or bundle commands into a PowerShell or shell script that runs on several cameras at once.</dd></div>
+        <div><dt>Network setup</dt><dd>Find Panasonic cameras in any IP range, like Panasonic's Easy IP Setup, and give one or many of them a new IP address, subnet mask and gateway.</dd></div>
+        <div><dt>Shows</dt><dd>Save which scene file goes to which camera and scene, and put a whole show back on the cameras with one click.</dd></div>
+        <div><dt>Operator files</dt><dd>Take an operator's personal settings, such as preset speeds, pan/tilt, lens and tally preferences, from one camera to another, separate from the scenes.</dd></div>
+        <div><dt>Undo and redo</dt><dd>Step back through edits in the app as well as changes sent to the cameras.</dd></div>
         <div><dt>Camera web pages in one click</dt><dd>Open a camera's live page or settings page in your browser from the camera list, logged in with the camera login you entered.</dd></div>
-        <div><dt>RP150 assignment</dt><dd>Assign the found cameras to CAM buttons by editing the RP150's Network.s15 file from its SD card (experimental), with step-by-step instructions.</dd></div>
+        <div><dt>RP150 assignment</dt><dd>Assign the found cameras to CAM buttons, with connection type LAN or None, by editing the RP150's Network.s15 file from its SD card (experimental), with step-by-step instructions.</dd></div>
         <div><dt>Works offline</dt><dd>Nothing goes through the internet and files stay on your computer. Only when you are online does the app check for a new version, and you can turn that off.</dd></div>
         <div><dt>Cameras with a login</dt><dd>If User Auth is on, enter the user name and password once. You can choose to remember them on this computer.</dd></div>
       </dl>
@@ -277,7 +281,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           </tbody>
         </table>
         <p>That includes picture level, iris mode and auto iris, shutter, gain and super gain, ND filter and day/night, white balance with color temperature and R/B gain, ATW, chroma level and phase, master and RGB pedestal, detail and skin detail, gamma and black gamma, knee and white clip, DRS, DNR, linear matrix and the color correction per color vector. The AW-UE160 adds flare, RGB gain per channel and HDR paint.</p>
-        <p>Not in a scene file: iris, zoom and focus position, presets, network and output settings. <a href="https://github.com/seppeva/panasonicscene/blob/main/PARAMETERS.md">Full list per model</a></p>
+        <p>Not in a scene file: iris, zoom and focus position, presets, network and output settings. <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/PARAMETERS.md">Full list per model</a></p>
       </div>
     </section>
 
@@ -297,14 +301,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 
 <footer>
   <div class="wrap">
-    <span>Panasonic Toolbox is made by <a href="https://seppevanaken.be">Seppe Van Aken</a>. <a href="https://github.com/seppeva/panasonicscene">Source code on GitHub</a></span>
-    <span><a href="privacy.html">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonicscene/blob/main/LICENSE">License (MIT)</a> &nbsp; Panasonic is a trademark of Panasonic Holdings Corporation.</span>
+    <span>Panasonic Toolbox is made by <a href="https://seppevanaken.be">Seppe Van Aken</a>. <a href="https://github.com/seppeva/panasonic-toolbox">Source code on GitHub</a></span>
+    <span><a href="privacy.html">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/LICENSE">License (MIT)</a> &nbsp; Panasonic is a trademark of Panasonic Holdings Corporation.</span>
   </div>
 </footer>
 
 <script>
 'use strict';
-const REPO = 'seppeva/panasonicscene';
+const REPO = 'seppeva/panasonic-toolbox';
 const BASE = `https://github.com/${REPO}/releases/latest/download/`;
 const DL = {
   macArm: { file: 'PanasonicToolbox-macOS-AppleSilicon.dmg', label: 'Download for Mac' },

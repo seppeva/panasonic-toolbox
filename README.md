@@ -2,7 +2,7 @@
 
 Desktop app for **macOS and Windows** to **export and import the scene files (all shading settings of a scene)** of Panasonic PTZ cameras, something an AW-RP120/RP150 cannot do. It also looks up every HTTP command of the cameras (for Bitfocus Companion), opens a camera's web pages already logged in, and helps assign cameras to an **AW-RP150**.
 
-Download page: **https://seppeva.github.io/panasonicscene/**
+Download page: **https://seppeva.github.io/panasonic-toolbox/**
 
 ## Repository layout
 
@@ -45,7 +45,7 @@ Without code signing, macOS and Windows show a warning the first time; the Termi
 
 ## The website
 
-Turn it on under *Settings › Pages › Deploy from branch › `main` / (root)*. It is then served at `https://seppeva.github.io/panasonicscene/`. To use your own domain later:
+Turn it on under *Settings › Pages › Deploy from branch › `main` / (root)*. It is then served at `https://seppeva.github.io/panasonic-toolbox/`. To use your own domain later:
 
 - Subdomain, e.g. `panasonicscene.seppevanaken.be`: add a **CNAME** record pointing to `seppeva.github.io` at your DNS provider and enter the domain under *Settings › Pages › Custom domain*.
 - `seppevanaken.be/panasonicscene`: only possible if the main domain is also served by a GitHub Pages site of `seppeva`.

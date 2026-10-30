@@ -1,9 +1,9 @@
 #!/bin/bash
 # Panasonic Toolbox installer for macOS
-#   curl -fsSL https://seppeva.github.io/panasonicscene/install.sh | bash
+#   curl -fsSL https://seppeva.github.io/panasonic-toolbox/install.sh | bash
 # Downloads the latest release from GitHub, checks the SHA-256 checksum and installs the app.
 set -euo pipefail
-REPO="seppeva/panasonicscene"
+REPO="seppeva/panasonic-toolbox"
 APP="Panasonic Toolbox.app"
 # Apple silicon (M1/M2/M3/M4)? sysctl also works when Terminal runs under Rosetta (uname then says x86_64).
 if [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = "1" ]; then

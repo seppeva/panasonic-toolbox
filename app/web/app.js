@@ -329,6 +329,8 @@ $('#saveSettings').onclick = () => {
   store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
   store.set('livePath', state.livePath); store.set('setupPath', state.setupPath);
   store.set('updateCheck', $('#setUpdates').checked);
+  const d = $('#setSaveDir').value.trim();
+  if (d && d !== state.saveDir) setSaveDir(d).catch(e => info('Cannot use this folder', esc(e.message)));
 };
 $('#quitBtn').onclick = async () => {
   $('#settingsDlg').close();
@@ -340,7 +342,7 @@ $('#retryBridge').onclick = checkBridge;
 setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 3000).then(() => { if (!state.bridgeOk) checkBridge(); }).catch(() => { if (state.bridgeOk) checkBridge(); }); }, 10000);
 
 /* New version available? (latest GitHub release; skipped silently when offline) */
-const REPO = 'seppeva/panasonicscene';
+const REPO = 'seppeva/panasonic-toolbox';
 async function checkUpdate() {
   if (!store.get('updateCheck', true)) return;
   try {
@@ -394,7 +396,7 @@ function renderCams() {
     $('input', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
     $('[data-act=live]', tr).onclick = () => openCamPage(c, 'live');
     $('[data-act=setup]', tr).onclick = () => openCamPage(c, 'setup');
-    $('[data-act=del]', tr).onclick = () => { state.cameras = state.cameras.filter(x => x !== c); saveCams(); renderCams(); };
+    $('[data-act=del]', tr).onclick = () => { track(`Remove ${c.ip}`, () => { state.cameras = state.cameras.filter(x => x !== c); }); saveCams(); renderCams(); };
     tb.appendChild(tr);
   }
   $('#camCount').textContent = state.cameras.length;
@@ -424,11 +426,11 @@ $('#scanBtn').onclick = async () => {
   $('#scanBtn').disabled = true; $('#scanStatus').textContent = 'Scanning…';
   try {
     const j = await bridgeFetch('/api/scan', { range, port: +$('#scanPort').value || 80, user: $('#authUser').value.trim(), pass: $('#authPass').value });
-    for (const f of j.cameras) {
+    track('Scan', () => { for (const f of j.cameras) {
       const c = upsertCam(f.ip, f.port, { model: f.model, title: f.title || '' });
       if (f.auth) { c.status = 'Login required'; c.statusKind = 'err'; }
       c.power = f.power === 'p1' ? 'on' : f.power === 'p0' ? 'standby' : f.power;
-    }
+    } });
     $('#scanStatus').textContent = `${j.scanned} addresses scanned, ${j.cameras.length} camera${j.cameras.length === 1 ? '' : 's'} found.`;
     log(`Scan ${range}: ${j.cameras.map(c => c.ip + ' ' + c.model).join(', ') || 'nothing found'}`);
     saveCams(); renderCams();
@@ -441,7 +443,7 @@ $('#addBtn').onclick = async () => {
   if (!state.bridgeOk && !(await checkBridge())) return;
   const ips = $('#addIp').value.split(/[\s,;]+/).filter(Boolean);
   const bad = ips.filter(i => !validIp(i)); if (bad.length) return info('Invalid IP address', esc(bad.join(', ')));
-  const cams = ips.map(ip => upsertCam(ip, +$('#addPort').value || 80));
+  const cams = track('Add cameras', () => ips.map(ip => upsertCam(ip, +$('#addPort').value || 80)));
   $('#addIp').value = ''; renderCams(); await refreshAll(cams);
 };
 async function refreshAll(cams) {
@@ -454,7 +456,129 @@ async function refreshAll(cams) {
   saveCams(); renderCams();
 }
 $('#refreshBtn').onclick = async () => { if (state.bridgeOk || await checkBridge()) refreshAll(state.cameras); };
-$('#clearCamsBtn').onclick = async () => { if (await ask({ title: 'Clear the camera list?', body: '<p>The cameras themselves are not changed.</p>', ok: 'Clear list' })) { state.cameras = []; saveCams(); renderCams(); } };
+$('#clearCamsBtn').onclick = async () => { if (await ask({ title: 'Clear the camera list?', body: '<p>The cameras themselves are not changed.</p>', ok: 'Clear list' })) { track('Clear camera list', () => { state.cameras = []; }); saveCams(); renderCams(); } };
+
+/* ------------------------------------------------------------------ undo / redo */
+// One history for app edits (lists and tables) and camera changes (imports, commands, network settings).
+const hist = { past: [], future: [], busy: false };
+function pushHistory(entry) {
+  hist.past.push(entry); if (hist.past.length > 100) hist.past.shift();
+  hist.future = []; updUndo();
+}
+function updUndo() {
+  const u = hist.past[hist.past.length - 1], r = hist.future[hist.future.length - 1];
+  $('#undoBtn').disabled = !u || hist.busy; $('#redoBtn').disabled = !r || hist.busy;
+  $('#undoBtn').title = u ? `Undo: ${u.label} (Ctrl/Cmd+Z)` : 'Nothing to undo';
+  $('#redoBtn').title = r ? `Redo: ${r.label} (Shift+Ctrl/Cmd+Z)` : 'Nothing to redo';
+}
+async function runHistory(from, to, fn, verb) {
+  const e = from.pop(); if (!e || hist.busy) return;
+  if (e.camera && !await ask({ title: `${verb} on the camera?`, body: `<p>${verb}: <b>${esc(e.label)}</b>. This changes the camera${e.many ? 's' : ''} again.</p>`, ok: verb, danger: true })) { from.push(e); return; }
+  hist.busy = true; updUndo();
+  try { await fn(e); to.push(e); toast(`${verb === 'Undo' ? 'Undone' : 'Redone'}: ${e.label}`); log(`${verb}: ${e.label}`); }
+  catch (err) { from.push(e); info(`${verb} failed`, esc(err.message)); }
+  hist.busy = false; updUndo();
+}
+const undo = () => runHistory(hist.past, hist.future, e => e.undo(), 'Undo');
+const redo = () => runHistory(hist.future, hist.past, e => e.redo(), 'Redo');
+$('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return; // keep text undo in fields
+  e.preventDefault(); e.shiftKey ? redo() : undo();
+});
+function snapApp() {
+  return JSON.stringify({
+    cameras: state.cameras.map(({ ip, port, model, title, selected, scene, power, status, statusKind }) => ({ ip, port, model, title, selected, scene, power, status, statusKind })),
+    sources: state.sources, jobs: state.jobs, rp: state.rp,
+  });
+}
+function restoreApp(snap) {
+  const s = JSON.parse(snap);
+  state.cameras = s.cameras; state.sources = s.sources; state.jobs = s.jobs; state.rp = s.rp;
+  saveCams(); saveRp(); renderCams(); renderImports(); renderRp(); renderExport();
+}
+function track(label, fn) {
+  const before = snapApp(); const r = fn(); const after = snapApp();
+  if (before !== after) pushHistory({ label, undo: async () => restoreApp(before), redo: async () => restoreApp(after) });
+  return r;
+}
+
+/* ------------------------------------------------------------------ save folder and opening files */
+state.saveDir = '';
+function renderSaveDir() { $$('[data-savedir]').forEach(e => e.textContent = state.saveDir || 'Downloads › Panasonic Toolbox'); if ($('#setSaveDir')) $('#setSaveDir').value = state.saveDir; }
+async function loadSaveDir() { try { const j = await bridgeFetch('/api/folder', {}); state.saveDir = j.dir; renderSaveDir(); } catch { } }
+async function setSaveDir(path) {
+  const j = await bridgeFetch('/api/folder', { set: path }); state.saveDir = j.dir; renderSaveDir(); log(`Save folder: ${j.dir}`);
+}
+async function chooseFolder() {
+  try {
+    const j = await bridgeFetch('/api/choose', { kind: 'folder' });
+    if (j.ok && j.paths?.length) return setSaveDir(j.paths[0]);
+    if (j.ok) return; // cancelled
+  } catch { }
+  // No native dialog (browser mode): ask for a path
+  const ok = await ask({ title: 'Save folder', body: `<label>Folder path<input id="askPath" class="mono" value="${esc(state.saveDir)}"></label>`, ok: 'Use this folder' });
+  if (ok) { try { await setSaveDir($('#askPath').value.trim()); } catch (e) { info('Cannot use this folder', esc(e.message)); } }
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-changedir]'); if (b) { e.preventDefault(); chooseFolder(); } });
+async function openPaths(paths) {
+  for (const p of paths) {
+    try {
+      const j = await bridgeFetch('/api/read_file', { path: p });
+      const bin = atob(j.dataB64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      await openBytes(j.name, u8);
+    } catch (e) { info(`Could not open ${esc(p)}`, esc(e.message)); }
+  }
+}
+async function openBytes(name, u8) {
+  if (/\.zip$/i.test(name)) { for (const z of await readZip(u8.buffer)) openJson(z.name, JSON.parse(z.text)); }
+  else openJson(name, JSON.parse(new TextDecoder().decode(u8)));
+  log(`Opened: ${name}`);
+}
+function openJson(name, data) {
+  if (data?.format === SHOW_ID) return addShow(data, true);
+  return addImportFile(name, data);
+}
+$('#openFilesBtn').onclick = async () => {
+  try { const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: true }); if (j.ok) return openPaths(j.paths || []); } catch { }
+  $('#fileInput').click();
+};
+$('#browseFolderBtn').onclick = async () => {
+  try {
+    const j = await bridgeFetch('/api/list_files', {});
+    const files = j.files.filter(f => /\.(json|zip|pshow|poper)$/i.test(f.name)).sort((a, b) => b.mtime - a.mtime);
+    $('#folderList').innerHTML = files.length ? `<table class="tbl dense"><thead><tr><th>File in ${esc(j.folder)}</th><th>Saved</th><th></th></tr></thead><tbody>${files.map(f => `<tr><td>${esc(f.name)}</td><td class="muted small">${new Date(f.mtime * 1000).toLocaleString('en-GB')}</td><td class="end"><button class="ghost small" data-open="${esc(f.path)}">Open</button></td></tr>`).join('')}</tbody></table>` : `<p class="muted">No Panasonic Toolbox files in ${esc(j.folder)}.</p>`;
+    $$('#folderList [data-open]').forEach(b => b.onclick = () => openPaths([b.dataset.open]));
+  } catch (e) { info('Could not read the folder', esc(e.message)); }
+};
+
+/* ------------------------------------------------------------------ operator settings */
+// Personal operating preferences, separate from the scenes: presets, speeds, pan/tilt, lens and tally behaviour.
+const OPERATOR_SPEC = [
+  ['Presets', ['OSJ:29', '#PST', '#UPVS', 'OSE:71', 'OSJ:A8', 'OSJ:A9', 'OSJ:AA', 'OSJ:AB', 'OSJ:AC', 'OSJ:AD', 'OSJ:AE', 'OSE:7C', 'OSE:7D', 'OSJ:5B', 'OSJ:D5', 'OSJ:2B', 'OSJ:2C', '#PRF']],
+  ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ', '#SPF', 'OSJ:45', 'OSJ:46']],
+  ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E', 'OIS']],
+  ['Tally and display', ['#TAE', 'OSA:D3', 'OSJ:D9', 'OSJ:DA', 'OSE:75']],
+];
+const OPERATOR_ID = 'panasonic-ptz-operator';
+const OPERATOR_PARAMS = (() => {
+  const out = [];
+  for (const [g, list] of OPERATOR_SPEC) for (const base of list) {
+    const c = (window.PANA_COMMANDS || []).find(x => x.c && (x.c === base + '[Data]' || x.c === base + ':[Data]' || x.c.startsWith(base + ':[Data') || x.c.startsWith(base + '[Data')) && x.q);
+    if (c) out.push({ cmd: base, q: c.q, t: base.startsWith('#') ? 'ptz' : 'cam', name: c.n, g });
+  }
+  return out;
+})();
+async function readOperatorFile(cam) {
+  const read = await readParams(cam, OPERATOR_PARAMS);
+  return {
+    format: OPERATOR_ID, version: 1, generator: 'Panasonic Toolbox ' + (state.version || ''), created: new Date().toISOString(),
+    camera: { ip: cam.ip, port: cam.port || 80, model: cam.model, title: cam.title || '', profile: profileFor(cam.model).fam },
+    settings: read.filter(r => r.raw).map(r => ({ cmd: r.p.cmd, name: r.p.name, group: r.p.g, raw: r.raw })),
+    unavailable: read.filter(r => !r.raw).map(r => ({ cmd: r.p.cmd, name: r.p.name, reason: r.err })),
+  };
+}
 
 /* ------------------------------------------------------------------ export */
 function renderExport() {
@@ -482,6 +606,8 @@ $('#exportBtn').onclick = async () => {
   const cams = state.cameras.filter(c => c.selected);
   if (!cams.length) return info('No cameras selected', 'Tick the cameras you want to export.');
   if (!state.bridgeOk && !(await checkBridge())) return;
+  const kind = $('input[name=expKind]:checked').value;
+  if (kind === 'operator') return exportOperator(cams);
   const mode = $('input[name=expMode]:checked').value;
   const picked = $$('#expScenes input:checked').map(i => +i.value);
   if (mode === 'pick') {
@@ -547,27 +673,57 @@ function showSceneTable(anchor, file) {
   anchor.after(div);
 }
 
+$$('input[name=expKind]').forEach(r => r.onchange = () => $('#expSceneBox').classList.toggle('disabled', $('input[name=expKind]:checked').value === 'operator'));
+async function exportOperator(cams) {
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  $('#exportBtn').disabled = true;
+  $('#expResultCard').classList.remove('hidden');
+  const out = $('#expResult'); out.innerHTML = '';
+  const files = [];
+  await Promise.all(cams.map(async cam => {
+    const row = document.createElement('div'); row.className = 'note'; row.textContent = `${cam.ip}: reading operator settings…`; out.appendChild(row);
+    try {
+      if (!cam.model) await identify(cam);
+      const f = await readOperatorFile(cam);
+      const name = `${(cam.title || cam.model || 'cam').replace(/[^\w.-]+/g, '_')}_${cam.ip.replace(/\./g, '-')}_operator_${new Date().toISOString().slice(0, 10)}.poper`;
+      files.push({ name, text: JSON.stringify(f, null, 1) });
+      addImportFile(name, f);
+      row.className = 'note ok'; row.innerHTML = `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${f.settings.length} operator settings${f.unavailable.length ? `, ${f.unavailable.length} not supported by this camera` : ''}`;
+    } catch (e) { row.className = 'note err'; row.textContent = `${cam.ip}: export failed. ${e.message}`; }
+  }));
+  if (files.length === 1) await download(files[0].name, files[0].text);
+  else if (files.length > 1) await download(`operator_${files.length}cams_${new Date().toISOString().slice(0, 10)}.zip`, makeZip(files));
+  $('#exportBtn').disabled = false;
+}
+
 /* ------------------------------------------------------------------ import: sources and jobs */
 state.sources = []; state.jobs = [];
 let srcId = 0, jobId = 0;
 function addImportFile(name, file) {
+  const target = state.cameras.find(c => c.ip === file?.camera?.ip)?.ip || '';
+  if (file?.format === OPERATOR_ID && Array.isArray(file.settings)) {
+    track('Open operator file', () => {
+      const src = { id: ++srcId, fileName: name, file, sceneIdx: null, kind: 'operator' };
+      state.sources.push(src);
+      state.jobs.push({ id: ++jobId, srcId: src.id, target, targetScene: '', include: true });
+    });
+    return renderImports();
+  }
   if (!file || file.format !== FORMAT_ID || !Array.isArray(file.scenes)) throw new Error('Not a Panasonic Toolbox file');
-  file.scenes.forEach((s, i) => {
-    const src = { id: ++srcId, fileName: name, file, sceneIdx: i };
+  track('Open scene file', () => file.scenes.forEach((s, i) => {
+    const src = { id: ++srcId, fileName: name, file, sceneIdx: i, kind: 'scene' };
     state.sources.push(src);
-    const target = state.cameras.find(c => c.ip === file.camera?.ip)?.ip || '';
     state.jobs.push({ id: ++jobId, srcId: src.id, target, targetScene: String(s.scene), include: true });
-  });
+  }));
   renderImports();
 }
+const srcParams = s => s.kind === 'operator' ? s.file.settings.length : s.file.scenes[s.sceneIdx].params.length;
 const srcById = id => state.sources.find(s => s.id === +id);
-const srcLabel = s => `${s.file.camera?.title || s.file.camera?.model || s.fileName}, scene ${s.file.scenes[s.sceneIdx].scene}`;
+const srcLabel = s => `${s.file.camera?.title || s.file.camera?.model || s.fileName}, ${s.kind === 'operator' ? 'operator file' : 'scene ' + s.file.scenes[s.sceneIdx].scene}`;
 async function handleFiles(list) {
   for (const f of list) {
     try {
-      if (/\.zip$/i.test(f.name)) { for (const z of await readZip(await f.arrayBuffer())) addImportFile(z.name, JSON.parse(z.text)); }
-      else addImportFile(f.name, JSON.parse(await f.text()));
-      log(`Opened: ${f.name}`);
+      await openBytes(f.name, new Uint8Array(await f.arrayBuffer()));
     } catch (e) { info(`Could not open ${esc(f.name)}`, esc(e.message)); log(`${f.name}: ${e.message}`, 'ERROR'); }
   }
 }
@@ -576,18 +732,18 @@ const dz = $('#dropZone');
 dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
 dz.addEventListener('dragleave', () => dz.classList.remove('over'));
 dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); handleFiles([...e.dataTransfer.files]); });
-$('#clearFilesBtn').onclick = () => { state.sources = []; state.jobs = []; renderImports(); };
+$('#clearFilesBtn').onclick = () => { track('Clear import list', () => { state.sources = []; state.jobs = []; }); renderImports(); };
 $('#addJobBtn').onclick = () => {
   if (!state.sources.length) return info('Open a scene file first', 'Drop a .pscene.json or .zip file in step 1.');
   const last = state.jobs[state.jobs.length - 1];
-  state.jobs.push({ id: ++jobId, srcId: last ? last.srcId : state.sources[0].id, target: '', targetScene: 'active', include: true });
+  track('Add destination', () => state.jobs.push({ id: ++jobId, srcId: last ? last.srcId : state.sources[0].id, target: '', targetScene: 'active', include: true }));
   renderImports();
 };
 
 function renderImports() {
   // step 1: list of opened scenes
-  $('#srcList').innerHTML = state.sources.length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || '')} <span class="mono muted">${esc(s.file.camera?.ip || '')}</span> <span class="muted small">${esc(s.file.camera?.model || '')}</span></td><td>Scene ${esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${s.file.scenes[s.sceneIdx].params.length}</td><td class="end"><button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
-  $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); renderImports(); });
+  $('#srcList').innerHTML = state.sources.length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || '')} <span class="mono muted">${esc(s.file.camera?.ip || '')}</span> <span class="muted small">${esc(s.file.camera?.model || '')}</span></td><td>${s.kind === 'operator' ? 'Operator file' : 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end"><button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
   // step 2: jobs
   const tb = $('#impTable tbody'); tb.innerHTML = '';
   for (const j of state.jobs) {
@@ -598,12 +754,12 @@ function renderImports() {
     tr.innerHTML = `<td><input type="checkbox" ${j.include ? 'checked' : ''} aria-label="Include"></td>
       <td><select data-k="srcId">${state.sources.map(s => `<option value="${s.id}" ${s.id === j.srcId ? 'selected' : ''}>${esc(srcLabel(s))}</option>`).join('')}</select></td>
       <td><select data-k="target"><option value="">Choose a camera</option>${state.cameras.map(c => `<option value="${esc(c.ip)}" ${j.target === c.ip ? 'selected' : ''}>${esc(c.ip)} ${esc(c.title || c.model || '')}</option>`).join('')}</select></td>
-      <td><select data-k="targetScene"><option value="active" ${j.targetScene === 'active' ? 'selected' : ''}>Live scene${tcam?.scene ? ' (' + tcam.scene + ')' : ''}</option>${Array.from({ length: nsc }, (_, i) => `<option value="${i + 1}" ${j.targetScene === String(i + 1) ? 'selected' : ''}>Scene ${i + 1}</option>`).join('')}</select></td>
-      <td>${src.file.scenes[src.sceneIdx].params.length}</td>
+      <td>${src.kind === 'operator' ? '<span class="muted">Not scene-related</span>' : `<select data-k="targetScene"><option value="active" ${j.targetScene === 'active' ? 'selected' : ''}>Live scene${tcam?.scene ? ' (' + tcam.scene + ')' : ''}</option>${Array.from({ length: nsc }, (_, i) => `<option value="${i + 1}" ${j.targetScene === String(i + 1) ? 'selected' : ''}>Scene ${i + 1}</option>`).join('')}</select>`}</td>
+      <td>${srcParams(src)}</td>
       <td class="end nowrap"><button class="ghost small" data-act="cmp" title="Compare with what is on the camera now">Compare</button> <button class="icon" data-act="del" aria-label="Remove">×</button></td>`;
     $('input', tr).onchange = e => j.include = e.target.checked;
-    $$('select', tr).forEach(se => se.onchange = () => { j[se.dataset.k] = se.dataset.k === 'srcId' ? +se.value : se.value; if (se.dataset.k === 'target') renderImports(); });
-    $('[data-act=del]', tr).onclick = () => { state.jobs = state.jobs.filter(x => x !== j); renderImports(); };
+    $$('select', tr).forEach(se => se.onchange = () => { track('Change destination', () => { j[se.dataset.k] = se.dataset.k === 'srcId' ? +se.value : se.value; }); renderImports(); });
+    $('[data-act=del]', tr).onclick = () => { track('Remove destination', () => { state.jobs = state.jobs.filter(x => x !== j); }); renderImports(); };
     $('[data-act=cmp]', tr).onclick = () => compareImport(j, tr);
     tb.appendChild(tr);
   }
@@ -614,6 +770,7 @@ async function compareImport(j, tr) {
   const cam = state.cameras.find(c => c.ip === j.target);
   if (!cam) return info('Choose a camera first', 'Pick the camera to compare with.');
   const src = srcById(j.srcId);
+  if (src.kind === 'operator') return info('Compare is for scene files', 'Operator files are applied as a whole; the current values are saved as a backup first.');
   try {
     if (!cam.model) await identify(cam);
     const cur = await getScene(cam);
@@ -632,26 +789,27 @@ async function compareImport(j, tr) {
   } catch (e) { info('Compare failed', esc(e.message)); }
 }
 
-$('#importBtn').onclick = async () => {
-  const jobs = state.jobs.filter(j => j.include);
-  if (!jobs.length) return info('Nothing to import', 'Open a scene file and choose a camera for it in step 2.');
+$('#importBtn').onclick = () => runImport(state.jobs.filter(j => j.include), {
+  backup: $('#optBackup').checked, restore: $('#optRestore').checked, store: $('#optStore').checked, verify: $('#optVerify').checked, force: $('#optForce').checked,
+});
+async function runImport(jobs, opts, title = 'Import into these cameras?') {
+  if (!jobs.length) return info('Nothing to import', 'Open a file and choose a camera for it in step 2.');
   const missing = jobs.filter(j => !state.cameras.some(c => c.ip === j.target));
   if (missing.length) return info('Choose a camera for every row', `${missing.length} row${missing.length > 1 ? 's have' : ' has'} no camera yet.`);
   if (!state.bridgeOk && !(await checkBridge())) return;
   const byCam = new Map();
   for (const j of jobs) { const c = state.cameras.find(x => x.ip === j.target); if (!byCam.has(c)) byCam.set(c, []); byCam.get(c).push(j); }
   const ok = await ask({
-    title: 'Import into these cameras?',
-    body: `<ul>${[...byCam].map(([c, js]) => `<li><b>${esc(c.title || c.model || c.ip)}</b> <span class="mono">${esc(c.ip)}</span>: ${js.map(j => `${esc(srcLabel(srcById(j.srcId)))} → ${j.targetScene === 'active' ? 'live scene' : 'scene ' + j.targetScene}`).join('; ')}</li>`).join('')}</ul>
-      <p>The picture of these cameras changes immediately. If a destination scene is not the live scene, the camera switches to it while importing.</p>`,
+    title,
+    body: `<ul>${[...byCam].map(([c, js]) => `<li><b>${esc(c.title || c.model || c.ip)}</b> <span class="mono">${esc(c.ip)}</span>: ${js.map(j => { const s = srcById(j.srcId); return `${esc(srcLabel(s))}${s.kind === 'operator' ? '' : ' → ' + (j.targetScene === 'active' ? 'live scene' : 'scene ' + j.targetScene)}`; }).join('; ')}</li>`).join('')}</ul>
+      <p>The picture of these cameras changes immediately. If a destination scene is not the live scene, the camera switches to it while importing. You can undo this afterwards.</p>`,
     ok: 'Import', danger: true,
   });
   if (!ok) return;
-  const opts = { backup: $('#optBackup').checked, restore: $('#optRestore').checked, store: $('#optStore').checked, verify: $('#optVerify').checked, force: $('#optForce').checked };
   $('#importBtn').disabled = true;
   $('#impResultCard').classList.remove('hidden');
   const out = $('#impResult'); out.innerHTML = '';
-  const backups = [];
+  const backups = [], undos = [];
   await Promise.all([...byCam].map(async ([cam, js]) => {
     cam.busy = true; renderCams();
     for (const j of js) {
@@ -659,23 +817,28 @@ $('#importBtn').onclick = async () => {
       const row = document.createElement('div'); row.className = 'note'; out.appendChild(row);
       const setRow = (cls, html) => { row.className = 'note ' + cls; row.innerHTML = html; };
       try {
-        const r = await importScene(cam, src.file.scenes[src.sceneIdx], j.targetScene, opts, msg => setRow('', `${esc(cam.ip)}: ${esc(msg)}`));
+        const { r, undo, redo } = await runJob(cam, src, j.targetScene, opts, msg => setRow('', `${esc(cam.ip)}: ${esc(msg)}`));
+        undos.push({ undo, redo });
         if (r.backup) backups.push(r.backup);
         const bad = r.failed.length + r.mismatch.length;
-        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))} into scene ${r.scene}: ${r.applied} settings applied` +
+        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${r.applied} settings applied` +
           (r.skipped.length ? `, ${r.skipped.length} skipped (not supported by ${esc(profileFor(cam.model).fam)})` : '') +
           (r.failed.length ? `<br>Not accepted by the camera: ${r.failed.map(f => esc(f.name) + ' (' + esc(f.err) + ')').join(', ')}` : '') +
           (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}` : '') +
           (r.stored ? '<br>Stored in the scene file (UE160).' : ''));
-        log(`${cam.ip}: imported into scene ${r.scene}: ${r.applied} applied, ${r.failed.length} refused, ${r.mismatch.length} different`);
+        log(`${cam.ip}: imported ${srcLabel(src)}: ${r.applied} applied, ${r.failed.length} refused, ${r.mismatch.length} different`);
       } catch (e) { setRow('err', `${esc(cam.ip)}: import failed. ${esc(e.message)}`); log(`${cam.ip}: import failed: ${e.message}`, 'ERROR'); }
     }
     cam.busy = false; try { await identify(cam); } catch { } renderCams();
   }));
+  if (undos.length) pushHistory({
+    label: `Import ${undos.length} file${undos.length > 1 ? 's' : ''}`, camera: true, many: byCam.size > 1,
+    undo: async () => { for (const u of [...undos].reverse()) await u.undo(); }, redo: async () => { for (const u of undos) await u.redo(); },
+  });
   if (backups.length === 1) await download(backups[0].name, backups[0].text);
-  else if (backups.length > 1) await download(`pscene_backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`, makeZip(backups));
+  else if (backups.length > 1) await download(`backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`, makeZip(backups));
   $('#importBtn').disabled = false;
-};
+}
 
 async function importScene(cam, sceneData, targetScene, opts, progress) {
   if (!cam.model) await identify(cam);
@@ -692,12 +855,11 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
   if (!target) throw new Error('Cannot determine the active scene');
   if (target > prof.scenes) throw new Error(`Camera has no scene ${target}`);
   if (target !== orig) { progress(`switching to scene ${target}…`); await switchScene(cam, target); }
-  let backup = null;
-  if (opts.backup) {
-    progress('backing up current settings…');
-    const b = await readSceneFile(cam, target);
-    const f = makeFile(cam, [b]);
-    backup = { name: fileName(cam, [b], '_BACKUP'), text: JSON.stringify(f, null, 1) };
+  let backup = null, before = null;
+  if (!opts.noBackupRead) {
+    progress('reading current settings…');
+    before = await readSceneFile(cam, target);
+    if (opts.backup) backup = { name: fileName(cam, [before], '_BACKUP'), text: JSON.stringify(makeFile(cam, [before]), null, 1) };
   }
   const send = async (items, label) => {
     progress(label);
@@ -732,10 +894,36 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     mismatch = back.map((b, i) => ({ b, x: okList[i] })).filter(({ b, x }) => b.raw && b.raw.toUpperCase() !== x.raw.toUpperCase()).map(({ x }) => ({ cmd: x.cmd, name: x.name }));
   }
   if (opts.restore && target !== orig && orig) { progress(`returning to scene ${orig}…`); await switchScene(cam, orig); }
-  return { scene: target, applied: list.length - failed.length, skipped, failed, mismatch, stored, backup };
+  return { scene: target, applied: list.length - failed.length, skipped, failed, mismatch, stored, backup, before };
 }
 
 
+
+
+async function importOperator(cam, data, opts, progress) {
+  if (!cam.model) await identify(cam);
+  progress('reading current operator settings…');
+  const before = await readOperatorFile(cam);
+  const backup = opts.backup ? { name: `${(cam.title || cam.model || 'cam').replace(/[^\w.-]+/g, '_')}_${cam.ip.replace(/\./g, '-')}_operator_BACKUP_${Date.now()}.poper`, text: JSON.stringify(before, null, 1) } : null;
+  const known = new Map(OPERATOR_PARAMS.map(p => [p.cmd, p]));
+  const list = data.settings.filter(x => x.raw && known.has(x.cmd));
+  progress(`setting ${list.length} values…`);
+  let res = await batch(cam, list.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.raw })));
+  let failed = list.filter((x, i) => !(res[i]?.ok && !isErr(res[i].body)));
+  if (failed.length) { res = await batch(cam, failed.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.raw }))); failed = failed.filter((x, i) => !(res[i]?.ok && !isErr(res[i].body))); }
+  return { scene: null, applied: list.length - failed.length, skipped: data.settings.filter(x => !known.has(x.cmd)), failed: failed.map(x => ({ cmd: x.cmd, name: x.name, err: 'ER' })), mismatch: [], stored: false, backup, before };
+}
+// Run one import job (scene or operator) and return its result plus how to undo/redo it.
+async function runJob(cam, src, targetScene, opts, progress) {
+  if (src.kind === 'operator') {
+    const r = await importOperator(cam, src.file, opts, progress);
+    return { r, undo: () => importOperator(cam, r.before, { backup: false }, () => { }), redo: () => importOperator(cam, src.file, { backup: false }, () => { }) };
+  }
+  const sceneData = src.file.scenes[src.sceneIdx];
+  const r = await importScene(cam, sceneData, targetScene, opts, progress);
+  const o2 = { ...opts, backup: false, verify: false, noBackupRead: true };
+  return { r, undo: () => importScene(cam, r.before, String(r.scene), o2, () => { }), redo: () => importScene(cam, sceneData, String(r.scene), o2, () => { }) };
+}
 
 /* ------------------------------------------------------------------ parameters: scene file contents */
 const FAM_TEXT = { UE150: 'AW-UE150 / UE155 / HE145', UE150A: 'AW-UE150A', UE160: 'AW-UE160', UE100: 'AW-UE100', UE80: 'AW-UE80 / UE50 / UE40 / UE30', GENERIC: 'Other models' };
@@ -785,16 +973,6 @@ function renderHttpTargets() {
     $('#cmdModel').innerHTML = `<option value="">All models</option>` + models.map(m => `<option>${m}</option>`).join('');
   }
 }
-async function sendCmd(t, cmd, outEl) {
-  const tg = httpTarget();
-  if (!validIp(tg.ip)) return info('Invalid IP address', 'Choose a camera or fill in a valid IP address.');
-  outEl.textContent = 'Sending…';
-  try {
-    const [r] = await batch({ ip: tg.ip, port: tg.port }, [{ type: t, cmd }]);
-    outEl.textContent = r.ok ? `Response: ${r.body || '(empty)'}` : `No response: ${r.error || ''}`;
-    log(`${tg.ip}: ${cmd} → ${r.ok ? r.body : r.error}`);
-  } catch (e) { outEl.textContent = 'Failed: ' + e.message; }
-}
 async function copyText(text, btn) {
   try { await navigator.clipboard.writeText(text); }
   catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
@@ -810,12 +988,23 @@ function urlRow(t, cmdFn, extraHtml = '') {
   wrap.update = upd; upd();
   return wrap;
 }
-// Common actions: shown first in the one command list. 'p' = preset number 1-100 (sent as 00-99).
+
+// The query that reads back the current value of a set command, taken from the command list (for undo).
+function queryFor(t, cmd) {
+  for (const x of COMMANDS) {
+    if (!x.q || x.t !== t || !x.c) continue;
+    const re = new RegExp('^' + x.c.split(/\[Data\d*\]/).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.+') + '$');
+    if (re.test(cmd)) return x.q;
+  }
+  return null;
+}
+// Common actions: shown first in the command list. 'p' = preset number 1-100 (sent as 00-99).
 const COMMON = [
   ['Zoom in (tele)', 'ptz', '#Z75'], ['Zoom out (wide)', 'ptz', '#Z25'], ['Zoom stop', 'ptz', '#Z50'],
   ['Focus near', 'ptz', '#F25'], ['Focus far', 'ptz', '#F75'], ['Focus stop', 'ptz', '#F50'],
   ['Auto focus on', 'ptz', '#D11'], ['Manual focus', 'ptz', '#D10'], ['One-push auto focus', 'cam', 'OSE:69:1'],
   ['Auto iris on', 'ptz', '#D31'], ['Manual iris', 'ptz', '#D30'],
+  ['Night mode on (infrared, IR cut filter out)', 'ptz', '#D61'], ['Night mode off (day)', 'ptz', '#D60'],
   ['Pan left', 'ptz', '#P25'], ['Pan right', 'ptz', '#P75'], ['Tilt up', 'ptz', '#T75'], ['Tilt down', 'ptz', '#T25'],
   ['Stop pan and tilt', 'ptz', '#PTS5050'], ['Home position', 'ptz', '#APC80008000'],
   ['Recall preset', 'ptz', '#R[Data]', 'p'], ['Store preset', 'ptz', '#M[Data]', 'p'],
@@ -824,8 +1013,8 @@ const COMMON = [
   ['Color bars on', 'cam', 'DCB:1'], ['Color bars off', 'cam', 'DCB:0'],
   ['Power on', 'ptz', '#O1'], ['Standby', 'ptz', '#O0'],
   ['Red tally on', 'cam', 'TLR:1'], ['Red tally off', 'cam', 'TLR:0'], ['Green tally on', 'cam', 'TLG:1'], ['Green tally off', 'cam', 'TLG:0'],
-].map(([n, t, c, p]) => ({ n, t, c, q: null, d: p ? ['1', '-', '100'] : ['-'], v: p ? ['Preset 1', '-', 'Preset 100'] : [''], m: ['Most models'], common: 1, preset: !!p }));
-['#httpCam', '#httpIp', '#httpPort'].forEach(s => $(s).addEventListener('input', () => { $('#httpIpWrap').classList.toggle('hidden', !!$('#httpCam').value); $$('.urlrow').forEach(r => r.update && r.update()); }));
+].map(([n, t, c, p]) => ({ n, t, c, q: queryFor(t, c), d: p ? ['1', '-', '100'] : ['-'], v: p ? ['Preset 1', '-', 'Preset 100'] : [''], m: ['Most models'], common: 1, preset: !!p }));
+['#httpCam', '#httpIp', '#httpPort'].forEach(s => $(s).addEventListener('input', () => { $('#httpIpWrap').classList.toggle('hidden', !!$('#httpCam').value); $$('#cmdTable tr').forEach(r => r.update && r.update()); }));
 
 function enumOpts(c) {
   const d = c.d, v = c.v;
@@ -834,87 +1023,330 @@ function enumOpts(c) {
   return d.map((x, i) => ({ val: x.replace(/h$/i, ''), label: `${x.replace(/h$/i, '')}: ${v[i]}` }));
 }
 function valueHint(c) {
-  if (c.preset) return 'Preset number 1 to 100';
   if (!c.d || (c.d.length === 1 && (c.d[0] === '-' || c.d[0] === '※'))) return '';
-  const d = c.d.join(' '), v = c.v.join(' ');
-  return (d + (v ? '  →  ' + v : '')).slice(0, 220);
+  return (c.d.join(' ') + (c.v.join('') ? '  →  ' + c.v.join(' ') : '')).slice(0, 300);
 }
-let cmdOpen = null;
+function matchType(c, type) {
+  if (!type) return true;
+  if (type === 'common') return !!c.common;
+  if (type === 'rp') return !!c.rp;
+  return !c.common && !c.rp && c.t === type;
+}
 function renderCmds() {
-  const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean), m = $('#cmdModel').value;
+  const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const m = $('#cmdModel').value, type = $('#cmdType').value;
   const match = c => words.every(w => (c.n + ' ' + c.c + ' ' + (c.q || '')).toLowerCase().includes(w));
-  const common = COMMON.filter(match);
-  const list = COMMANDS.filter(c => c.c && (!m || c.m.some(x => x.replace('*', '') === m)) && match(c));
-  // most widely supported first (current models before legacy-only commands), then alphabetically
-  list.sort((x, y) => (y.m.length - x.m.length) || x.n.localeCompare(y.n));
+  const common = COMMON.filter(c => match(c) && matchType(c, type) && !m);
+  const list = COMMANDS.filter(c => c.c && (!m || c.m.some(x => x.replace('*', '') === m)) && matchType(c, type) && match(c));
+  list.sort((x, y) => (y.m.length - x.m.length) || x.n.localeCompare(y.n)); // widely supported first
   const all = [...common, ...list];
   $('#cmdCount').textContent = all.length;
-  const shown = all.slice(0, 150);
+  const shown = all.slice(0, 120);
   const tb = $('#cmdTable tbody'); tb.innerHTML = '';
-  for (const c of shown) {
-    const tr = document.createElement('tr'); tr.className = 'clickable';
-    const fixed = !/\[Data/.test(c.c);
-    tr.innerHTML = `<td>${esc(c.n)}${c.common ? ' <span class="pill ok">Common</span>' : ''}${c.rp ? ' <span class="pill info">Controller</span>' : ''}</td><td class="mono">${esc(c.c)}</td><td class="small muted">${esc(c.m.join(', '))}</td><td class="end nowrap">${fixed ? '<button class="ghost small" data-copy>Copy link</button>' : ''}</td>`;
-    tr.onclick = e => { if (e.target.closest('[data-copy]')) return; toggleCmd(c, tr); };
-    if (fixed) $('[data-copy]', tr).onclick = e => copyText(cmdUrl(c.t, c.c), e.target);
-    tb.appendChild(tr);
-    if (cmdOpen === c) toggleCmd(c, tr, true);
-  }
-  $('#cmdMore').textContent = all.length > shown.length ? `Showing the first ${shown.length} of ${all.length}. Search more specifically to narrow the list.` : (all.length ? '' : 'No commands match your search.');
+  for (const c of shown) tb.appendChild(cmdRow(c));
+  $('#cmdMore').textContent = all.length > shown.length ? `Showing the first ${shown.length} of ${all.length}. Search or filter to narrow the list.` : (all.length ? '' : 'No commands match.');
 }
-function toggleCmd(c, tr, force) {
-  const ex = tr.nextElementSibling;
-  if (ex?.classList.contains('cmd-detail')) { ex.remove(); if (!force) { cmdOpen = null; return; } }
-  cmdOpen = c;
+// One row: name, value field(s), the link for the selected camera (always visible), and actions.
+function cmdRow(c) {
+  const tr = document.createElement('tr'); tr.className = 'cmdrow';
   const holders = c.c.match(/\[Data\d*\]/g) || [];
   const opts = holders.length === 1 && !c.preset ? enumOpts(c) : null;
   const inputs = holders.map((h, i) => c.preset
-    ? `<label>Preset number<input data-i="${i}" type="number" min="1" max="100" value="1"></label>`
-    : opts ? `<label>${esc(h.replace(/[[\]]/g, ''))}<select data-i="${i}">${opts.map(o => `<option value="${esc(o.val)}">${esc(o.label)}</option>`).join('')}</select></label>`
-    : `<label>${esc(h.replace(/[[\]]/g, ''))}<input data-i="${i}" class="mono" placeholder="value"></label>`).join('');
-  const d = document.createElement('tr'); d.className = 'cmd-detail';
-  d.innerHTML = `<td colspan="4"><div class="cmdbox">${valueHint(c) ? `<p class="hint mono">${esc(valueHint(c))}</p>` : ''}${c.rp ? '<p class="hint">Send this to the IP address of the RP150/RP120/RP60 controller, not to a camera.</p>' : ''}${inputs ? `<div class="row wrap">${inputs}</div>` : ''}<div class="set"></div>${c.q ? '<p class="small muted">Query the current value:</p><div class="get"></div>' : ''}</div></td>`;
+    ? `<input data-i="${i}" type="number" min="1" max="100" value="1" class="num" aria-label="Preset number" title="Preset number 1-100">`
+    : opts ? `<select data-i="${i}" aria-label="Value">${opts.map(o => `<option value="${esc(o.val)}">${esc(o.label)}</option>`).join('')}</select>`
+    : `<input data-i="${i}" class="mono val" placeholder="${esc(holders.length > 1 ? h.replace(/[[\]]/g, '') : 'value')}" title="${esc(valueHint(c))}">`).join(' ');
+  const pills = (c.common ? ' <span class="pill ok">Common</span>' : '') + (c.rp ? ' <span class="pill info">Controller</span>' : '');
+  tr.innerHTML = `<td class="fn"><div>${esc(c.n)}${pills}</div><div class="muted small">${esc(c.c)}${c.common ? '' : ' · ' + esc(c.m.join(', '))}</div>${valueHint(c) && !c.preset ? `<div class="muted small hintline">${esc(valueHint(c))}</div>` : ''}</td>
+    <td class="valcell">${inputs || '<span class="muted">–</span>'}</td>
+    <td class="linkcell"><code class="url"></code>${c.q ? '<div class="small muted qline">Query: <code class="qurl"></code></div>' : ''}</td>
+    <td class="end nowrap acts"><button class="ghost small" data-act="copy">Copy</button><button class="ghost small" data-act="send">Send</button><button class="ghost small" data-act="script" title="Add to a script for Companion">+ Script</button><div class="small muted out"></div></td>`;
   const val = el => c.preset ? pad2(Math.max(1, Math.min(100, +el.value || 1)) - 1) : (el?.value || '').trim();
-  const build = () => { let i = 0; return c.c.replace(/\[Data\d*\]/g, () => val($(`[data-i="${i++}"]`, d))); };
-  const setRow = urlRow(c.t, build);
-  $('.set', d).appendChild(setRow);
-  $$('[data-i]', d).forEach(el => el.addEventListener('input', () => setRow.update()));
-  if (c.q) $('.get', d).appendChild(urlRow(c.t, () => c.q));
-  tr.after(d);
+  const build = () => { let i = 0; return c.c.replace(/\[Data\d*\]/g, () => val($(`[data-i="${i++}"]`, tr))); };
+  tr.update = () => { $('code.url', tr).textContent = cmdUrl(c.t, build()); if (c.q) $('code.qurl', tr).textContent = cmdUrl(c.t, c.q); };
+  $$('[data-i]', tr).forEach(el => el.addEventListener('input', tr.update));
+  $('[data-act=copy]', tr).onclick = e => copyText(cmdUrl(c.t, build()), e.target);
+  $('[data-act=send]', tr).onclick = () => sendCmd(c.t, build(), $('.out', tr), c);
+  $('[data-act=script]', tr).onclick = () => addToScript(c.preset ? `${c.n} ${$('[data-i="0"]', tr).value}` : c.n, c.t, build());
+  tr.update();
+  return tr;
 }
-$('#paramSearch').addEventListener('input', () => { cmdOpen = null; renderCmds(); renderParamTab(); });
-$('#cmdModel').addEventListener('change', () => { cmdOpen = null; renderCmds(); });
+$('#paramSearch').addEventListener('input', () => { renderCmds(); renderParamTab(); });
+$('#cmdModel').addEventListener('change', renderCmds);
+$('#cmdType').addEventListener('change', renderCmds);
 
-/* ------------------------------------------------------------------ RP150: assignment + Network.s15 */
+/* ---- script builder for Companion ---- */
+state.script = store.get('script', []);
+const saveScript = () => store.set('script', state.script);
+function addToScript(name, t, cmd) {
+  if (/\[Data/.test(cmd) || /:$/.test(cmd)) return info('Fill in a value first', 'This command needs a value before it can be added.');
+  state.script.push({ name, t, cmd }); saveScript(); renderScript();
+  toast(`Added to script: ${name}`);
+}
+function renderScript() {
+  $('#scriptCard').classList.toggle('hidden', !state.script.length);
+  $('#scriptCount').textContent = state.script.length;
+  $('#scriptList').innerHTML = state.script.map((s, i) => `<li><span>${esc(s.name)}</span> <span class="mono muted">${esc(s.cmd)}</span> <button class="icon" data-i="${i}" aria-label="Remove">×</button></li>`).join('');
+  $$('#scriptList [data-i]').forEach(b => b.onclick = () => { state.script.splice(+b.dataset.i, 1); saveScript(); renderScript(); });
+  const prev = new Set(store.get('scriptCams', []));
+  $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span></label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you tick here.</span>';
+  $$('#scriptCams input').forEach(i => i.onchange = () => store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)));
+}
+$('#scriptClear').onclick = () => { state.script = []; saveScript(); renderScript(); };
+function scriptTargets() {
+  const ips = $$('#scriptCams input:checked').map(x => x.value);
+  return state.cameras.filter(c => ips.includes(c.ip)).map(c => ({ ip: c.ip, port: c.port || 80 }));
+}
+function scriptName(ext) { return ($('#scriptName').value.trim() || 'panasonic-action').replace(/[^\w.-]+/g, '_') + ext; }
+$('#scriptPs1').onclick = () => {
+  const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
+  const user = $('#authUser').value.trim(), pass = $('#authPass').value;
+  const lines = [
+    `# Panasonic Toolbox script: ${$('#scriptName').value.trim()}`,
+    `# Generated ${new Date().toLocaleString('en-GB')}. Runs ${state.script.length} command(s) on ${cams.length} camera(s).`,
+    `# Companion: System > Run shell path:  powershell -ExecutionPolicy Bypass -File "<path to this file>"`,
+    `$ErrorActionPreference = 'SilentlyContinue'`,
+    `$ProgressPreference = 'SilentlyContinue'`,
+    `$cameras = @(${cams.map(c => `'${c.ip}${c.port !== 80 ? ':' + c.port : ''}'`).join(', ')})`,
+    `$commands = @(`, ...state.script.map((s, i) => `  @{ path = '${s.t === 'ptz' ? 'aw_ptz' : 'aw_cam'}'; cmd = '${encCmd(s.cmd)}' }${i < state.script.length - 1 ? ',' : ''}  # ${s.name.replace(/[\r\n]/g, ' ')}`), `)`,
+    user ? `$cred = New-Object System.Management.Automation.PSCredential('${user.replace(/'/g, "''")}', (ConvertTo-SecureString '${pass.replace(/'/g, "''")}' -AsPlainText -Force))` : `$cred = $null`,
+    `foreach ($cam in $cameras) {`,
+    `  foreach ($c in $commands) {`,
+    `    $url = "http://$cam/cgi-bin/$($c.path)?cmd=$($c.cmd)&res=1"`,
+    `    try { if ($cred) { Invoke-WebRequest -Uri $url -Credential $cred -UseBasicParsing -TimeoutSec 3 | Out-Null } else { Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 3 | Out-Null } } catch { Write-Host "Failed: $url" }`,
+    `    Start-Sleep -Milliseconds 30`,
+    `  }`,
+    `}`,
+  ];
+  download(scriptName('.ps1'), lines.join('\r\n') + '\r\n', 'text/plain');
+  if (user) toast('Note: the camera login is stored in the script as plain text.');
+};
+$('#scriptSh').onclick = () => {
+  const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
+  const user = $('#authUser').value.trim(), pass = $('#authPass').value;
+  const auth = user ? ` --digest -u '${(user + ':' + pass).replace(/'/g, "'\\''")}'` : '';
+  const lines = [
+    '#!/bin/bash',
+    `# Panasonic Toolbox script: ${$('#scriptName').value.trim()}`,
+    `# Companion: System > Run shell path:  bash "<path to this file>"`,
+    `CAMERAS=(${cams.map(c => `"${c.ip}${c.port !== 80 ? ':' + c.port : ''}"`).join(' ')})`,
+    `for CAM in "\${CAMERAS[@]}"; do`,
+    ...state.script.map(s => `  curl -s -m 3${auth} "http://$CAM/cgi-bin/${s.t === 'ptz' ? 'aw_ptz' : 'aw_cam'}?cmd=${encCmd(s.cmd)}&res=1" > /dev/null  # ${s.name.replace(/[\r\n]/g, ' ')}`),
+    `done`,
+  ];
+  download(scriptName('.sh'), lines.join('\n') + '\n', 'text/plain');
+};
+
+/* ------------------------------------------------------------------ shows */
+// A show: which file goes to which camera and scene, with the file contents embedded, recallable in one go.
+const SHOW_ID = 'panasonic-toolbox-show';
+state.shows = store.get('shows', []);
+const saveShows = () => store.set('shows', state.shows);
+function addShow(show, fromFile) {
+  if (!show || show.format !== SHOW_ID || !Array.isArray(show.items)) throw new Error('Not a Panasonic Toolbox show');
+  track(fromFile ? 'Open show' : 'Save show', () => { state.shows = state.shows.filter(s => s.name !== show.name); state.shows.push(show); });
+  saveShows(); renderShows();
+  if (fromFile) toast(`Show “${show.name}” added to Shows`);
+}
+$('#saveShowBtn').onclick = async () => {
+  const jobs = state.jobs.filter(j => j.include && j.target);
+  if (!jobs.length) return info('Nothing to save', 'Choose a camera for at least one file first. A show remembers which file goes to which camera and scene.');
+  const ok = await ask({ title: 'Save as show', body: `<label>Name of the show<input id="askPath" value="Show ${new Date().toLocaleDateString('en-GB')}"></label><p class="hint">${jobs.length} destination${jobs.length > 1 ? 's' : ''}. The file contents are stored in the show, so it keeps working if the files are moved.</p>`, ok: 'Save show' });
+  if (!ok) return;
+  const name = $('#askPath').value.trim() || 'Show';
+  const show = {
+    format: SHOW_ID, version: 1, name, created: new Date().toISOString(),
+    items: jobs.map(j => { const s = srcById(j.srcId); const cam = state.cameras.find(c => c.ip === j.target); return { target: j.target, port: cam?.port || 80, targetTitle: cam?.title || cam?.model || '', targetScene: j.targetScene, kind: s.kind, sceneIdx: s.sceneIdx, fileName: s.fileName, file: s.file }; }),
+  };
+  addShow(show);
+  await download(`${name.replace(/[^\w.-]+/g, '_')}.pshow`, JSON.stringify(show));
+};
+function renderShows() {
+  const tb = $('#showTable tbody'); tb.innerHTML = '';
+  for (const sh of state.shows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${esc(sh.name)}</b></td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
+      <td class="end nowrap"><button data-act="recall">Recall</button> <button class="ghost small" data-act="file">Save file</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
+    $('[data-act=recall]', tr).onclick = () => recallShow(sh);
+    $('[data-act=file]', tr).onclick = () => download(`${sh.name.replace(/[^\w.-]+/g, '_')}.pshow`, JSON.stringify(sh));
+    $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete show', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
+    tb.appendChild(tr);
+  }
+  $('#showCount').textContent = state.shows.length;
+  $('#showEmpty').classList.toggle('hidden', state.shows.length > 0);
+}
+async function recallShow(sh) {
+  // make sure every camera of the show is in the list, then run it like an import
+  for (const it of sh.items) if (!state.cameras.some(c => c.ip === it.target)) upsertCam(it.target, it.port, { title: it.targetTitle });
+  const jobs = sh.items.map(it => {
+    const src = { id: ++srcId, fileName: it.fileName, file: it.file, sceneIdx: it.sceneIdx, kind: it.kind };
+    state.sources.push(src);
+    return { id: ++jobId, srcId: src.id, target: it.target, targetScene: it.targetScene, include: true };
+  });
+  renderCams();
+  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Recall show “${esc(sh.name)}”?`);
+  state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id)); // keep the import page clean
+}
+$('#showOpen').onclick = async () => {
+  try { const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: true }); if (j.ok) return openPaths(j.paths || []); } catch { }
+  $('#fileInput').click();
+};
+
+/* ------------------------------------------------------------------ send a command (with undo) */
+// Turns a query response into the set command that restores it: OSD:A4:1 stays, d61 becomes #D61.
+const restoreCmd = (t, body) => (!body || isErr(body)) ? null : (t === 'ptz' ? '#' + body.toUpperCase() : body);
+async function sendCmd(t, cmd, outEl, c) {
+  const tg = httpTarget();
+  if (!validIp(tg.ip)) return info('Invalid IP address', 'Choose a camera or fill in a valid IP address.');
+  if (/\[Data/.test(cmd)) return info('Fill in a value first', 'This command needs a value before it can be sent.');
+  outEl.textContent = 'Sending…';
+  const cam = { ip: tg.ip, port: tg.port };
+  try {
+    let prev = null;
+    if (c && c.q) { try { const [q] = await batch(cam, [{ type: t, cmd: c.q }]); if (q.ok) prev = restoreCmd(t, q.body); } catch { } }
+    const [r] = await batch(cam, [{ type: t, cmd }]);
+    outEl.textContent = r.ok ? `Response: ${r.body || '(empty)'}` : `No response: ${r.error || ''}`;
+    log(`${tg.ip}: ${cmd} → ${r.ok ? r.body : r.error}`);
+    const same = (x, y) => t === 'ptz' ? x.startsWith(c.q) && y.startsWith(c.q) : x.split(':').slice(0, -1).join(':') === y.split(':').slice(0, -1).join(':');
+    if (r.ok && !isErr(r.body) && prev && prev !== cmd && same(prev, cmd)) pushHistory({
+      label: `${c.n} on ${tg.ip}`, camera: true,
+      undo: async () => { const [u] = await batch(cam, [{ type: t, cmd: prev }]); if (!u.ok) throw new Error(u.error || 'no response'); },
+      redo: async () => { const [u] = await batch(cam, [{ type: t, cmd }]); if (!u.ok) throw new Error(u.error || 'no response'); },
+    });
+  } catch (e) { outEl.textContent = 'Failed: ' + e.message; }
+}
+
+/* ------------------------------------------------------------------ network setup (Easy IP) */
+state.eip = [];
+function renderEip() {
+  const tb = $('#eipTable tbody'); tb.innerHTML = '';
+  for (const r of state.eip) {
+    const tr = document.createElement('tr');
+    const changed = k => r.edit[k] !== r.orig[k] ? ' changed' : '';
+    tr.innerHTML = `<td><input type="checkbox" ${r.sel ? 'checked' : ''} aria-label="Select"></td><td class="mono small">${esc(r.mac)}</td><td>${esc(r.model)}</td><td>${esc(r.name)}</td>
+      <td><input data-k="ip" class="mono${changed('ip')}" value="${esc(r.edit.ip)}" aria-label="IP address"></td>
+      <td><input data-k="mask" class="mono${changed('mask')}" value="${esc(r.edit.mask)}" aria-label="Subnet mask"></td>
+      <td><input data-k="gateway" class="mono${changed('gateway')}" value="${esc(r.edit.gateway)}" aria-label="Gateway"></td>
+      <td><input data-k="port" type="number" class="num${changed('port')}" value="${r.edit.port}" aria-label="Port"></td>
+      <td class="small muted">${JSON.stringify(r.edit) !== JSON.stringify(r.orig) ? 'Changed' : ''}</td>`;
+    $('input[type=checkbox]', tr).onchange = e => { r.sel = e.target.checked; };
+    $$('input[data-k]', tr).forEach(i => i.onchange = () => { r.edit[i.dataset.k] = i.dataset.k === 'port' ? (+i.value || 80) : i.value.trim(); renderEip(); });
+    tb.appendChild(tr);
+  }
+  $('#eipEmpty').classList.toggle('hidden', state.eip.length > 0);
+  $('#eipApply').disabled = !state.eip.some(r => JSON.stringify(r.edit) !== JSON.stringify(r.orig));
+}
+async function eipDiscover() {
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  $('#eipSearch').disabled = true; $('#eipStatus').textContent = 'Searching (3 seconds)…';
+  try {
+    const j = await bridgeFetch('/api/eip/discover', { timeout: 3 });
+    const keep = new Map(state.eip.map(r => [r.mac, r.sel]));
+    state.eip = j.cameras.map(c => { const v = { ip: c.ip, mask: c.mask, gateway: c.gateway, port: c.port }; return { ...c, sel: keep.get(c.mac) || false, orig: { ...v }, edit: { ...v } }; });
+    $('#eipStatus').textContent = `${state.eip.length} camera${state.eip.length === 1 ? '' : 's'} found.`;
+    log(`Easy IP: ${state.eip.length} camera(s) found`);
+  } catch (e) { $('#eipStatus').textContent = 'Search failed: ' + e.message; }
+  $('#eipSearch').disabled = false; renderEip();
+}
+$('#eipSearch').onclick = eipDiscover;
+$('#eipSelAll').onchange = e => { state.eip.forEach(r => r.sel = e.target.checked); renderEip(); };
+$('#eipFill').onclick = () => {
+  const sel = state.eip.filter(r => r.sel);
+  if (!sel.length) return info('Select cameras first', 'Tick the cameras you want to give new settings.');
+  const start = $('#eipStart').value.trim(), mask = $('#eipMask').value.trim(), gw = $('#eipGw').value.trim();
+  if (start && !validIp(start, true)) return info('Invalid first IP address', esc(start));
+  let n = start ? ipNum(start) : null;
+  for (const r of sel) {
+    if (n != null) { r.edit.ip = [n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255].join('.'); n++; }
+    if (mask) r.edit.mask = mask;
+    if (gw) r.edit.gateway = gw;
+  }
+  renderEip();
+};
+async function eipSend(list, field) {
+  const fails = [];
+  for (const r of list) {
+    const v = r[field];
+    try { await bridgeFetch('/api/eip/set', { mac: r.mac, ip: v.ip, mask: v.mask, gateway: v.gateway, dns1: r.dns1, dns2: r.dns2, port: v.port }); log(`Easy IP: ${r.mac} → ${v.ip}`); }
+    catch (e) { fails.push(`${r.mac}: ${e.message}`); }
+  }
+  if (fails.length) throw new Error(fails.join('; '));
+}
+$('#eipApply').onclick = async () => {
+  const list = state.eip.filter(r => JSON.stringify(r.edit) !== JSON.stringify(r.orig));
+  const bad = list.find(r => !validIp(r.edit.ip, true) || !validIp(r.edit.mask, true) || (r.edit.gateway && r.edit.gateway !== '0.0.0.0' && !validIp(r.edit.gateway, true)));
+  if (bad) return info('Check the values', `The settings for ${esc(bad.mac)} are not valid IPv4 addresses.`);
+  const dup = list.find(r => state.eip.some(o => o !== r && (o.edit.ip === r.edit.ip)));
+  if (dup) return info('Duplicate IP address', `${esc(dup.edit.ip)} is used more than once.`);
+  const ok = await ask({
+    title: `Change the network settings of ${list.length} camera${list.length > 1 ? 's' : ''}?`,
+    body: `<ul>${list.map(r => `<li><b>${esc(r.model || r.mac)}</b> ${esc(r.name)}: <span class="mono">${esc(r.orig.ip)} → ${esc(r.edit.ip)}</span></li>`).join('')}</ul>
+      <p>The cameras restart their network and are briefly unreachable. Cameras only accept this within about 20 minutes after they were switched on; if a camera does not change, restart it and try again.</p>`,
+    ok: 'Apply', danger: true,
+  });
+  if (!ok) return;
+  $('#eipApply').disabled = true; $('#eipStatus').textContent = 'Sending…';
+  const snap = list.map(r => ({ mac: r.mac, dns1: r.dns1, dns2: r.dns2, orig: { ...r.orig }, edit: { ...r.edit } }));
+  try { await eipSend(snap, 'edit'); } catch (e) { info('Not every camera accepted the change', esc(e.message)); }
+  pushHistory({ label: `Network settings of ${snap.length} camera${snap.length > 1 ? 's' : ''}`, camera: true, many: snap.length > 1,
+    undo: async () => { await eipSend(snap, 'orig'); setTimeout(eipDiscover, 2500); }, redo: async () => { await eipSend(snap, 'edit'); setTimeout(eipDiscover, 2500); } });
+  $('#eipStatus').textContent = 'Sent. Searching again…';
+  setTimeout(eipDiscover, 2500);
+};
+$('#eipToList').onclick = () => {
+  const list = state.eip.filter(r => r.sel).length ? state.eip.filter(r => r.sel) : state.eip;
+  if (!list.length) return info('No cameras found yet', 'Search the network first.');
+  track('Add cameras from network setup', () => list.forEach(r => upsertCam(r.orig.ip, r.orig.port, { model: r.model, title: r.name })));
+  renderCams(); refreshAll(state.cameras.filter(c => list.some(r => r.orig.ip === c.ip)));
+  toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to Cameras`);
+};
+
+/* ------------------------------------------------------------------ RP150: assignment */
 const saveRp = () => store.set('rpRows', state.rp);
 function renderRp() {
   const tb = $('#rpTable tbody'); tb.innerHTML = '';
   state.rp.forEach((r, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="number" min="1" max="200" value="${r.cam}" style="width:70px" aria-label="CAM number"></td><td><input value="${esc(r.ip)}" class="mono" style="width:150px" aria-label="IP address"></td><td><input type="number" value="${r.port || 80}" style="width:70px" aria-label="Port"></td><td>${esc(r.label || '')}</td><td class="end"><button class="icon" aria-label="Remove row">×</button></td>`;
-    const [cam, ip, port] = $$('input', tr);
-    cam.onchange = () => { r.cam = +cam.value; saveRp(); if (s15.a) analyzeS15(); };
-    ip.onchange = () => { r.ip = ip.value.trim(); ip.classList.toggle('bad', !validIp(r.ip)); saveRp(); if (s15.a) analyzeS15(); };
-    port.onchange = () => { r.port = +port.value || 80; saveRp(); };
-    $('button', tr).onclick = () => { state.rp.splice(i, 1); saveRp(); renderRp(); if (s15.a) analyzeS15(); };
+    tr.innerHTML = `<td><input type="checkbox" ${r.sel ? 'checked' : ''} aria-label="Select row"></td><td><input data-k="cam" type="number" min="1" max="200" value="${r.cam}" class="num" aria-label="CAM number"></td><td><input data-k="ip" value="${esc(r.ip)}" class="mono${validIp(r.ip) ? '' : ' bad'}" style="width:150px" aria-label="IP address"></td><td><input data-k="port" type="number" value="${r.port || 80}" class="num" aria-label="Port"></td>
+      <td><select data-k="conn" aria-label="Connection"><option value="lan">LAN</option><option value="none">None (NoAsign)</option></select></td><td>${esc(r.label || '')}</td><td class="end"><button class="icon" aria-label="Remove row">×</button></td>`;
+    $('select', tr).value = r.conn || 'lan';
+    $('input[type=checkbox]', tr).onchange = e => { r.sel = e.target.checked; saveRp(); };
+    $$('[data-k]', tr).forEach(el => el.onchange = () => {
+      const k = el.dataset.k; const v = k === 'cam' ? +el.value : k === 'port' ? (+el.value || 80) : el.value.trim();
+      track(`Edit CAM ${r.cam}`, () => { state.rp[i] = { ...r, [k]: v }; });
+      saveRp(); renderRp(); if (s15.a) analyzeS15();
+    });
+    $('button', tr).onclick = () => { track(`Remove CAM ${r.cam}`, () => state.rp.splice(i, 1)); saveRp(); renderRp(); if (s15.a) analyzeS15(); };
     tb.appendChild(tr);
   });
   $('#rpEmpty').classList.toggle('hidden', state.rp.length > 0);
+  $('#rpSelAll').checked = state.rp.length > 0 && state.rp.every(r => r.sel);
 }
+$('#rpSelAll').onchange = e => { state.rp.forEach(r => r.sel = e.target.checked); saveRp(); renderRp(); };
+$('#rpBulkConn').onchange = e => {
+  const v = e.target.value; e.target.value = ''; if (!v) return;
+  const sel = state.rp.filter(r => r.sel);
+  if (!sel.length) return info('Select rows first', 'Tick the rows whose connection type you want to change.');
+  track(`Set ${sel.length} row(s) to ${v === 'lan' ? 'LAN' : 'None'}`, () => { state.rp = state.rp.map(r => r.sel ? { ...r, conn: v } : r); });
+  saveRp(); renderRp(); if (s15.a) analyzeS15();
+};
 $('#rpFromCams').onclick = () => {
   const cams = [...(state.cameras.some(c => c.selected) ? state.cameras.filter(c => c.selected) : state.cameras)];
   if (!cams.length) return info('No cameras found yet', 'Find the cameras on the Cameras page first.');
   const by = $('#rpSort').value;
   cams.sort((a, b) => by === 'title' ? String(a.title || '').localeCompare(String(b.title || ''), 'en', { numeric: true }) : ipNum(a.ip) - ipNum(b.ip));
   const start = +$('#rpStart').value || 1;
-  state.rp = cams.map((c, i) => ({ cam: start + i, ip: c.ip, port: c.port || 80, label: [c.model, c.title].filter(Boolean).join(', ') }));
+  track('Take found cameras', () => { state.rp = cams.map((c, i) => ({ cam: start + i, ip: c.ip, port: c.port || 80, conn: 'lan', label: [c.model, c.title].filter(Boolean).join(', ') })); });
   saveRp(); renderRp(); if (s15.a) analyzeS15();
 };
-$('#rpAddRow').onclick = () => { const last = state.rp[state.rp.length - 1]; state.rp.push({ cam: last ? last.cam + 1 : 1, ip: last ? last.ip.replace(/\d+$/, n => +n + 1) : '192.168.0.11', port: 80 }); saveRp(); renderRp(); };
-
+$('#rpAddRow').onclick = () => {
+  const last = state.rp[state.rp.length - 1];
+  track('Add row', () => state.rp.push({ cam: last ? last.cam + 1 : 1, ip: last ? last.ip.replace(/\d+$/, n => +n + 1) : '192.168.0.11', port: 80, conn: 'lan' }));
+  saveRp(); renderRp();
+};
 const s15 = { a: null, b: null, name: '', layout: null };
 $('#s15Input').onchange = async e => { const f = e.target.files[0]; if (!f) return; s15.a = new Uint8Array(await f.arrayBuffer()); s15.name = f.name; s15.b = null; s15.layout = null; analyzeS15(); e.target.value = ''; };
 $('#s15Input2').onchange = async e => { const f = e.target.files[0]; if (!f) return; if (!s15.a) return info('Open the first file first', 'Open the Network.s15 you want to change, then the second version.'); s15.b = new Uint8Array(await f.arrayBuffer()); analyzeS15(); e.target.value = ''; };
+
 const privIp = (a, b) => a === 192 && b === 168 || a === 10 || a === 172 && b >= 16 && b <= 31;
 function findLayout(u8) {
   const cands = [];
@@ -971,7 +1403,6 @@ function hexDump(u8, start, len) {
   return `<pre class="hex">${esc(s)}</pre>`;
 }
 
-
 function analyzeS15() {
   const out = $('#s15Out'); const u8 = s15.a;
   const L = s15.layout && s15.layout.src === u8 ? s15.layout : findLayout(u8); if (L) L.src = u8; s15.layout = L;
@@ -993,7 +1424,7 @@ function analyzeS15() {
         <div class="note ${diffs.length ? 'ok' : 'warn'}">${diffs.length} byte(s) differ: ${rel.slice(0, 12).map(d => `offset ${d.i} (${d.rel >= 0 ? '+' : ''}${d.rel} from the IP of CAM ${changedCam}): ${d.a} → ${d.b}`).join('; ') || 'none'}${diffs.length > 12 ? '…' : ''}</div>`;
       if (single.length === 1 || (single.length > 1 && new Set(single.map(d => d.rel)).size === 1)) {
         const d = single[0];
-        L.typeRel = d.rel;
+        L.typeRel = d.rel; L.typeVals = [d.a, d.b];
         typeInfo += `<div class="note ok">Connection type found at ${d.rel >= 0 ? '+' : ''}${d.rel} from the IP field of each record. Value in the first file: <b>${d.a}</b>, in the second: <b>${d.b}</b>. Which one means LAN?</div>
           <label class="check"><input type="radio" name="lanVal" value="${d.b}" checked> ${d.b} means LAN (the second version had LAN)</label>
           <label class="check"><input type="radio" name="lanVal" value="${d.a}"> ${d.a} means LAN (the first version had LAN)</label>`;
@@ -1004,8 +1435,8 @@ function analyzeS15() {
   out.innerHTML = `<div class="note ok">Found: ${L.run} records of ${L.stride} bytes with IP addresses (${esc(L.kind)}). Check that CAM 1 below matches the controller.</div>
     <div class="row wrap"><label class="w180">Offset of CAM 1 <input id="s15Cam1" type="number" value="${L.cam1}" step="${L.stride}"></label><label class="w180">Record length <input id="s15Stride" type="number" value="${L.stride}"></label></div>
     ${typeInfo}
-    <div class="scroll"><table class="tbl dense"><thead><tr><th>CAM</th><th>Offset</th><th>IP now</th><th>New IP</th></tr></thead><tbody>
-    ${recs.slice(0, 200).map(r => `<tr class="${rp.has(r.cam) && rp.get(r.cam).ip !== r.ip ? 'diff' : ''}"><td>${r.cam}</td><td class="mono">${r.off}</td><td class="mono">${esc(r.ip)}</td><td class="mono">${esc(rp.get(r.cam)?.ip || '')}</td></tr>`).join('')}
+    <div class="scroll"><table class="tbl dense"><thead><tr><th>CAM</th><th>Offset</th><th>IP now</th><th>New IP</th><th>Connection</th></tr></thead><tbody>
+    ${recs.slice(0, 200).map(r => `<tr class="${rp.has(r.cam) && rp.get(r.cam).ip !== r.ip ? 'diff' : ''}"><td>${r.cam}</td><td class="mono">${r.off}</td><td class="mono">${esc(r.ip)}</td><td class="mono">${esc(rp.get(r.cam)?.ip || '')}</td><td>${rp.has(r.cam) ? (rp.get(r.cam).conn === 'none' ? 'None' : 'LAN') : ''}</td></tr>`).join('')}
     </tbody></table></div>
     <div class="row"><button id="s15Apply">Save new Network.s15</button></div>`;
   $('#s15Cam1').onchange = e => { L.cam1 = +e.target.value; analyzeS15(); };
@@ -1014,23 +1445,27 @@ function analyzeS15() {
   $('#s15Apply').onclick = async () => {
     if (!state.rp.length) return info('No assignment yet', 'Fill in the assignment table first (Take found cameras or Add row).');
     const copy = new Uint8Array(u8); const lanVal = $('input[name=lanVal]:checked')?.value;
+    if (lanVal == null && state.rp.some(r => r.conn === 'none') && !await ask({ title: 'Connection type unknown', body: '<p>Some rows are set to <b>None</b>, but the position of the connection type in this file is not known yet. Only the IP addresses will be written. Set those CAMs to NoAsign on the controller, or open a second version of the file first.</p>', ok: 'Save anyway' })) return;
     try {
       for (const r of state.rp) {
         if (!validIp(r.ip)) throw new Error(`Invalid IP address for CAM ${r.cam}`);
         const off = L.cam1 + (r.cam - 1) * L.stride;
         if (off < 0 || off + 4 > copy.length || (L.typeRel != null && (off + L.typeRel < 0 || off + L.typeRel >= copy.length))) throw new Error(`CAM ${r.cam} falls outside the file`);
         writeIpAt(copy, L, off, r.ip);
-        if (lanVal != null && L.typeRel != null) copy[off + L.typeRel] = +lanVal;
+        if (lanVal != null && L.typeRel != null) {
+          const noneVal = L.typeVals.find(v => v !== +lanVal);
+          copy[off + L.typeRel] = (r.conn || 'lan') === 'none' && noneVal != null ? noneVal : +lanVal;
+        }
       }
     } catch (e) { return info('Cannot save', esc(e.message)); }
     await download('Network_ORIGINAL_backup.s15', new Blob([u8]), 'application/octet-stream');
     await download('Network.s15', new Blob([copy]), 'application/octet-stream');
     log(`Network.s15 changed for ${state.rp.length} camera(s)${lanVal != null ? ', connection type included' : ' (IP addresses only)'}`);
-    info('Network.s15 saved', `The new file and a backup of the original are in Downloads › Panasonic Toolbox. Copy the new file to the SD card as <code>Network.s15</code> and load it on the RP150 with DATA LOAD › YES+NW.` +
+    info('Network.s15 saved', `The new file and a backup of the original are in ${esc(state.saveDir || 'Downloads › Panasonic Toolbox')}. Copy the new file to the SD card as <code>Network.s15</code> and load it on the RP150 with DATA LOAD › YES+NW.` +
       (lanVal == null ? '<br><br>The connection type could not be set automatically. Set CNNCT MD to LAN on the controller for each CAM, or open a second version of the file as explained above.' : ''));
   };
 }
 
 /* ------------------------------------------------------------------ init */
-renderCams(); renderRp(); renderParamTab(); renderExport(); renderImports();
-checkBridge();
+renderCams(); renderRp(); renderParamTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo();
+checkBridge().then(() => loadSaveDir());

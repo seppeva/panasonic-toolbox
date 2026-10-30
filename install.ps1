@@ -1,8 +1,8 @@
 # Panasonic Toolbox installer for Windows
-#   irm https://seppeva.github.io/panasonicscene/install.ps1 | iex
+#   irm https://seppeva.github.io/panasonic-toolbox/install.ps1 | iex
 # Downloads the latest release from GitHub, checks the SHA-256 checksum and installs the app.
 $ErrorActionPreference = 'Stop'
-$repo = 'seppeva/panasonicscene'
+$repo = 'seppeva/panasonic-toolbox'
 $url  = "https://github.com/$repo/releases/latest/download/PanasonicToolbox-Windows-Setup.exe"
 $tmp  = Join-Path $env:TEMP 'PanasonicToolbox-Setup.exe'
 Write-Host '-> Downloading the installer...'

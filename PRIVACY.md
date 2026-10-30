@@ -11,6 +11,8 @@ Panasonic Toolbox is free, open source software by Seppe Van Aken (Belgium). Thi
 - **Stored on your computer:** the list of cameras you found (IP address, model and title) and your settings, so they are still there next time. You can clear the list in the app.
 - **Camera login:** the camera user name and password are only kept in memory while the app is open. If you tick *Remember on this computer*, they are stored in the app's local storage on your computer only. They are sent only to your own cameras.
 - **Camera web pages:** when you open a camera's live or settings page, your default browser opens a link to that camera on your local network, including the camera login if you entered one.
+- **Network setup:** searching for cameras sends a broadcast on your local network (UDP ports 10669 and 10670, as Panasonic's Easy IP Setup does). It never leaves your network.
+- **Scripts and shows:** scripts and show files you save stay in the folder you choose. If a camera login is set, a saved script contains it in plain text.
 - **Scene files and backups** are saved in the folder *Downloads › Panasonic Toolbox* on your computer. Existing files are never overwritten.
 - **Update check:** when you are online, the app asks GitHub (GitHub, Inc.) for the latest version number. Like with any website visit, GitHub sees your IP address. Nothing about you or your cameras is sent. You can turn this off in *Settings › Check for new versions*.
 

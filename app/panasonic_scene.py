@@ -27,11 +27,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+
+import easyip
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 DEFAULT_PORT = 8765
 
 
@@ -121,24 +123,95 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
     return {"ok": False, "status": 0, "error": last_err or "unknown error"}
 
 
-def save_dir():
+SETTINGS = {}
+WINDOW = None  # pywebview window (for native file dialogs)
+ALLOWED_EXT = (".json", ".zip", ".s15", ".html", ".csv", ".ps1", ".sh", ".pshow", ".poper")
+
+
+def settings_path():
+    return os.path.join(app_data_dir(), "settings.json")
+
+
+def load_settings():
+    try:
+        with open(settings_path()) as f:
+            SETTINGS.update(json.load(f))
+    except Exception:
+        pass
+
+
+def save_settings():
+    try:
+        with open(settings_path(), "w") as f:
+            json.dump(SETTINGS, f)
+    except Exception:
+        pass
+
+
+def default_save_dir():
     home = os.path.expanduser("~")
     d = os.path.join(home, "Downloads") if os.path.isdir(os.path.join(home, "Downloads")) else home
-    d = os.path.join(d, "Panasonic Toolbox")
-    os.makedirs(d, exist_ok=True)
+    return os.path.join(d, "Panasonic Toolbox")
+
+
+def save_dir():
+    d = SETTINGS.get("saveDir") or default_save_dir()
+    if not os.path.isdir(d):
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError:
+            d = default_save_dir()
+            os.makedirs(d, exist_ok=True)
     return d
+
+
+def native_dialog(kind, multiple=False):
+    """Native folder/file dialog via pywebview. Returns a list of paths, or None if unavailable."""
+    if WINDOW is None:
+        return None
+    import webview
+    if kind == "folder":
+        res = WINDOW.create_file_dialog(webview.FOLDER_DIALOG, directory=save_dir())
+    else:
+        res = WINDOW.create_file_dialog(webview.OPEN_DIALOG, directory=save_dir(), allow_multiple=multiple,
+                                        file_types=("Panasonic Toolbox files (*.json;*.zip;*.pshow;*.poper;*.s15)", "All files (*.*)"))
+    return list(res) if res else []
+
+
+def list_files(folder):
+    folder = os.path.realpath(os.path.expanduser(folder))
+    if not os.path.isdir(folder):
+        raise ValueError("Folder not found")
+    out = []
+    for name in sorted(os.listdir(folder)):
+        full = os.path.join(folder, name)
+        if os.path.isfile(full) and name.lower().endswith(ALLOWED_EXT):
+            st = os.stat(full)
+            out.append({"name": name, "path": full, "size": st.st_size, "mtime": int(st.st_mtime)})
+    return {"folder": folder, "files": out}
+
+
+def read_file(path):
+    path = os.path.realpath(os.path.expanduser(str(path)))
+    if not path.lower().endswith(ALLOWED_EXT) or not os.path.isfile(path):
+        raise ValueError("File type not allowed or file not found")
+    if os.path.getsize(path) > 50_000_000:
+        raise ValueError("File too large")
+    with open(path, "rb") as f:
+        return {"name": os.path.basename(path), "path": path, "dataB64": base64.b64encode(f.read()).decode()}
 
 
 def safe_name(name):
     base = os.path.basename(str(name or "bestand"))
     base = re.sub(r"[^A-Za-z0-9._ -]+", "_", base).strip(" .") or "bestand"
-    if not re.search(r"\.(json|zip|s15|html|csv)$", base, re.I):
+    if not base.lower().endswith(ALLOWED_EXT):
         raise ValueError("File type not allowed")
     return base[:150]
 
 
-def save_file(name, data):
-    d = save_dir()
+def save_file(name, data, folder=None):
+    d = os.path.realpath(os.path.expanduser(folder)) if folder else save_dir()
+    os.makedirs(d, exist_ok=True)
     stem, ext = os.path.splitext(safe_name(name))
     path = os.path.join(d, stem + ext)
     n = 1
@@ -286,7 +359,8 @@ class Handler(BaseHTTPRequestHandler):
             if not self.token_ok():
                 return self.send_json(401, {"ok": False, "error": "token"})
             return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION,
-                                        "localIps": local_ipv4s(), "platform": sys.platform})
+                                        "localIps": local_ipv4s(), "platform": sys.platform,
+                                        "saveDir": save_dir(), "nativeDialogs": WINDOW is not None})
         if path in ("", "/"):
             path = "/index.html"
         root = os.path.realpath(WEB_DIR)
@@ -326,13 +400,36 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, self.scan(req))
             if path == "/api/save":
                 data = base64.b64decode(req.get("dataB64") or "", validate=True)
-                return self.send_json(200, {"ok": True, "path": save_file(req.get("name"), data), "dir": save_dir()})
+                return self.send_json(200, {"ok": True, "path": save_file(req.get("name"), data, req.get("dir")), "dir": req.get("dir") or save_dir()})
             if path == "/api/reveal":
                 p = req.get("path")
-                if p and os.path.commonpath([save_dir(), os.path.realpath(p)]) != save_dir():
-                    p = None  # enkel binnen de eigen map
+                if p and not os.path.exists(os.path.realpath(p)):
+                    p = None
                 reveal(p)
                 return self.send_json(200, {"ok": True})
+            if path == "/api/eip/discover":
+                return self.send_json(200, {"ok": True, "cameras": easyip.discover(local_ipv4s(), float(req.get("timeout", 3)))})
+            if path == "/api/eip/set":
+                easyip.configure(str(req.get("mac", "")), str(req.get("ip", "")), str(req.get("mask", "")),
+                                 str(req.get("gateway", "")), str(req.get("dns1", "0.0.0.0")), str(req.get("dns2", "0.0.0.0")),
+                                 int(req.get("port") or 80), local_ipv4s())
+                return self.send_json(200, {"ok": True})
+            if path == "/api/folder":
+                if req.get("set"):
+                    d = os.path.realpath(os.path.expanduser(str(req["set"])))
+                    os.makedirs(d, exist_ok=True)
+                    SETTINGS["saveDir"] = d
+                    save_settings()
+                return self.send_json(200, {"ok": True, "dir": save_dir()})
+            if path == "/api/choose":
+                res = native_dialog(req.get("kind", "folder"), bool(req.get("multiple")))
+                if res is None:
+                    return self.send_json(200, {"ok": False, "error": "unavailable"})
+                return self.send_json(200, {"ok": True, "paths": res})
+            if path == "/api/list_files":
+                return self.send_json(200, {"ok": True, **list_files(req.get("folder") or save_dir())})
+            if path == "/api/read_file":
+                return self.send_json(200, {"ok": True, **read_file(req.get("path"))})
             if path == "/api/open_url":
                 return self.send_json(200, open_camera_page(str(req.get("url", ""))))
             if path == "/api/quit":
@@ -432,7 +529,8 @@ def open_window(url):
         webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     except Exception:
         pass
-    webview.create_window(APP_NAME, url, width=1320, height=900, min_size=(900, 600))
+    global WINDOW
+    WINDOW = webview.create_window(APP_NAME, url, width=1320, height=900, min_size=(900, 600))
     try:
         # Niet-privé modus + vaste map: camera-lijst en instellingen blijven bewaard tussen sessies
         webview.start(private_mode=False, storage_path=app_data_dir())
@@ -453,6 +551,7 @@ def main():
     CONFIG["origins"] = set(o.rstrip("/") for o in a.allow_origin)
     CONFIG["allow_public"] = a.allow_public_ips
 
+    load_settings()
     if running_instance(a.port):
         webbrowser.open(f"http://127.0.0.1:{a.port}/")
         return

@@ -37,6 +37,7 @@ class H(BaseHTTPRequestHandler):
         b = body.encode(); self.send_response(200); self.send_header("Content-Type", "text/plain")
         self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def handle_cmd(self, c, ptz):
+        global extra
         with lock:
             st = scenes[cur["scene"]]
             if ptz:
@@ -44,6 +45,9 @@ class H(BaseHTTPRequestHandler):
                 if c == "#D6": return "d6" + st["#D6"]
                 m = re.match(r"#D6([01])$", c)
                 if m: st["#D6"] = m.group(1); return "d6" + m.group(1)
+                for k in ("#UPVS", "#PST", "#PRF", "#SWZ", "#SPF", "#TAE"):  # operator settings (camera-wide)
+                    if c == k: return k[1:].lower() + extra.get(k, "0")
+                    if c.startswith(k): extra[k] = c[len(k):]; return k[1:].lower() + c[len(k):]
                 return "eR1"
             if c == "QID": return "OID:" + MODEL
             if c == "QSF": return f"OSF:{cur['scene'] - 1}"
@@ -57,14 +61,20 @@ class H(BaseHTTPRequestHandler):
             if m and fam == "UE160": cur["store"][int(m.group(1))] = dict(st); return c
             if c.startswith("Q"):
                 key = "O" + c[1:]
-                return f"{key}:{st[key]}" if key in params else "ER1:" + c[:6]
+                if key in params: return f"{key}:{st[key]}"
+                if c[1:4] not in ("SJ:", "SE:", "AF", "AZ", "IS", "SA:"): return "ER1:" + c[:6]
             m = re.match(r"(O[A-Z]{2}(?::[0-9A-F]{2})?):(.+)$", c)
             if m and m.group(1) in params:
                 key, val = m.group(1), m.group(2)
                 # afhankelijkheid testen: R/B gain enkel als WB-mode niet 4 (=ATW in deze mock)
                 if key in ("OSG:39", "OSG:3A") and st.get("OAW") == "4": return "ER3:" + key
                 st[key] = val.upper(); return c
+            if c.startswith("Q") and c[1:4] in ("SJ:", "SE:", "AF", "AZ", "IS", "SA:"):  # operator settings
+                key = "O" + c[1:]; return f"{key}:{extra.get(key, '0')}"
+            m = re.match(r"(O[A-Z]{2}(?::[0-9A-F]{2})?):(.+)$", c)
+            if m: extra[m.group(1)] = m.group(2).upper(); return c
             return "ER1:" + c[:6]
 
+extra = {}
 print(f"Mock {MODEL} ({fam}, {len(params)} params) op http://{HOST}:{PORT}")
 ThreadingHTTPServer((HOST, PORT), H).serve_forever()

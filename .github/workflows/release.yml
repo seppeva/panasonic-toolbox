@@ -191,5 +191,5 @@ jobs:
           files: out/*
           generate_release_notes: true
           body: |
-            Download via https://seppeva.github.io/panasonicscene/
+            Download via https://seppeva.github.io/panasonic-toolbox/
             Controleer de integriteit met SHA256SUMS.txt (de installatiescripts doen dat automatisch).

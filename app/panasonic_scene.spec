@@ -14,7 +14,7 @@ a = Analysis(
     [os.path.join(HERE, 'panasonic_scene.py')],
     pathex=[HERE],
     datas=[(os.path.join(HERE, 'web'), 'web')],
-    hiddenimports=['webview'],
+    hiddenimports=['webview', 'easyip'],
     excludes=['tkinter', 'unittest', 'pydoc', 'test'],
 )
 pyz = PYZ(a.pure)
