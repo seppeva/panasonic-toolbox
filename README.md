@@ -1,4 +1,4 @@
-# Panasonic Scene
+# Panasonic Toolbox
 
 Desktop app for **macOS and Windows** to **export and import the scene files (all shading settings of a scene)** of Panasonic PTZ cameras, something an AW-RP120/RP150 cannot do. It also looks up every HTTP command of the cameras (for Bitfocus Companion), opens a camera's web pages already logged in, and helps assign cameras to an **AW-RP150**.
 
@@ -21,22 +21,22 @@ Download page: **https://seppeva.github.io/panasonicscene/**
 ## How it works
 
 ```
-Panasonic Scene (app on your computer)
+Panasonic Toolbox (app on your computer)
   ├─ window with the interface ──►  http://127.0.0.1:8765  (built-in server)
   └─ built-in server           ──►  http://<camera-ip>/cgi-bin/aw_cam?cmd=…&res=1
                                     http://<camera-ip>/cgi-bin/aw_ptz?cmd=…&res=1
 ```
 
-Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in *Downloads › Panasonic Scene* and are never overwritten.
+Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in *Downloads › Panasonic Toolbox* and are never overwritten.
 
 ## Releasing a new version
 
 Change `VERSION = "x.y.z"` in `app/panasonic_scene.py` and push to `main`. GitHub Actions then builds:
 
-- `PanasonicScene-macOS-AppleSilicon.dmg` / `.zip`
-- `PanasonicScene-macOS-Intel.dmg` / `.zip`
-- `PanasonicScene-Windows-Setup.exe`
-- `PanasonicScene-Windows-Portable.zip`
+- `PanasonicToolbox-macOS-AppleSilicon.dmg` / `.zip`
+- `PanasonicToolbox-macOS-Intel.dmg` / `.zip`
+- `PanasonicToolbox-Windows-Setup.exe`
+- `PanasonicToolbox-Windows-Portable.zip`
 - `SHA256SUMS.txt` and `build-info-*.txt`
 
 It then publishes release `vX.Y.Z`. The download buttons point to `releases/latest/download/…`, so they work right away. Pushing a tag `vX.Y.Z` works too.

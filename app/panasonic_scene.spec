@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller-spec voor Panasonic Scene.  Bouwen:  pyinstaller app/panasonic_scene.spec
+# PyInstaller-spec voor Panasonic Toolbox.  Bouwen:  pyinstaller app/panasonic_scene.spec
 import os, re, sys
 
 HERE = os.path.abspath(SPECPATH)
 ROOT = os.path.dirname(HERE)
 VERSION = re.search(r'VERSION = "([^"]+)"', open(os.path.join(HERE, 'panasonic_scene.py')).read()).group(1)
-NAME = 'Panasonic Scene'
+NAME = 'Panasonic Toolbox'
 # Ondertekening (enkel als het certificaat in de build beschikbaar is, zie SIGNING.md)
 SIGN_ID = os.environ.get('MAC_SIGN_IDENTITY') or None
 ENTITLEMENTS = os.path.join(HERE, 'entitlements.plist') if SIGN_ID else None
@@ -37,7 +37,7 @@ if sys.platform == 'darwin':
             'LSMinimumSystemVersion': '11.0',
             'NSHighResolutionCapable': True,
             # macOS 15+: toestemming om camera's op het lokale netwerk te bereiken
-            'NSLocalNetworkUsageDescription': 'Panasonic Scene verbindt met je PTZ-camera\'s op het lokale netwerk om scene files uit te lezen en terug te zetten.',
+            'NSLocalNetworkUsageDescription': 'Panasonic Toolbox verbindt met je PTZ-camera\'s op het lokale netwerk om scene files uit te lezen en terug te zetten.',
             'NSAppTransportSecurity': {'NSAllowsArbitraryLoads': True, 'NSAllowsLocalNetworking': True},
         },
     )

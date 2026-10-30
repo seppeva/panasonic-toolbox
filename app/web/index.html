@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="ps-token" content="__PS_TOKEN__">
-<title>Panasonic Scene</title>
+<title>Panasonic Toolbox</title>
 <meta name="description" content="Export and import scene files (shading) of Panasonic PTZ cameras.">
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="style.css">
@@ -13,7 +13,7 @@
 <body>
 <div class="shell">
 <aside class="side">
-  <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Scene</span></div>
+  <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Toolbox</span></div>
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Cameras</span></button>
     <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Export</span></button>
@@ -30,8 +30,8 @@
 <div class="content">
 <div class="bridge-help hidden" id="bridgeHelp">
   <div class="card warn">
-    <h3>Lost connection to the Panasonic Scene app</h3>
-    <p>This window talks to the Panasonic Scene program running on this computer. If it was closed, start it again and choose <button class="small" id="retryBridge">Reconnect</button></p>
+    <h3>Lost connection to the Panasonic Toolbox app</h3>
+    <p>This window talks to the Panasonic Toolbox program running on this computer. If it was closed, start it again and choose <button class="small" id="retryBridge">Reconnect</button></p>
   </div>
 </div>
 <div class="bridge-help hidden" id="updateBox"><div class="note ok" id="updateText"></div></div>
@@ -88,7 +88,7 @@
 
 <!-- ================= EXPORT ================= -->
 <section id="tab-export" class="tab">
-  <header class="page-head"><h1>Export</h1><p>Reads every shading setting of a scene and saves it as a .pscene.json file in Downloads › Panasonic Scene.</p></header>
+  <header class="page-head"><h1>Export</h1><p>Reads every shading setting of a scene and saves it as a .pscene.json file in Downloads › Panasonic Toolbox.</p></header>
   <div class="grid2">
     <div class="card">
       <div class="row between"><h2>Cameras</h2><span class="row"><button class="ghost small" id="expAll">All</button><button class="ghost small" id="expNone">None</button></span></div>
@@ -153,7 +153,7 @@
         <li>Insert an SD card in the RP150. On the RP150 choose <span class="kbd">SYSTEM</span> › CONNECT SETTING › <b>DATA SAVE</b> › YES.</li>
         <li>Put the SD card in this computer and open <code>PRIVATE/MEIGROUP/PAVCN/SBG/SYSCAM/RP150/DATA/Network.s15</code> below.</li>
         <li>Fill in the assignment table: which camera IP goes to which CAM number. <em>Take found cameras</em> fills it from your camera list.</li>
-        <li>Choose <b>Save new Network.s15</b>. The file is saved in Downloads › Panasonic Scene, together with a backup of the original.</li>
+        <li>Choose <b>Save new Network.s15</b>. The file is saved in Downloads › Panasonic Toolbox, together with a backup of the original.</li>
         <li>Copy the new file to the same folder on the SD card and replace the old one. Make sure it is called exactly <code>Network.s15</code>.</li>
         <li>Put the SD card back in the RP150 and choose <span class="kbd">SYSTEM</span> › CONNECT SETTING › <b>DATA LOAD</b>, select the file and choose <b>YES+NW</b> so the network settings are loaded too.</li>
         <li>Press each CAM button and check that the right camera responds.</li>
@@ -191,19 +191,36 @@
 
 <!-- ================= PARAMETERS ================= -->
 <section id="tab-params" class="tab">
-  <header class="page-head"><h1>Parameters</h1><p>What is in a scene file, and every HTTP command the cameras understand.</p></header>
+  <header class="page-head"><h1>Parameters</h1><p>Every HTTP command the cameras understand, and what is in a scene file.</p></header>
+  <div class="row wrap searchbar">
+    <label class="grow">Search commands and scene settings <input id="paramSearch" placeholder="zoom, preset, tally, knee, matrix, OSD:A4" autocomplete="off"></label>
+    <label class="w180">Camera for the links <select id="httpCam"></select></label>
+    <label class="w140" id="httpIpWrap">IP address <input id="httpIp" value="192.168.0.10"></label>
+    <label class="w90">Port <input id="httpPort" type="number" value="80"></label>
+  </div>
   <div class="subtabs" role="tablist">
-    <button role="tab" data-sub="scene" class="active">Scene file contents</button>
-    <button role="tab" data-sub="http">HTTP commands</button>
+    <button role="tab" data-sub="http" class="active">HTTP commands <span class="count" id="cmdCount">0</span></button>
+    <button role="tab" data-sub="scene">Scene file contents <span class="count" id="sceneCount">0</span></button>
   </div>
 
-  <div class="subtab active" id="sub-scene">
+  <div class="subtab active" id="sub-http">
     <div class="card">
       <div class="row between wrap">
-        <div class="row wrap">
-          <label class="w180">Camera model <select id="paramFam"></select></label>
-          <label class="w180">Search <input id="paramFilter" placeholder="matrix, knee, OSD:A4"></label>
-        </div>
+        <p class="hint">Click a command to get its link for the selected camera. In Bitfocus Companion use the <b>Generic HTTP</b> connection with a <b>GET</b> action and paste the link.</p>
+        <label class="w140">Model <select id="cmdModel"></select></label>
+      </div>
+      <table class="tbl dense" id="cmdTable">
+        <thead><tr><th>Function</th><th>Command</th><th>Models</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted small" id="cmdMore"></p>
+    </div>
+  </div>
+
+  <div class="subtab" id="sub-scene">
+    <div class="card">
+      <div class="row between wrap">
+        <label class="w180">Camera model <select id="paramFam"></select></label>
         <button class="ghost" id="paramCsv">Save as CSV</button>
       </div>
       <p class="muted" id="paramInfo"></p>
@@ -211,35 +228,6 @@
         <thead><tr><th>Group</th><th>Setting</th><th>Set command</th><th>Query</th><th>Values</th></tr></thead>
         <tbody></tbody>
       </table>
-    </div>
-  </div>
-
-  <div class="subtab" id="sub-http">
-    <div class="card">
-      <div class="row wrap">
-        <label class="w180">Camera <select id="httpCam"></select></label>
-        <label class="w140" id="httpIpWrap">IP address <input id="httpIp" value="192.168.0.10"></label>
-        <label class="w90">Port <input id="httpPort" type="number" value="80"></label>
-      </div>
-      <p class="hint">Every link is an HTTP GET request. In Bitfocus Companion use the <b>Generic HTTP</b> connection and a <b>GET</b> action, then paste the link.</p>
-    </div>
-    <div class="card">
-      <h2>Common actions</h2>
-      <div id="quickList"></div>
-    </div>
-    <div class="card">
-      <div class="row between wrap">
-        <h2>All commands <span class="count" id="cmdCount">0</span></h2>
-        <div class="row wrap">
-          <label class="w180">Search <input id="cmdFilter" placeholder="zoom, preset, tally, iris"></label>
-          <label class="w140">Model <select id="cmdModel"></select></label>
-        </div>
-      </div>
-      <table class="tbl dense" id="cmdTable">
-        <thead><tr><th>Function</th><th>Command</th><th>Models</th></tr></thead>
-        <tbody></tbody>
-      </table>
-      <p class="muted small" id="cmdMore"></p>
     </div>
   </div>
 </section>

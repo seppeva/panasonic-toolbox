@@ -1,5 +1,5 @@
-/* Panasonic Scene — interface of the local app
- * Talks to the cameras through the local Panasonic Scene server (app/panasonic_scene.py).
+/* Panasonic Toolbox — interface of the local app
+ * Talks to the cameras through the local Panasonic Toolbox server (app/panasonic_scene.py).
  */
 'use strict';
 const CATALOG = window.PANA_CATALOG;
@@ -118,7 +118,7 @@ async function checkBridge() {
     const j = await bridgeFetch('/api/info', undefined, 4000);
     state.bridgeOk = true; state.localIps = j.localIps || [];
     state.version = j.version;
-    dot.className = 'dot ok'; txt.textContent = 'Connected'; txt.title = `Panasonic Scene ${j.version}`;
+    dot.className = 'dot ok'; txt.textContent = 'Connected'; txt.title = `Panasonic Toolbox ${j.version}`;
     $('#bridgeHelp').classList.add('hidden');
     if (!$('#scanRange').value && state.localIps.length) {
       const ip = state.localIps.find(i => i.startsWith('192.168.')) || state.localIps[0];
@@ -200,7 +200,7 @@ function makeFile(cam, scenes) {
   const prof = profileFor(cam.model);
   return {
     format: FORMAT_ID, version: 1,
-    generator: 'Panasonic Scene ' + (state.version || ''),
+    generator: 'Panasonic Toolbox ' + (state.version || ''),
     created: new Date().toISOString(),
     camera: { ip: cam.ip, port: cam.port || 80, model: cam.model, title: cam.title || '', profile: prof.fam },
     scenes,
@@ -218,7 +218,7 @@ const IN_APP = TOKEN && !TOKEN.startsWith('__');
 async function download(name, blobOrText, type = 'application/json') {
   const blob = blobOrText instanceof Blob ? blobOrText : new Blob([blobOrText], { type });
   if (IN_APP) {
-    // In the app: save to Downloads/Panasonic Scene via the local server (never overwrites)
+    // In the app: save to Downloads/Panasonic Toolbox via the local server (never overwrites)
     try {
       const buf = new Uint8Array(await blob.arrayBuffer());
       let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
@@ -305,13 +305,13 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
-  if (b.dataset.tab === 'params') { renderParamTab(); renderHttpTargets(); }
+  if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); }
   $('.content').scrollTop = 0;
 }));
 $$('.subtabs button').forEach(b => b.addEventListener('click', () => {
   $$('.subtabs button').forEach(x => x.classList.toggle('active', x === b));
   $$('.subtab').forEach(t => t.classList.toggle('active', t.id === 'sub-' + b.dataset.sub));
-  if (b.dataset.sub === 'http') { renderHttpTargets(); renderQuick(); renderCmds(); }
+  if (b.dataset.sub === 'http') { renderHttpTargets(); renderCmds(); }
 }));
 
 state.livePath = store.get('livePath', '/live/index.html');
@@ -320,7 +320,7 @@ $('#bridgeSettingsBtn').onclick = () => {
   $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
   $('#setUpdates').checked = store.get('updateCheck', true);
   $('#setLivePath').value = state.livePath; $('#setSetupPath').value = state.setupPath;
-  $('#aboutText').textContent = `Panasonic Scene ${state.version || ''}. Running locally at ${location.host}. This computer's IP addresses: ${state.localIps.join(', ') || '–'}`;
+  $('#aboutText').textContent = `Panasonic Toolbox ${state.version || ''}. Running locally at ${location.host}. This computer's IP addresses: ${state.localIps.join(', ') || '–'}`;
   $('#settingsDlg').showModal();
 };
 $('#saveSettings').onclick = () => {
@@ -332,9 +332,9 @@ $('#saveSettings').onclick = () => {
 };
 $('#quitBtn').onclick = async () => {
   $('#settingsDlg').close();
-  if (!await ask({ title: 'Quit Panasonic Scene?', body: '<p>The window closes and the cameras are no longer controlled from this computer.</p>', ok: 'Quit', danger: true })) return;
+  if (!await ask({ title: 'Quit Panasonic Toolbox?', body: '<p>The window closes and the cameras are no longer controlled from this computer.</p>', ok: 'Quit', danger: true })) return;
   try { await bridgeFetch('/api/quit', {}); } catch { }
-  document.body.innerHTML = '<p style="padding:40px;font:15px system-ui;color:#aaa">Panasonic Scene has quit. You can close this window.</p>';
+  document.body.innerHTML = '<p style="padding:40px;font:15px system-ui;color:#aaa">Panasonic Toolbox has quit. You can close this window.</p>';
 };
 $('#retryBridge').onclick = checkBridge;
 setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 3000).then(() => { if (!state.bridgeOk) checkBridge(); }).catch(() => { if (state.bridgeOk) checkBridge(); }); }, 10000);
@@ -551,7 +551,7 @@ function showSceneTable(anchor, file) {
 state.sources = []; state.jobs = [];
 let srcId = 0, jobId = 0;
 function addImportFile(name, file) {
-  if (!file || file.format !== FORMAT_ID || !Array.isArray(file.scenes)) throw new Error('Not a Panasonic Scene file');
+  if (!file || file.format !== FORMAT_ID || !Array.isArray(file.scenes)) throw new Error('Not a Panasonic Toolbox file');
   file.scenes.forEach((s, i) => {
     const src = { id: ++srcId, fileName: name, file, sceneIdx: i };
     state.sources.push(src);
@@ -742,8 +742,9 @@ const FAM_TEXT = { UE150: 'AW-UE150 / UE155 / HE145', UE150A: 'AW-UE150A', UE160
 function renderParamTab() {
   const sel = $('#paramFam');
   if (!sel.options.length) sel.innerHTML = Object.keys(CATALOG).map(f => `<option value="${f}">${esc(FAM_TEXT[f] || f)}</option>`).join('');
-  const fam = sel.value; const q = $('#paramFilter').value.trim().toLowerCase();
-  const list = CATALOG[fam].filter(p => !q || (p.name + ' ' + p.cmd + ' ' + p.g).toLowerCase().includes(q));
+  const fam = sel.value; const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const list = CATALOG[fam].filter(p => words.every(w => (p.name + ' ' + p.cmd + ' ' + p.q + ' ' + p.g).toLowerCase().includes(w)));
+  $('#sceneCount').textContent = list.length;
   $('#paramInfo').textContent = `${CATALOG[fam].length} settings belong to a scene on the ${FAM_TEXT[fam] || fam}. Source: the list of commands that belong to a scene in Panasonic's interface specification for this model.` + (fam === 'GENERIC' ? ' For other models every known scene command is tried; whatever the camera does not support is skipped.' : '');
   $('#paramTable tbody').innerHTML = list.map(p => `<tr><td class="grp">${esc(p.g)}</td><td>${esc(p.name)}</td><td class="mono">${esc(p.t === 'ptz' ? p.cmd + '[Data]' : p.cmd + ':[Data]')}</td><td class="mono">${esc(p.q)}</td><td class="small muted">${esc(rangeText(p))}</td></tr>`).join('');
 }
@@ -754,7 +755,7 @@ function rangeText(p) {
   if (p.sup) parts.push(p.sup);
   return parts.join('; ');
 }
-$('#paramFam').onchange = renderParamTab; $('#paramFilter').oninput = renderParamTab;
+$('#paramFam').onchange = renderParamTab;
 $('#paramCsv').onclick = () => {
   const fam = $('#paramFam').value;
   const csv = ['Group;Setting;Set command;Query command;Values'].concat(CATALOG[fam].map(p => [p.g, p.name, p.cmd, p.q, rangeText(p)].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
@@ -778,6 +779,7 @@ function renderHttpTargets() {
   sel.innerHTML = `<option value="">Other IP address</option>` + state.cameras.map(c => `<option value="${esc(c.ip)}">${esc(c.ip)} ${esc(c.title || c.model || '')}</option>`).join('');
   sel.value = state.cameras.some(c => c.ip === cur) ? cur : (state.cameras[0]?.ip || '');
   $('#httpIpWrap').classList.toggle('hidden', !!sel.value);
+  $$('.urlrow').forEach(r => r.update && r.update());
   if (!$('#cmdModel').options.length) {
     const models = [...new Set(COMMANDS.flatMap(c => c.m.map(m => m.replace('*', ''))))].sort();
     $('#cmdModel').innerHTML = `<option value="">All models</option>` + models.map(m => `<option>${m}</option>`).join('');
@@ -808,46 +810,21 @@ function urlRow(t, cmdFn, extraHtml = '') {
   wrap.update = upd; upd();
   return wrap;
 }
-const QUICK = [
-  ['Lens', [
-    ['Zoom in (tele)', 'ptz', '#Z75'], ['Zoom out (wide)', 'ptz', '#Z25'], ['Zoom stop', 'ptz', '#Z50'],
-    ['Focus near', 'ptz', '#F25'], ['Focus far', 'ptz', '#F75'], ['Focus stop', 'ptz', '#F50'],
-    ['Auto focus on', 'ptz', '#D11'], ['Manual focus', 'ptz', '#D10'], ['One-push auto focus', 'cam', 'OSE:69:1'],
-    ['Auto iris on', 'ptz', '#D31'], ['Manual iris', 'ptz', '#D30'],
-  ]],
-  ['Pan and tilt', [
-    ['Pan left', 'ptz', '#P25'], ['Pan right', 'ptz', '#P75'], ['Tilt up', 'ptz', '#T75'], ['Tilt down', 'ptz', '#T25'],
-    ['Stop pan and tilt', 'ptz', '#PTS5050'], ['Home position', 'ptz', '#APC80008000'],
-  ]],
-  ['Presets', [
-    ['Recall preset', 'ptz', w => '#R' + pad2(Math.max(1, Math.min(100, +$('input', w).value || 1)) - 1), 'preset'],
-    ['Store preset', 'ptz', w => '#M' + pad2(Math.max(1, Math.min(100, +$('input', w).value || 1)) - 1), 'preset'],
-  ]],
-  ['Picture', [
-    ['Scene 1', 'cam', 'XSF:1'], ['Scene 2', 'cam', 'XSF:2'], ['Scene 3', 'cam', 'XSF:3'], ['Scene 4', 'cam', 'XSF:4'],
-    ['Auto white balance (AWB)', 'cam', 'OWS'], ['Auto black balance (ABB)', 'cam', 'OAS'],
-    ['Color bars on', 'cam', 'DCB:1'], ['Color bars off', 'cam', 'DCB:0'],
-  ]],
-  ['Camera', [
-    ['Power on', 'ptz', '#O1'], ['Standby', 'ptz', '#O0'],
-    ['Red tally on', 'cam', 'TLR:1'], ['Red tally off', 'cam', 'TLR:0'], ['Green tally on', 'cam', 'TLG:1'], ['Green tally off', 'cam', 'TLG:0'],
-  ]],
-];
-function renderQuick() {
-  const box = $('#quickList'); if (box.dataset.built) { $$('.urlrow', box).forEach(r => r.update()); return; }
-  box.dataset.built = 1;
-  for (const [group, items] of QUICK) {
-    const g = document.createElement('div'); g.className = 'qgroup';
-    g.innerHTML = `<h3>${esc(group)}</h3>`;
-    for (const [label, t, cmd, input] of items) {
-      const line = document.createElement('div'); line.className = 'qline';
-      const extra = `<span class="qlabel">${esc(label)}${input === 'preset' ? ' <input type="number" min="1" max="100" value="1" aria-label="Preset number" class="num">' : ''}</span>`;
-      line.appendChild(urlRow(t, typeof cmd === 'function' ? cmd : () => cmd, extra));
-      g.appendChild(line);
-    }
-    box.appendChild(g);
-  }
-}
+// Common actions: shown first in the one command list. 'p' = preset number 1-100 (sent as 00-99).
+const COMMON = [
+  ['Zoom in (tele)', 'ptz', '#Z75'], ['Zoom out (wide)', 'ptz', '#Z25'], ['Zoom stop', 'ptz', '#Z50'],
+  ['Focus near', 'ptz', '#F25'], ['Focus far', 'ptz', '#F75'], ['Focus stop', 'ptz', '#F50'],
+  ['Auto focus on', 'ptz', '#D11'], ['Manual focus', 'ptz', '#D10'], ['One-push auto focus', 'cam', 'OSE:69:1'],
+  ['Auto iris on', 'ptz', '#D31'], ['Manual iris', 'ptz', '#D30'],
+  ['Pan left', 'ptz', '#P25'], ['Pan right', 'ptz', '#P75'], ['Tilt up', 'ptz', '#T75'], ['Tilt down', 'ptz', '#T25'],
+  ['Stop pan and tilt', 'ptz', '#PTS5050'], ['Home position', 'ptz', '#APC80008000'],
+  ['Recall preset', 'ptz', '#R[Data]', 'p'], ['Store preset', 'ptz', '#M[Data]', 'p'],
+  ['Scene 1', 'cam', 'XSF:1'], ['Scene 2', 'cam', 'XSF:2'], ['Scene 3', 'cam', 'XSF:3'], ['Scene 4', 'cam', 'XSF:4'],
+  ['Auto white balance (AWB)', 'cam', 'OWS'], ['Auto black balance (ABB)', 'cam', 'OAS'],
+  ['Color bars on', 'cam', 'DCB:1'], ['Color bars off', 'cam', 'DCB:0'],
+  ['Power on', 'ptz', '#O1'], ['Standby', 'ptz', '#O0'],
+  ['Red tally on', 'cam', 'TLR:1'], ['Red tally off', 'cam', 'TLR:0'], ['Green tally on', 'cam', 'TLG:1'], ['Green tally off', 'cam', 'TLG:0'],
+].map(([n, t, c, p]) => ({ n, t, c, q: null, d: p ? ['1', '-', '100'] : ['-'], v: p ? ['Preset 1', '-', 'Preset 100'] : [''], m: ['Most models'], common: 1, preset: !!p }));
 ['#httpCam', '#httpIp', '#httpPort'].forEach(s => $(s).addEventListener('input', () => { $('#httpIpWrap').classList.toggle('hidden', !!$('#httpCam').value); $$('.urlrow').forEach(r => r.update && r.update()); }));
 
 function enumOpts(c) {
@@ -857,48 +834,55 @@ function enumOpts(c) {
   return d.map((x, i) => ({ val: x.replace(/h$/i, ''), label: `${x.replace(/h$/i, '')}: ${v[i]}` }));
 }
 function valueHint(c) {
+  if (c.preset) return 'Preset number 1 to 100';
   if (!c.d || (c.d.length === 1 && (c.d[0] === '-' || c.d[0] === '※'))) return '';
   const d = c.d.join(' '), v = c.v.join(' ');
   return (d + (v ? '  →  ' + v : '')).slice(0, 220);
 }
 let cmdOpen = null;
 function renderCmds() {
-  const q = $('#cmdFilter').value.trim().toLowerCase(), m = $('#cmdModel').value;
-  const words = q.split(/\s+/).filter(Boolean);
-  const list = COMMANDS.filter(c => c.c && (!m || c.m.some(x => x.replace('*', '') === m)) && words.every(w => (c.n + ' ' + c.c + ' ' + (c.q || '')).toLowerCase().includes(w)));
+  const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean), m = $('#cmdModel').value;
+  const match = c => words.every(w => (c.n + ' ' + c.c + ' ' + (c.q || '')).toLowerCase().includes(w));
+  const common = COMMON.filter(match);
+  const list = COMMANDS.filter(c => c.c && (!m || c.m.some(x => x.replace('*', '') === m)) && match(c));
   // most widely supported first (current models before legacy-only commands), then alphabetically
   list.sort((x, y) => (y.m.length - x.m.length) || x.n.localeCompare(y.n));
-  $('#cmdCount').textContent = list.length;
-  const shown = list.slice(0, 150);
+  const all = [...common, ...list];
+  $('#cmdCount').textContent = all.length;
+  const shown = all.slice(0, 150);
   const tb = $('#cmdTable tbody'); tb.innerHTML = '';
   for (const c of shown) {
     const tr = document.createElement('tr'); tr.className = 'clickable';
-    tr.innerHTML = `<td>${esc(c.n)}${c.rp ? ' <span class="pill info">controller</span>' : ''}</td><td class="mono">${esc(c.c)}</td><td class="small muted">${esc(c.m.join(', '))}</td>`;
-    tr.onclick = () => toggleCmd(c, tr);
+    const fixed = !/\[Data/.test(c.c);
+    tr.innerHTML = `<td>${esc(c.n)}${c.common ? ' <span class="pill ok">Common</span>' : ''}${c.rp ? ' <span class="pill info">Controller</span>' : ''}</td><td class="mono">${esc(c.c)}</td><td class="small muted">${esc(c.m.join(', '))}</td><td class="end nowrap">${fixed ? '<button class="ghost small" data-copy>Copy link</button>' : ''}</td>`;
+    tr.onclick = e => { if (e.target.closest('[data-copy]')) return; toggleCmd(c, tr); };
+    if (fixed) $('[data-copy]', tr).onclick = e => copyText(cmdUrl(c.t, c.c), e.target);
     tb.appendChild(tr);
     if (cmdOpen === c) toggleCmd(c, tr, true);
   }
-  $('#cmdMore').textContent = list.length > shown.length ? `Showing the first ${shown.length} of ${list.length}. Search more specifically to narrow the list.` : '';
+  $('#cmdMore').textContent = all.length > shown.length ? `Showing the first ${shown.length} of ${all.length}. Search more specifically to narrow the list.` : (all.length ? '' : 'No commands match your search.');
 }
 function toggleCmd(c, tr, force) {
   const ex = tr.nextElementSibling;
   if (ex?.classList.contains('cmd-detail')) { ex.remove(); if (!force) { cmdOpen = null; return; } }
   cmdOpen = c;
   const holders = c.c.match(/\[Data\d*\]/g) || [];
-  const opts = holders.length === 1 ? enumOpts(c) : null;
-  const inputs = holders.map((h, i) => opts
-    ? `<label>${esc(h.replace(/[[\]]/g, ''))}<select data-i="${i}">${opts.map(o => `<option value="${esc(o.val)}">${esc(o.label)}</option>`).join('')}</select></label>`
+  const opts = holders.length === 1 && !c.preset ? enumOpts(c) : null;
+  const inputs = holders.map((h, i) => c.preset
+    ? `<label>Preset number<input data-i="${i}" type="number" min="1" max="100" value="1"></label>`
+    : opts ? `<label>${esc(h.replace(/[[\]]/g, ''))}<select data-i="${i}">${opts.map(o => `<option value="${esc(o.val)}">${esc(o.label)}</option>`).join('')}</select></label>`
     : `<label>${esc(h.replace(/[[\]]/g, ''))}<input data-i="${i}" class="mono" placeholder="value"></label>`).join('');
   const d = document.createElement('tr'); d.className = 'cmd-detail';
-  d.innerHTML = `<td colspan="3"><div class="cmdbox">${valueHint(c) ? `<p class="hint mono">${esc(valueHint(c))}</p>` : ''}${c.rp ? '<p class="hint">Send this to the IP address of the RP150/RP120/RP60 controller, not to a camera.</p>' : ''}<div class="row wrap">${inputs}</div><div class="set"></div>${c.q ? '<p class="small muted">Query the current value:</p><div class="get"></div>' : ''}</div></td>`;
-  const build = w => { let i = 0; return c.c.replace(/\[Data\d*\]/g, () => { const el = $(`[data-i="${i++}"]`, d); return (el?.value || '').trim(); }); };
+  d.innerHTML = `<td colspan="4"><div class="cmdbox">${valueHint(c) ? `<p class="hint mono">${esc(valueHint(c))}</p>` : ''}${c.rp ? '<p class="hint">Send this to the IP address of the RP150/RP120/RP60 controller, not to a camera.</p>' : ''}${inputs ? `<div class="row wrap">${inputs}</div>` : ''}<div class="set"></div>${c.q ? '<p class="small muted">Query the current value:</p><div class="get"></div>' : ''}</div></td>`;
+  const val = el => c.preset ? pad2(Math.max(1, Math.min(100, +el.value || 1)) - 1) : (el?.value || '').trim();
+  const build = () => { let i = 0; return c.c.replace(/\[Data\d*\]/g, () => val($(`[data-i="${i++}"]`, d))); };
   const setRow = urlRow(c.t, build);
   $('.set', d).appendChild(setRow);
   $$('[data-i]', d).forEach(el => el.addEventListener('input', () => setRow.update()));
   if (c.q) $('.get', d).appendChild(urlRow(c.t, () => c.q));
   tr.after(d);
 }
-$('#cmdFilter').addEventListener('input', () => { cmdOpen = null; renderCmds(); });
+$('#paramSearch').addEventListener('input', () => { cmdOpen = null; renderCmds(); renderParamTab(); });
 $('#cmdModel').addEventListener('change', () => { cmdOpen = null; renderCmds(); });
 
 /* ------------------------------------------------------------------ RP150: assignment + Network.s15 */
@@ -1042,7 +1026,7 @@ function analyzeS15() {
     await download('Network_ORIGINAL_backup.s15', new Blob([u8]), 'application/octet-stream');
     await download('Network.s15', new Blob([copy]), 'application/octet-stream');
     log(`Network.s15 changed for ${state.rp.length} camera(s)${lanVal != null ? ', connection type included' : ' (IP addresses only)'}`);
-    info('Network.s15 saved', `The new file and a backup of the original are in Downloads › Panasonic Scene. Copy the new file to the SD card as <code>Network.s15</code> and load it on the RP150 with DATA LOAD › YES+NW.` +
+    info('Network.s15 saved', `The new file and a backup of the original are in Downloads › Panasonic Toolbox. Copy the new file to the SD card as <code>Network.s15</code> and load it on the RP150 with DATA LOAD › YES+NW.` +
       (lanVal == null ? '<br><br>The connection type could not be set automatically. Set CNNCT MD to LAN on the controller for each CAM, or open a second version of the file as explained above.' : ''));
   };
 }

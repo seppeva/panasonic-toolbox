@@ -1,6 +1,6 @@
 # Open source components
 
-Panasonic Scene itself is licensed under the [MIT license](LICENSE). The installed app includes the following third-party components:
+Panasonic Toolbox itself is licensed under the [MIT license](LICENSE). The installed app includes the following third-party components:
 
 | Component | Used for | License |
 |---|---|---|

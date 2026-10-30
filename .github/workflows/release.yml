@@ -89,20 +89,20 @@ jobs:
       - name: Build-info (versies van gebundelde pakketten + architectuur)
         shell: bash
         run: |
-          { echo "Panasonic Scene build ${{ matrix.target }}-${{ matrix.arch }}"; python -c "import platform,sys;print(platform.platform(), platform.machine(), sys.version)"; pip freeze; } > "dist/build-info-${{ matrix.target }}-${{ matrix.arch }}.txt"
+          { echo "Panasonic Toolbox build ${{ matrix.target }}-${{ matrix.arch }}"; python -c "import platform,sys;print(platform.platform(), platform.machine(), sys.version)"; pip freeze; } > "dist/build-info-${{ matrix.target }}-${{ matrix.arch }}.txt"
           if [[ "${{ matrix.target }}" == "mac" ]]; then
-            file "dist/Panasonic Scene.app/Contents/MacOS/Panasonic Scene" | tee -a "dist/build-info-${{ matrix.target }}-${{ matrix.arch }}.txt"
-            if [[ "${{ matrix.arch }}" == "AppleSilicon" ]]; then file "dist/Panasonic Scene.app/Contents/MacOS/Panasonic Scene" | grep -q arm64; fi
+            file "dist/Panasonic Toolbox.app/Contents/MacOS/Panasonic Toolbox" | tee -a "dist/build-info-${{ matrix.target }}-${{ matrix.arch }}.txt"
+            if [[ "${{ matrix.arch }}" == "AppleSilicon" ]]; then file "dist/Panasonic Toolbox.app/Contents/MacOS/Panasonic Toolbox" | grep -q arm64; fi
           fi
 
       - name: Rooktest (server start en antwoordt)
         shell: bash
         run: |
-          if [[ "${{ matrix.target }}" == "mac" ]]; then BIN="dist/Panasonic Scene.app/Contents/MacOS/Panasonic Scene"; else BIN="dist/Panasonic Scene/Panasonic Scene.exe"; fi
+          if [[ "${{ matrix.target }}" == "mac" ]]; then BIN="dist/Panasonic Toolbox.app/Contents/MacOS/Panasonic Toolbox"; else BIN="dist/Panasonic Toolbox/Panasonic Toolbox.exe"; fi
           "$BIN" --headless --port 8799 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8799/api/ping && break; sleep 1; done
           curl -sf http://127.0.0.1:8799/api/ping | grep -q panasonic-scene
-          curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Scene</title>"
+          curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Toolbox</title>"
           curl -sf -X POST http://127.0.0.1:8799/api/quit || true
 
       - name: macOS — notariseren (enkel met Apple Developer-account)
@@ -113,10 +113,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd dist
-          codesign --verify --deep --strict --verbose=2 "Panasonic Scene.app"
-          ditto -c -k --keepParent "Panasonic Scene.app" notarize.zip
+          codesign --verify --deep --strict --verbose=2 "Panasonic Toolbox.app"
+          ditto -c -k --keepParent "Panasonic Toolbox.app" notarize.zip
           xcrun notarytool submit notarize.zip --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-          xcrun stapler staple "Panasonic Scene.app"
+          xcrun stapler staple "Panasonic Toolbox.app"
           rm notarize.zip
 
       - name: macOS — DMG en ZIP
@@ -127,10 +127,10 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           cd dist
-          ditto -c -k --sequesterRsrc --keepParent "Panasonic Scene.app" "PanasonicScene-macOS-${{ matrix.arch }}.zip"
-          mkdir dmg && cp -R "Panasonic Scene.app" dmg/ && ln -s /Applications dmg/Applications
-          DMG="PanasonicScene-macOS-${{ matrix.arch }}.dmg"
-          hdiutil create -volname "Panasonic Scene" -srcfolder dmg -ov -format UDZO "$DMG"
+          ditto -c -k --sequesterRsrc --keepParent "Panasonic Toolbox.app" "PanasonicToolbox-macOS-${{ matrix.arch }}.zip"
+          mkdir dmg && cp -R "Panasonic Toolbox.app" dmg/ && ln -s /Applications dmg/Applications
+          DMG="PanasonicToolbox-macOS-${{ matrix.arch }}.dmg"
+          hdiutil create -volname "Panasonic Toolbox" -srcfolder dmg -ov -format UDZO "$DMG"
           if [[ -n "$MAC_SIGN_IDENTITY" ]]; then
             codesign --sign "$MAC_SIGN_IDENTITY" --timestamp "$DMG"
             xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
@@ -146,7 +146,7 @@ jobs:
           $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
           if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           & $iscc "/DAppVersion=$v" installer/windows.iss
-          Compress-Archive -Path "dist/Panasonic Scene" -DestinationPath "dist/PanasonicScene-Windows-Portable.zip"
+          Compress-Archive -Path "dist/Panasonic Toolbox" -DestinationPath "dist/PanasonicToolbox-Windows-Portable.zip"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -180,12 +180,12 @@ jobs:
           cat SHA256SUMS.txt
       - name: Controleren of de belangrijkste downloads er zijn
         run: |
-          test -f out/PanasonicScene-macOS-AppleSilicon.dmg
-          test -f out/PanasonicScene-Windows-Setup.exe
+          test -f out/PanasonicToolbox-macOS-AppleSilicon.dmg
+          test -f out/PanasonicToolbox-Windows-Setup.exe
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
-          name: Panasonic Scene ${{ steps.v.outputs.version }}
+          name: Panasonic Toolbox ${{ steps.v.outputs.version }}
           target_commitish: ${{ github.sha }}
           make_latest: true
           files: out/*

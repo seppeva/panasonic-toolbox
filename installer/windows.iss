@@ -1,8 +1,8 @@
-; Inno Setup script for Panasonic Scene (built by GitHub Actions)
+; Inno Setup script for Panasonic Toolbox (built by GitHub Actions)
 #ifndef AppVersion
   #define AppVersion "0.0.0"
 #endif
-#define AppName "Panasonic Scene"
+#define AppName "Panasonic Toolbox"
 
 [Setup]
 AppId={{6C1E7A52-2F0B-4C1D-9E7A-5A3B1F0C9D21}
@@ -16,7 +16,7 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 OutputDir=..\dist
-OutputBaseFilename=PanasonicScene-Windows-Setup
+OutputBaseFilename=PanasonicToolbox-Windows-Setup
 SetupIconFile=..\assets\icon.ico
 UninstallDisplayIcon={app}\{#AppName}.exe
 Compression=lzma2

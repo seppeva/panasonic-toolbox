@@ -1,4 +1,4 @@
-/* Panasonic Scene — desktop-interface
+/* Panasonic Toolbox — desktop-interface
    Systeemlettertype (SF Pro / Segoe UI) zoals native software; grafietgrijs,
    kleur enkel waar ze betekenis heeft: blauw = actie/selectie, groen/oranje/rood = status. */
 :root{
@@ -200,3 +200,5 @@ tr.cmd-detail td{background:#202327}
 .cmdbox{padding:6px 2px}
 .cmdbox .row{margin:6px 0}
 .cmdbox label{min-width:160px}
+
+.searchbar{margin:0 0 14px}

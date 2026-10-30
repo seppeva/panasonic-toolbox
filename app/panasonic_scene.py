@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Panasonic Scene — lokale app
+Panasonic Toolbox — lokale app
 ============================
 Exporteer en importeer scene files (shading) van Panasonic PTZ-camera's.
 
@@ -30,8 +30,8 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-APP_NAME = "Panasonic Scene"
-VERSION = "2.1.0"
+APP_NAME = "Panasonic Toolbox"
+VERSION = "2.2.0"
 DEFAULT_PORT = 8765
 
 
@@ -124,7 +124,7 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
 def save_dir():
     home = os.path.expanduser("~")
     d = os.path.join(home, "Downloads") if os.path.isdir(os.path.join(home, "Downloads")) else home
-    d = os.path.join(d, "Panasonic Scene")
+    d = os.path.join(d, "Panasonic Toolbox")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -223,7 +223,7 @@ def probe(ip, port, user, password):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "PanasonicScene"
+    server_version = "PanasonicToolbox"
     sys_version = ""
 
     def log_message(self, fmt, *args):

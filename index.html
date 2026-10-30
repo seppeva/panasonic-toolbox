@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panasonic Scene: export and import scene files of Panasonic PTZ cameras</title>
+<title>Panasonic Toolbox: export and import scene files of Panasonic PTZ cameras</title>
 <meta name="description" content="Desktop app for Mac and Windows to save, copy and restore the scene files (shading) of Panasonic PTZ cameras.">
 <link rel="icon" href="app/web/icon.svg">
 <style>
@@ -119,7 +119,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 <body>
 
 <header class="wrap bar">
-  <a class="brand" href="#top"><img src="app/web/icon.svg" alt="">Panasonic Scene</a>
+  <a class="brand" href="#top"><img src="app/web/icon.svg" alt="">Panasonic Toolbox</a>
   <nav aria-label="Main"><a href="#how">How it works</a><a href="#download">Download</a><a href="#contents">Scene file contents</a><a href="#faq">Questions</a></nav>
 </header>
 
@@ -127,7 +127,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
   <div class="wrap hero">
     <div class="hero-text">
       <h1>Save and restore the scene files of Panasonic PTZ cameras</h1>
-      <p class="lead">An AW-RP120 or AW-RP150 cannot export a camera's shading. Panasonic Scene reads every setting of a scene, saves it to a file and puts it back on the same camera or another one.</p>
+      <p class="lead">An AW-RP120 or AW-RP150 cannot export a camera's shading. Panasonic Toolbox reads every setting of a scene, saves it to a file and puts it back on the same camera or another one.</p>
       <div class="actions">
         <a class="btn" id="mainDl" href="#download">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 17h12"/></svg>
@@ -140,7 +140,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
     <figure class="shot">
       <div class="frame">
         <div class="chrome" aria-hidden="true"><i></i><i></i><i></i></div>
-        <img src="assets/app-screenshot.jpg" width="1920" height="1200" alt="Panasonic Scene listing five cameras with model, title, active scene, status and buttons for their web pages.">
+        <img src="assets/app-screenshot.jpg" width="1920" height="1200" alt="Panasonic Toolbox listing five cameras with model, title, active scene, status and buttons for their web pages.">
       </div>
       <figcaption>After a network scan every camera is listed with its model, title and live scene.</figcaption>
     </figure>
@@ -154,7 +154,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
       </div>
       <div>
         <div class="diagram">
-          <svg viewBox="0 0 820 260" role="img" aria-label="Diagram: a computer running Panasonic Scene and the AW-RP150 are connected through a network switch to three PTZ cameras.">
+          <svg viewBox="0 0 820 260" role="img" aria-label="Diagram: a computer running Panasonic Toolbox and the AW-RP150 are connected through a network switch to three PTZ cameras.">
             <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#16191d" stroke-linecap="round">
               <g fill="none" stroke="#16191d" stroke-width="1.5">
                 <rect x="10" y="80" width="170" height="104" rx="6"/>
@@ -172,7 +172,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
               </g>
               <path d="M395 160v62h-205" fill="none" stroke="#9aa2ad" stroke-width="1.5" stroke-dasharray="4 4"/>
               <text x="95" y="126" text-anchor="middle" font-weight="600">Computer</text>
-              <text x="95" y="148" text-anchor="middle" fill="#6b7380" font-size="13">Panasonic Scene</text>
+              <text x="95" y="148" text-anchor="middle" fill="#6b7380" font-size="13">Panasonic Toolbox</text>
               <text x="95" y="166" text-anchor="middle" fill="#6b7380" font-size="13">192.168.0.200</text>
               <text x="395" y="137" text-anchor="middle" font-weight="600">Network switch</text>
               <text x="250" y="122" text-anchor="middle" fill="#6b7380" font-size="12.5">LAN</text>
@@ -185,8 +185,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         </div>
         <ol class="steps">
           <li><div><h3>Put your computer in the cameras' IP range</h3><p>Give your computer a fixed address in the range of the cameras, for example 192.168.0.200 with subnet mask 255.255.255.0, and connect it to the same switch.</p></div></li>
-          <li><div><h3>Find the cameras</h3><p>Open Panasonic Scene and choose <em>Scan network</em>. Each PTZ shows up with its model, title and live scene. From the list you can also open a camera's live page or settings page, already logged in.</p></div></li>
-          <li><div><h3>Export</h3><p>Pick the cameras and either the live scene or scenes 1 to 4 (up to 8 on the AW-UE160). Each camera becomes a <span class="mono">.pscene.json</span> file in Downloads › Panasonic Scene; several cameras go into one ZIP. Before the app switches scenes, it asks you to confirm.</p></div></li>
+          <li><div><h3>Find the cameras</h3><p>Open Panasonic Toolbox and choose <em>Scan network</em>. Each PTZ shows up with its model, title and live scene. From the list you can also open a camera's live page or settings page, already logged in.</p></div></li>
+          <li><div><h3>Export</h3><p>Pick the cameras and either the live scene or scenes 1 to 4 (up to 8 on the AW-UE160). Each camera becomes a <span class="mono">.pscene.json</span> file in Downloads › Panasonic Toolbox; several cameras go into one ZIP. Before the app switches scenes, it asks you to confirm.</p></div></li>
           <li><div><h3>Import</h3><p>Open a file and choose for each scene which camera and which scene it goes to. The app saves the current settings as a backup first and reads everything back afterwards to check.</p></div></li>
         </ol>
       </div>
@@ -205,16 +205,16 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <div class="dl-col">
             <h3>macOS</h3>
             <p class="os-req">macOS 11 Big Sur or later</p>
-            <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-macOS-AppleSilicon.dmg">Mac with Apple silicon (M1–M4) <span class="size" data-asset="PanasonicScene-macOS-AppleSilicon.dmg"></span></a>
-            <p class="alt">Older Mac with an Intel processor? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-macOS-Intel.dmg">Download the Intel version</a></p>
+            <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-macOS-AppleSilicon.dmg">Mac with Apple silicon (M1–M4) <span class="size" data-asset="PanasonicToolbox-macOS-AppleSilicon.dmg"></span></a>
+            <p class="alt">Older Mac with an Intel processor? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-macOS-Intel.dmg">Download the Intel version</a></p>
             <p class="term-label">Or install from Terminal. This avoids the security warning when opening the app:</p>
             <div class="term"><code data-cmd="install.sh">curl -fsSL https://seppeva.github.io/panasonicscene/install.sh | bash</code><button type="button" data-copy>Copy</button></div>
             <details>
               <summary>Opening the app for the first time</summary>
               <ol>
-                <li>Open the .dmg file and drag Panasonic Scene to Applications.</li>
+                <li>Open the .dmg file and drag Panasonic Toolbox to Applications.</li>
                 <li>The app is not registered with Apple yet, so the first time macOS says it cannot be opened. Click Done.</li>
-                <li>Open System Settings, go to Privacy &amp; Security and click Open Anyway next to Panasonic Scene at the bottom.</li>
+                <li>Open System Settings, go to Privacy &amp; Security and click Open Anyway next to Panasonic Toolbox at the bottom.</li>
                 <li>When macOS asks whether the app may find devices on your local network, choose Allow. Without that permission the app cannot find any cameras.</li>
               </ol>
             </details>
@@ -222,8 +222,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <div class="dl-col">
             <h3>Windows</h3>
             <p class="os-req">Windows 10 or 11, 64-bit</p>
-            <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-Windows-Setup.exe">Installer <span class="size" data-asset="PanasonicScene-Windows-Setup.exe"></span></a>
-            <p class="alt">Prefer not to install? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicScene-Windows-Portable.zip">Download the portable version</a></p>
+            <a class="btn" href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-Windows-Setup.exe">Installer <span class="size" data-asset="PanasonicToolbox-Windows-Setup.exe"></span></a>
+            <p class="alt">Prefer not to install? <a href="https://github.com/seppeva/panasonicscene/releases/latest/download/PanasonicToolbox-Windows-Portable.zip">Download the portable version</a></p>
             <p class="term-label">Or install from PowerShell:</p>
             <div class="term"><code data-cmd="install.ps1">irm https://seppeva.github.io/panasonicscene/install.ps1 | iex</code><button type="button" data-copy>Copy</button></div>
             <details>
@@ -232,7 +232,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
                 <li>Run the installer. No administrator rights are needed.</li>
                 <li>If Windows shows “Windows protected your PC”, click More info and then Run anyway.</li>
                 <li>If Windows Firewall asks for access, allow private networks.</li>
-                <li>Panasonic Scene then appears in the Start menu.</li>
+                <li>Panasonic Toolbox then appears in the Start menu.</li>
               </ol>
             </details>
           </div>
@@ -284,12 +284,12 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
     <section class="sec" id="faq">
       <div class="sec-head"><h2>Questions</h2></div>
       <div>
-        <details><summary>The scan finds no cameras</summary><ul><li>Check that your computer is in the same range, for example 192.168.0.x with subnet mask 255.255.255.0.</li><li>Turn Wi-Fi off or give the wired connection priority.</li><li>Mac: in System Settings › Privacy &amp; Security › Local Network, make sure Panasonic Scene is turned on.</li><li>Windows: allow Panasonic Scene on private networks in the firewall.</li></ul></details>
+        <details><summary>The scan finds no cameras</summary><ul><li>Check that your computer is in the same range, for example 192.168.0.x with subnet mask 255.255.255.0.</li><li>Turn Wi-Fi off or give the wired connection priority.</li><li>Mac: in System Settings › Privacy &amp; Security › Local Network, make sure Panasonic Toolbox is turned on.</li><li>Windows: allow Panasonic Toolbox on private networks in the firewall.</li></ul></details>
         <details><summary>Does the picture change while exporting?</summary><p>Not when you export the live scene only. To read other scenes the camera has to switch to them, so the app asks you to confirm first. Don't do that while a camera is on air.</p></details>
         <details><summary>Can I undo an import?</summary><p>Yes. Before every import the app saves the current settings of the destination scene as a separate file. Import that file to go back.</p></details>
         <details><summary>Can the RP150 be used at the same time?</summary><p>Yes, both control the same cameras and changes made in the app show up on the controller. Preferably don't operate the controller during an import.</p></details>
         <details><summary>Do I need to reinstall for an update?</summary><p>Install the new version over the old one, for example with the same Terminal or PowerShell command. Your camera list and settings are kept.</p></details>
-        <details><summary>Is this Panasonic software?</summary><p>No. Panasonic Scene uses the publicly documented camera functions, but it is an independent tool.</p></details>
+        <details><summary>Is this Panasonic software?</summary><p>No. Panasonic Toolbox uses the publicly documented camera functions, but it is an independent tool.</p></details>
       </div>
     </section>
   </div>
@@ -297,7 +297,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 
 <footer>
   <div class="wrap">
-    <span>Panasonic Scene is made by <a href="https://seppevanaken.be">Seppe Van Aken</a>. <a href="https://github.com/seppeva/panasonicscene">Source code on GitHub</a></span>
+    <span>Panasonic Toolbox is made by <a href="https://seppevanaken.be">Seppe Van Aken</a>. <a href="https://github.com/seppeva/panasonicscene">Source code on GitHub</a></span>
     <span><a href="privacy.html">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonicscene/blob/main/LICENSE">License (MIT)</a> &nbsp; Panasonic is a trademark of Panasonic Holdings Corporation.</span>
   </div>
 </footer>
@@ -307,9 +307,9 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 const REPO = 'seppeva/panasonicscene';
 const BASE = `https://github.com/${REPO}/releases/latest/download/`;
 const DL = {
-  macArm: { file: 'PanasonicScene-macOS-AppleSilicon.dmg', label: 'Download for Mac' },
-  macIntel: { file: 'PanasonicScene-macOS-Intel.dmg', label: 'Download for Mac (Intel)' },
-  win: { file: 'PanasonicScene-Windows-Setup.exe', label: 'Download for Windows' },
+  macArm: { file: 'PanasonicToolbox-macOS-AppleSilicon.dmg', label: 'Download for Mac' },
+  macIntel: { file: 'PanasonicToolbox-macOS-Intel.dmg', label: 'Download for Mac (Intel)' },
+  win: { file: 'PanasonicToolbox-Windows-Setup.exe', label: 'Download for Windows' },
 };
 async function detect() {
   const ua = navigator.userAgent;
