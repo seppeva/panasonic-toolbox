@@ -15,14 +15,14 @@
 <aside class="side">
   <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Toolbox</span></div>
   <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" data-tab="netsetup"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="2"/><circle cx="4" cy="15.5" r="2"/><circle cx="16" cy="15.5" r="2"/><path d="M10 6.5v4M10 10.5L4.8 13.8M10 10.5l5.2 3.3"/></svg><span>Network setup</span></button>
     <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Cameras</span></button>
     <button role="tab" data-tab="live"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><circle cx="15.5" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg><span>Live</span></button>
-    <button role="tab" data-tab="netsetup"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="2"/><circle cx="4" cy="15.5" r="2"/><circle cx="16" cy="15.5" r="2"/><path d="M10 6.5v4M10 10.5L4.8 13.8M10 10.5l5.2 3.3"/></svg><span>Network setup</span></button>
     <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Export</span></button>
     <button role="tab" data-tab="import"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Import</span></button>
-    <button role="tab" data-tab="shows"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 7.5l4.5 2.5L8 12.5z"/></svg><span>Shows</span></button>
-    <button role="tab" data-tab="rp150"><svg viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg><span>RP150 assignment</span></button>
+    <button role="tab" data-tab="shows"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 7.5l4.5 2.5L8 12.5z"/></svg><span>Presets</span></button>
     <button role="tab" data-tab="params"><svg viewBox="0 0 20 20"><path d="M4 5h12M4 10h12M4 15h8"/></svg><span>Parameters</span></button>
+    <button role="tab" data-tab="rp150"><svg viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg><span>RP150 assignment</span></button>
   </nav>
   <div class="side-foot">
     <div class="undo-row"><button class="sidebtn half" id="undoBtn" disabled title="Undo (Ctrl/Cmd+Z)"><svg viewBox="0 0 20 20"><path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 0 1 0 10h-2"/></svg><span>Undo</span></button><button class="sidebtn half" id="redoBtn" disabled title="Redo (Shift+Ctrl/Cmd+Z)"><svg viewBox="0 0 20 20"><path d="M13 5l4 4-4 4"/><path d="M17 9H8a5 5 0 0 0 0 10h2"/></svg><span>Redo</span></button></div>
@@ -52,7 +52,7 @@
         <label class="w90" title="The cameras' web port. Leave at 80 unless you changed it in the camera's network settings.">HTTP port <input id="scanPort" type="number" value="80"></label>
       </div>
       <p class="hint">Example: this computer on 192.168.0.200 with subnet mask 255.255.255.0 finds cameras on 192.168.0.1 to 192.168.0.254.</p>
-      <div class="row">
+      <div class="card-foot">
         <button id="scanBtn">Scan network</button>
         <span id="scanStatus" class="muted"></span>
       </div>
@@ -72,22 +72,17 @@
     <div class="row between">
       <h2>Found cameras <span class="count" id="camCount">0</span></h2>
       <div class="row">
-        <button class="ghost small" id="addToggle">Add by IP</button>
+        <button class="ghost small" id="addCamsBtn">Add cameras…</button>
         <button class="ghost small" id="refreshBtn">Refresh status</button>
-        <button class="ghost small" id="clearCamsBtn">Clear list</button>
+        <button class="ghost small danger-text" id="clearCamsBtn">Clear list</button>
       </div>
     </div>
-    <div class="row wrap hidden" id="addRow">
-      <label class="grow">IP address(es) <input id="addIp" placeholder="192.168.0.11, 192.168.0.12"></label>
-      <label class="w90">HTTP port <input id="addPort" type="number" value="80"></label>
-      <button id="addBtn" class="secondary">Add</button>
-    </div>
     <div class="zonebar" id="camZoneBar"></div>
-    <div class="selbar hidden" id="camSelBar"><span><b id="camSelN">0</b> selected</span>
-      <label class="w140">Zone <input id="camSelZone" list="zoneList" placeholder="e.g. Stage" autocomplete="off"></label>
-      <button class="secondary small" id="camSetZone">Set zone</button>
+    <div class="selbar hidden" id="camSelBar"><span class="seln"><b id="camSelN">0</b> selected</span>
+      <span class="selgroup"><input id="camSelZone" list="zoneList" placeholder="Zone, e.g. Stage" autocomplete="off" aria-label="Zone"><button class="ghost small" id="camSetZone">Set zone</button></span>
       <button class="ghost small" id="camEditSel">Edit…</button>
-      <button class="ghost small danger-text" id="camDelSel">Remove selected</button>
+      <span class="grow"></span>
+      <button class="ghost small danger-text" id="camDelSel">Remove</button>
     </div>
     <datalist id="zoneList"></datalist>
     <table class="tbl" id="camTable">
@@ -131,7 +126,7 @@
       <div class="chips tokens" id="expTokens"></div>
       <p class="hint" id="expNamePreview"></p>
       <p class="hint">Saved to <span class="mono" data-savedir></span> <button class="ghost small" data-changedir>Change</button></p>
-      <div class="row"><button id="exportBtn">Export</button><span class="muted" id="expSel"></span></div>
+      <div class="card-foot"><button id="exportBtn">Export</button><span class="muted" id="expSel"></span></div>
     </div>
   </div>
   <div class="card hidden" id="expResultCard"><h2>Result</h2><div id="expResult"></div></div>
@@ -141,22 +136,21 @@
 <section id="tab-import" class="tab">
   <header class="page-head"><h1>Import</h1><p>Put a saved scene back on a camera. Choose for each file which camera and which scene it goes to.</p></header>
   <div class="card">
-    <h2>1. Open scene files</h2>
+    <div class="row between"><h2>1. Open files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ghost small" id="browseFolderBtn">Show files in folder</button></div></div>
     <div class="drop" id="dropZone">
-      <p>Drop .pscene.json or .zip files here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,application/json,application/zip" multiple hidden></label></p>
+      <p>Drop scene files (.pscene.json), operator files (.poper), presets (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,application/json,application/zip" multiple hidden></label></p>
       <p class="muted small">Files you exported in this session are already listed below.</p>
     </div>
-    <div class="row wrap"><button class="secondary" id="openFilesBtn">Open files…</button><button class="ghost" id="browseFolderBtn">Show files in folder</button><span class="hint">Folder: <span class="mono" data-savedir></span> <button class="ghost small" data-changedir>Change</button></span></div>
+    <p class="hint">Folder: <span class="mono" data-savedir></span> <button class="ghost small" data-changedir>Change</button></p>
     <div id="folderList"></div>
     <div id="srcList"></div>
   </div>
   <div class="card">
-    <div class="row between"><h2>2. Choose where each file goes <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ghost small" id="clearFilesBtn">Clear all</button></span></div>
-    <div class="selbar hidden" id="impSelBar"><span><b id="impSelN">0</b> ticked</span>
-      <label class="w180">Camera <select id="impSelCam"></select></label>
-      <label class="w140">Into scene <select id="impSelScene"><option value="">Keep</option><option value="active">Live scene</option><option value="1">Scene 1</option><option value="2">Scene 2</option><option value="3">Scene 3</option><option value="4">Scene 4</option><option value="5">Scene 5</option><option value="6">Scene 6</option><option value="7">Scene 7</option><option value="8">Scene 8</option></select></label>
-      <button class="secondary small" id="impSelApply">Apply to ticked rows</button>
-      <button class="ghost small danger-text" id="impDelSel">Remove ticked rows</button>
+    <div class="row between"><h2>2. Choose where each file goes <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as preset</button><button class="ghost small" id="clearFilesBtn">Clear all</button></span></div>
+    <div class="selbar hidden" id="impSelBar"><span class="seln"><b id="impSelN">0</b> ticked</span>
+      <span class="selgroup"><select id="impSelCam" aria-label="Camera"></select><select id="impSelScene" aria-label="Into scene"><option value="">Scene: keep</option><option value="active">Live scene</option><option value="1">Scene 1</option><option value="2">Scene 2</option><option value="3">Scene 3</option><option value="4">Scene 4</option><option value="5">Scene 5</option><option value="6">Scene 6</option><option value="7">Scene 7</option><option value="8">Scene 8</option></select><button class="ghost small" id="impSelApply">Apply</button></span>
+      <span class="grow"></span>
+      <button class="ghost small danger-text" id="impDelSel">Remove</button>
     </div>
     <table class="tbl" id="impTable">
       <thead><tr><th class="w30"><input type="checkbox" id="impSelAll" aria-label="Tick all rows"></th><th>Scene from file</th><th>Camera</th><th>Into scene</th><th>Settings</th><th></th></tr></thead>
@@ -173,7 +167,7 @@
       <label class="check"><input type="checkbox" id="optVerify" checked><span><b>Check afterwards.</b> <span class="muted">Reads every value back and reports anything that differs.</span></span></label>
       <label class="check"><input type="checkbox" id="optForce"><span><b>Also try settings the destination model doesn't list.</b> <span class="muted">Only useful between different camera models; unknown settings are skipped anyway.</span></span></label>
     </div>
-    <div class="row"><button id="importBtn">Import</button><span class="muted" id="impStatus"></span></div>
+    <div class="card-foot"><button id="importBtn">Import</button><span class="muted" id="impStatus"></span></div>
   </div>
   <div class="card hidden" id="impResultCard"><h2>Result</h2><div id="impResult"></div></div>
 </section>
@@ -182,22 +176,23 @@
 <section id="tab-netsetup" class="tab">
   <header class="page-head"><h1>Network setup</h1><p>Find Panasonic cameras on this network in any IP range and change their IP address, the way Panasonic's Easy IP Setup tool does.</p></header>
   <div class="card">
-    <div class="row between wrap">
-      <div class="row"><button id="eipSearch">Search the network</button><span class="muted" id="eipStatus"></span></div>
-      <div class="row wrap">
-        <label class="w140">First IP for selected <input id="eipStart" placeholder="192.168.0.11"></label>
-        <label class="w140">Subnet mask <input id="eipMask" value="255.255.255.0"></label>
-        <label class="w140">Gateway <input id="eipGw" placeholder="192.168.0.1"></label>
-        <button class="secondary" id="eipFill">Fill in for selected</button>
-      </div>
+    <div class="row between">
+      <h2>Cameras on the network <span class="count" id="eipCount">0</span></h2>
+      <div class="row"><span class="muted small" id="eipStatus"></span><button class="ghost small" id="eipSearch">Search the network</button></div>
     </div>
-    <p class="hint">Cameras only accept new network settings for a limited time after they are switched on (20 minutes by default, setting “Easy IP Setup accommodate period”). If a change is not accepted, switch the camera off and on and try again. The camera's web pages are not needed for this.</p>
+    <p class="hint">Cameras only accept new network settings for a limited time after they are switched on (20 minutes by default, setting “Easy IP Setup accommodate period”). If a change is not accepted, switch the camera off and on and try again.</p>
+    <div class="selbar hidden" id="eipSelBar"><span class="seln"><b id="eipSelN">0</b> selected</span>
+      <span class="selgroup"><input id="eipStart" class="mono" placeholder="First IP, e.g. 192.168.0.11" aria-label="First IP address"><input id="eipMask" class="mono" value="255.255.255.0" aria-label="Subnet mask" title="Subnet mask"><input id="eipGw" class="mono" placeholder="Gateway" aria-label="Gateway"><button class="ghost small" id="eipFill">Fill in</button></span>
+      <button class="ghost small" id="eipToList">Add to camera list</button>
+      <span class="grow"></span>
+      <button class="ghost small danger-text" id="eipDelSel">Remove from list</button>
+    </div>
     <table class="tbl" id="eipTable">
       <thead><tr><th class="w30"><input type="checkbox" id="eipSelAll" aria-label="Select all"></th><th>MAC address</th><th>Model</th><th>Name</th><th>IP address</th><th>Subnet mask</th><th>Gateway</th><th>Port</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="empty muted" id="eipEmpty">Choose Search the network. Cameras are found even if they are in another IP range than this computer.</p>
-    <div class="row"><button id="eipApply" disabled>Apply changes</button><button class="ghost" id="eipToList">Add to camera list</button><button class="ghost danger-text" id="eipDelSel">Remove selected from list</button></div>
+    <div class="card-foot"><button id="eipApply" disabled>Apply changes</button><span class="muted small" id="eipChanged"></span></div>
   </div>
 </section>
 
@@ -222,7 +217,7 @@
       <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
     </div>
       <div class="live-block live-presets">
-        <div class="row between"><h3>Presets</h3><label class="check small"><input type="checkbox" id="presetStore"> Store the current position</label></div>
+        <div class="row between"><h3>Camera presets</h3><label class="check small"><input type="checkbox" id="presetStore"> Store the current position</label></div>
         <div class="preset-row"><div class="preset-grid" id="presetGrid"></div><label class="w90">Presets <select id="presetPage"></select></label></div>
       </div>
     </div>
@@ -263,14 +258,15 @@
 
 <!-- ================= SHOWS ================= -->
 <section id="tab-shows" class="tab">
-  <header class="page-head"><h1>Shows</h1><p>A show puts the right scene files on the right cameras in the right scenes with one click. Make one on the Import page with <b>Save as show</b>.</p></header>
+  <header class="page-head"><h1>Presets</h1><p>A preset puts the right scene and operator files on the right cameras in the right scenes with one click. Make one on the Import page with <b>Save as preset</b>.</p></header>
   <div class="card">
-    <div class="row between wrap"><h2>Saved shows <span class="count" id="showCount">0</span></h2><span class="row"><button class="ghost small danger-text hidden" id="showDelSel">Delete selected</button><button class="ghost small" id="showOpen">Open show file…</button></span></div>
+    <div class="row between wrap"><h2>Saved presets <span class="count" id="showCount">0</span></h2><button class="ghost small" id="showOpen">Open preset file…</button></div>
+    <div class="selbar hidden" id="showSelBar"><span class="seln"><b id="showSelN">0</b> selected</span><span class="grow"></span><button class="ghost small danger-text" id="showDelSel">Delete</button></div>
     <table class="tbl" id="showTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="showSelAll" aria-label="Select all shows"></th><th>Show</th><th>Cameras and scenes</th><th>Saved</th><th></th></tr></thead>
+      <thead><tr><th class="w30"><input type="checkbox" id="showSelAll" aria-label="Select all presets"></th><th>Preset</th><th>Cameras and scenes</th><th>Saved</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
-    <p class="empty muted" id="showEmpty">No shows yet.</p>
+    <p class="empty muted" id="showEmpty">No presets yet.</p>
   </div>
 </section>
 
@@ -296,36 +292,28 @@
       <h2>Network.s15</h2>
       <div class="row wrap">
         <label class="btnlike">Open Network.s15<input type="file" id="s15Input" hidden></label>
-        <label class="btnlike ghostlike">Open a second version (to learn the connection type)<input type="file" id="s15Input2" hidden></label>
+        <label class="btnlike ghostlike">Open a second version…<input type="file" id="s15Input2" hidden></label>
       </div>
       <p class="hint">To set the connection type to LAN automatically, the app needs to know where it is stored: on the RP150 change the connection type of one CAM (CONNECT SETTING › CNNCT MD = LAN), save again with DATA SAVE and open that file as the second version.</p>
       <div id="s15Out"></div>
     </div>
   </div>
   <div class="card">
-    <div class="row between wrap">
-      <h2>Assignment</h2>
-      <div class="row wrap">
-        <label class="w140">Order by <select id="rpSort"><option value="ip">IP address</option><option value="title">Title</option></select></label>
-        <label class="w140">First CAM number <input id="rpStart" type="number" min="1" max="200" value="1"></label>
-        <button id="rpFromCams" class="secondary">Take found cameras</button>
-        <button id="rpAddRow" class="ghost">Add row</button>
-        <button id="rpAddRows" class="ghost">Add multiple rows…</button>
-        <button class="ghost" id="rpEditSel">Edit selected…</button>
-        <button class="ghost danger-text" id="rpDelSel">Remove selected</button>
-        <label class="w180">Selected rows <select id="rpBulkConn"><option value="">Set connection…</option><option value="lan">LAN</option><option value="none">None (NoAsign)</option></select></label>
-      </div>
+    <div class="row between">
+      <h2>Assignment <span class="count" id="rpCount">0</span></h2>
+      <div class="row"><button class="ghost small" id="rpFromCams">Take found cameras…</button><button class="ghost small" id="rpAddRow">Add row</button><button class="ghost small" id="rpAddRows">Add rows…</button></div>
     </div>
-    <div class="row wrap bulkbar">
-      <span class="bulklabel small">Change IP addresses of <b id="rpBulkScope">all rows</b></span>
-      <label class="w140">First IP <input id="rpBulkIp" class="mono" placeholder="192.168.0.11"></label>
-      <label class="w90">Step <input id="rpBulkStep" type="number" min="1" max="50" value="1"></label>
-      <button class="secondary" id="rpBulkFill">Number in CAM order</button>
-      <span class="bulksep"></span>
-      <label class="w140">New network <input id="rpBulkNet" class="mono" placeholder="10.0.1"></label>
-      <button class="secondary" id="rpBulkNetBtn" title="Keeps the last number of every address and replaces the first three">Move to network</button>
-      <span class="bulksep"></span>
-      <button class="ghost" id="rpBulkPaste">Paste a list…</button>
+    <div class="toolrow" id="rpIpTools">
+      <span class="toollabel">IP addresses of <b id="rpBulkScope">all rows</b></span>
+      <span class="selgroup"><input id="rpBulkIp" class="mono" placeholder="First IP, e.g. 192.168.0.11" aria-label="First IP"><input id="rpBulkStep" type="number" min="1" max="50" value="1" class="num" title="Step" aria-label="Step"><button class="ghost small" id="rpBulkFill">Number in CAM order</button></span>
+      <span class="selgroup"><input id="rpBulkNet" class="mono" placeholder="New network, e.g. 10.0.1" aria-label="New network"><button class="ghost small" id="rpBulkNetBtn" title="Keeps the last number of every address and replaces the first three">Move to network</button></span>
+      <button class="ghost small" id="rpBulkPaste">Paste a list…</button>
+    </div>
+    <div class="selbar hidden" id="rpSelBar"><span class="seln"><b id="rpSelN">0</b> selected</span>
+      <span class="selgroup"><span class="muted small">Connection</span><button class="ghost small" data-conn="lan">LAN</button><button class="ghost small" data-conn="none">None</button></span>
+      <button class="ghost small" id="rpEditSel">Edit…</button>
+      <span class="grow"></span>
+      <button class="ghost small danger-text" id="rpDelSel">Remove</button>
     </div>
     <table class="tbl" id="rpTable">
       <thead><tr><th class="w30"><input type="checkbox" id="rpSelAll" aria-label="Select all rows"></th><th>CAM</th><th>IP address</th><th>Port</th><th>Connection</th><th>Camera</th><th></th></tr></thead>
