@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 DEFAULT_PORT = 8765
 
 
@@ -223,6 +223,32 @@ def save_file(name, data, folder=None):
     return path
 
 
+def rename_file(path, new_name, data=None):
+    """Renames a file the app saved (a preset, say) within its own folder; optionally rewrites its contents.
+    Never overwrites another file."""
+    src = os.path.realpath(os.path.expanduser(str(path or "")))
+    if not os.path.isfile(src) or not src.lower().endswith(ALLOWED_EXT):
+        raise ValueError("File not found")
+    ext = ".pscene.json" if src.lower().endswith(".pscene.json") else os.path.splitext(src)[1]
+    stem = safe_name(re.sub(r"(\.pscene\.json|\.[A-Za-z0-9]+)$", "", os.path.basename(str(new_name))) + ext)[: -len(ext)]
+    d = os.path.dirname(src)
+    dst = os.path.join(d, stem + ext)
+    n = 1
+    while os.path.exists(dst) and os.path.realpath(dst) != src:
+        dst = os.path.join(d, f"{stem} ({n}){ext}")
+        n += 1
+    if data is not None:
+        tmp = dst + ".tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, dst)
+        if os.path.realpath(dst) != src:
+            os.remove(src)
+    elif os.path.realpath(dst) != src:
+        os.rename(src, dst)
+    return dst
+
+
 def reveal(path=None):
     target = path if path and os.path.exists(path) else save_dir()
     if sys.platform == "darwin":
@@ -278,6 +304,24 @@ def local_ipv4s():
     with _ips_guard:
         _ips_cache.update(t=time.time(), ips=out)
     return out
+
+
+def cached_ips():
+    with _ips_guard:
+        if _ips_cache["t"]:
+            return list(_ips_cache["ips"])
+    return []
+
+
+def _ips_refresher():
+    while True:
+        try:
+            with _ips_guard:
+                _ips_cache["t"] = 0  # force a fresh lookup
+            local_ipv4s()
+        except Exception:
+            pass
+        time.sleep(10)
 
 
 def expand_targets(spec):
@@ -381,8 +425,10 @@ def api_scan(req):
 
 
 def api_info():
-    return {"ok": True, "name": "panasonic-scene", "version": VERSION, "localIps": local_ipv4s(), "platform": sys.platform,
-            "saveDir": save_dir(), "nativeDialogs": WINDOW is not None}
+    # Must answer instantly: no file system access (a save folder on a sleeping network drive can hang)
+    # and no network lookups; the IP addresses come from a cache that a background thread keeps fresh.
+    return {"ok": True, "name": "panasonic-scene", "version": VERSION, "localIps": cached_ips(), "platform": sys.platform,
+            "saveDir": SETTINGS.get("saveDir") or default_save_dir(), "nativeDialogs": WINDOW is not None, "time": time.time()}
 
 
 def api_call(path, req):
@@ -396,6 +442,9 @@ def api_call(path, req):
     if path == "/api/save":
         data = base64.b64decode(req.get("dataB64") or "", validate=True)
         return ({"ok": True, "path": save_file(req.get("name"), data, req.get("dir")), "dir": req.get("dir") or save_dir()})
+    if path == "/api/rename":
+        data = base64.b64decode(req["dataB64"], validate=True) if req.get("dataB64") else None
+        return {"ok": True, "path": rename_file(req.get("path"), req.get("name"), data)}
     if path == "/api/reveal":
         p = req.get("path")
         if p and not os.path.exists(os.path.realpath(p)):
@@ -521,7 +570,7 @@ class Handler(BaseHTTPRequestHandler):
         with open(full, "rb") as f:
             data = f.read()
         if full.endswith("index.html"):
-            data = data.replace(b"__PS_TOKEN__", SESSION_TOKEN.encode())
+            data = data.replace(b"__PS_TOKEN__", SESSION_TOKEN.encode()).replace(b"__PS_VERSION__", VERSION.encode())
         self.send_response(200)
         self.send_header("Content-Type", STATIC_TYPES.get(os.path.splitext(full)[1].lower(), "application/octet-stream"))
         self.send_header("Cache-Control", "no-store" if full.endswith(".html") else "no-cache")
@@ -688,6 +737,7 @@ def main():
     if running_instance(a.port):
         webbrowser.open(f"http://127.0.0.1:{a.port}/")
         return
+    threading.Thread(target=_ips_refresher, daemon=True).start()
     srv, port = start_server(a.port)
     url = f"http://127.0.0.1:{port}/"
     print(f"{APP_NAME} {VERSION} running at {url}  (stop: close the window or Ctrl+C)")

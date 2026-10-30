@@ -135,10 +135,11 @@ async function checkBridge(quiet = false) {
   const dot = $('#bridgeDot'), txt = $('#bridgeText');
   if (!quiet) { dot.className = 'dot'; txt.textContent = 'Connecting…'; }
   // a few tries before reporting a lost connection: the app can be busy for a moment (sleep, network change)
-  let j = null, err = null;
+  let j = null, err = null; const t0 = Date.now();
   for (let i = 0; i < (quiet ? 1 : 3) && !j; i++) {
     try { j = await bridgeFetch('/api/info', undefined, 8000); }
     catch (e) { err = e; if (i < 2 && !quiet) await new Promise(r => setTimeout(r, 1000)); }
+    state.bridgeLastMs = Date.now() - t0;
   }
   if (j) {
     const wasDown = !state.bridgeOk; state.bridgeMiss = 0;
@@ -150,12 +151,15 @@ async function checkBridge(quiet = false) {
       const ip = state.localIps.find(i => i.startsWith('192.168.')) || state.localIps[0];
       $('#scanRange').value = ip.replace(/\.\d+$/, '.0/24');
     }
-    if (wasDown) { log(`App ${j.version} ready. This computer's IP addresses: ${state.localIps.join(', ') || '-'}`); checkUpdate(); }
+    if (wasDown) { log(`Connected to the app through ${nativeApi ? 'the window bridge' : 'local HTTP'} (${Date.now() - t0} ms)`); log(`App ${j.version} ready. This computer's IP addresses: ${state.localIps.join(', ') || '-'}`); checkUpdate(); }
   } else if (quiet && state.bridgeOk && (state.bridgeMiss = (state.bridgeMiss || 0) + 1) < 2) {
     return true; // one missed background check is not yet a lost connection
   } else {
     state.bridgeOk = false;
     dot.className = 'dot err'; txt.textContent = 'Not connected'; txt.title = err ? err.message : '';
+    const detail = `Details: v${document.querySelector('meta[name="ps-version"]')?.content} · ${IN_WINDOW ? (nativeApi ? 'window bridge' : 'app window without bridge, local HTTP') : 'browser, local HTTP'} · ${err ? err.message : 'no answer'} · after ${Math.round((Date.now() - t0) / 100) / 10} s · ${new Date().toLocaleTimeString('en-GB')}`;
+    $('#bridgeDetail').textContent = detail;
+    log(`Connection to the app lost. ${detail}`, 'ERROR');
     $('#bridgeHelp').classList.remove('hidden');
   }
   return state.bridgeOk;
@@ -391,6 +395,8 @@ $('#quitBtn').onclick = async () => {
   document.body.innerHTML = '<p style="padding:40px;font:15px system-ui;color:#aaa">Panasonic Toolbox has quit. You can close this window.</p>';
 };
 $('#retryBridge').onclick = () => checkBridge();
+$('#reloadWin').onclick = () => location.reload();
+$('#copyDetail').onclick = e => copyText(`${$('#bridgeDetail').textContent}\n${navigator.userAgent}\n${location.href.replace(/\?.*/, '')}`, e.target);
 setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 3000).then(() => { if (!state.bridgeOk) checkBridge(); }).catch(() => { if (state.bridgeOk) checkBridge(); }); }, 10000);
 
 /* New version available? (latest GitHub release; skipped silently when offline) */
@@ -645,17 +651,17 @@ async function openPaths(paths) {
     try {
       const j = await bridgeFetch('/api/read_file', { path: p });
       const bin = atob(j.dataB64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      await openBytes(j.name, u8);
+      await openBytes(j.name, u8, p);
     } catch (e) { info(`Could not open ${esc(p)}`, esc(e.message)); }
   }
 }
-async function openBytes(name, u8) {
+async function openBytes(name, u8, path) {
   if (/\.zip$/i.test(name)) { for (const z of await readZip(u8.buffer)) openJson(z.name, JSON.parse(z.text)); }
-  else openJson(name, JSON.parse(new TextDecoder().decode(u8)));
+  else openJson(name, JSON.parse(new TextDecoder().decode(u8)), path);
   log(`Opened: ${name}`);
 }
-function openJson(name, data) {
-  if (data?.format === SHOW_ID) return addShow(data, true);
+function openJson(name, data, path) {
+  if (data?.format === SHOW_ID) return addShow(data, true, path);
   return addImportFile(name, data);
 }
 $('#openFilesBtn').onclick = async () => {
@@ -1087,7 +1093,9 @@ function renderParamTab() {
   const sel = $('#paramFam');
   if (!sel.options.length) sel.innerHTML = Object.keys(CATALOG).map(f => `<option value="${f}">${esc(FAM_TEXT[f] || f)}</option>`).join('');
   const fam = sel.value; const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const list = CATALOG[fam].filter(p => words.every(w => (p.name + ' ' + p.cmd + ' ' + p.q + ' ' + p.g).toLowerCase().includes(w)));
+  const gsel = $('#paramGroup'), groups = [...new Set(CATALOG[fam].map(p => p.g))], g = groups.includes(gsel.value) ? gsel.value : '';
+  gsel.innerHTML = '<option value="">All groups</option>' + groups.map(x => `<option ${x === g ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  const list = CATALOG[fam].filter(p => (!g || p.g === g) && words.every(w => (p.name + ' ' + p.cmd + ' ' + p.q + ' ' + p.g).toLowerCase().includes(w)));
   $('#sceneCount').textContent = list.length;
   $('#paramInfo').textContent = `${CATALOG[fam].length} settings belong to a scene on the ${FAM_TEXT[fam] || fam}. Source: the list of commands that belong to a scene in Panasonic's interface specification for this model.` + (fam === 'GENERIC' ? ' For other models every known scene command is tried; whatever the camera does not support is skipped.' : '');
   $('#paramTable tbody').innerHTML = list.map(p => `<tr><td class="grp">${esc(p.g)}</td><td>${esc(p.name)}</td><td class="mono">${esc(p.t === 'ptz' ? p.cmd + '[Data]' : p.cmd + ':[Data]')}</td><td class="mono">${esc(p.q)}</td><td class="small muted">${esc(rangeText(p))}</td></tr>`).join('');
@@ -1100,6 +1108,7 @@ function rangeText(p) {
   return parts.join('; ');
 }
 $('#paramFam').onchange = renderParamTab;
+$('#paramGroup').onchange = renderParamTab;
 $('#paramCsv').onclick = () => {
   const fam = $('#paramFam').value;
   const csv = ['Group;Setting;Set command;Query command;Values'].concat(CATALOG[fam].map(p => [p.g, p.name, p.cmd, p.q, rangeText(p)].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
@@ -1182,6 +1191,36 @@ function valueHint(c) {
   if (!c.d || (c.d.length === 1 && (c.d[0] === '-' || c.d[0] === '※'))) return '';
   return (c.d.join(' ') + (c.v.join('') ? '  →  ' + c.v.join(' ') : '')).slice(0, 300);
 }
+// Categories for the command list, from the command's name and code
+const CMD_CATS = [
+  ['lens', 'Lens: zoom, focus, iris', /zoom|focus|iris|\bOIS\b|stabili|\bAF\b|lens|extender|\b(#Z|#F|#I|#AX)/i],
+  ['pt', 'Pan and tilt', /\bpan\b|tilt|P\/T|\bPTS|\bAPC|\bAPS|position|limit|speed|install/i],
+  ['preset', 'Presets', /preset|#R\[|#M\[|recall|memory/i],
+  ['image', 'Picture: gain, white, black, shutter', /gain|white|black|\bAWB|\bABB|\bAWC|\bABC|shutter|\bND\b|filter|gamma|knee|matrix|detail|chroma|color|colour|saturation|hue|flare|pedestal|level|skin|contrast|brightness|DRS|iris|day\/night|night|ATW|white clip|linear|back ?light|haze|HDR|HLG|SDR|spotlight|flicker|intelligent|shooting mode/i],
+  ['scene', 'Scene files', /scene/i],
+  ['tally', 'Tally and indicators', /tally|lamp|LED|indicator/i],
+  ['audio', 'Audio and recording', /audio|\bREC\b|record/i],
+  ['video', 'Video format and outputs', /format|output|SDI|HDMI|\b12G|\b3G|frequency|frame|resolution|down.?con|\bUHD|\bHD\b|genlock|sync|\bIP out|bar|color bar|crop|phase|SC coarse|D\/C/i],
+  ['stream', 'Streaming and IP video', /stream|NDI|SRT|RTMP|RTSP|H\.26|JPEG|\bIP video|multicast/i],
+  ['system', 'Power, network and system', /power|standby|network|\bIP\b|address|version|model|error|status|fan|temperature|title|name|date|time|reset|login|user|OSD|menu|lock|language|USB|mirror|privacy|SFP|option device|DC out|conference/i],
+];
+function cmdCat(c) {
+  const s = `${c.n} ${c.c} ${c.q || ''}`;
+  for (const [k, , re] of CMD_CATS) if (re.test(s)) return k;
+  return 'other';
+}
+const SCENE_CODES = new Set(Object.values(window.PANA_CATALOG || {}).flat().map(p => p.cmd));
+const isSceneCmd = c => { const m = /^(#?[A-Z]+(?::[0-9A-F]{2})?)/.exec(c.c || ''); return !!m && (SCENE_CODES.has(m[1]) || SCENE_CODES.has(m[1].replace(/:$/, ''))); };
+const hasValue = c => /\[Data/.test(c.c || '');
+function matchKind(c, kind) {
+  if (!kind) return true;
+  if (kind === 'action') return !hasValue(c);
+  if (kind === 'setting') return hasValue(c);
+  if (kind === 'readable') return !!c.q;
+  if (kind === 'scene') return isSceneCmd(c);
+  return true;
+}
+$('#cmdCat').innerHTML = '<option value="">All categories</option>' + CMD_CATS.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('') + '<option value="other">Other</option>';
 function matchType(c, type) {
   if (!type) return true;
   if (type === 'common') return !!c.common;
@@ -1190,10 +1229,11 @@ function matchType(c, type) {
 }
 function renderCmds() {
   const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const m = $('#cmdModel').value, type = $('#cmdType').value;
+  const m = $('#cmdModel').value, type = $('#cmdType').value, cat = $('#cmdCat').value, kind = $('#cmdKind').value;
+  const extra = c => (!cat || (c._cat ??= cmdCat(c)) === cat) && matchKind(c, kind);
   const match = c => words.every(w => (c.n + ' ' + c.c + ' ' + (c.q || '')).toLowerCase().includes(w));
-  const common = COMMON.filter(c => match(c) && matchType(c, type) && !m);
-  const list = COMMANDS.filter(c => c.c && (!m || c.m.some(x => x.replace('*', '') === m)) && matchType(c, type) && match(c));
+  const common = COMMON.filter(c => match(c) && matchType(c, type) && !m && extra(c));
+  const list = COMMANDS.filter(c => c.c && (!m || c.m.some(x => x.replace('*', '') === m)) && matchType(c, type) && match(c) && extra(c));
   list.sort((x, y) => (y.m.length - x.m.length) || x.n.localeCompare(y.n)); // widely supported first
   const all = [...common, ...list];
   $('#cmdCount').textContent = all.length;
@@ -1229,6 +1269,9 @@ function cmdRow(c) {
 $('#paramSearch').addEventListener('input', () => { renderCmds(); renderParamTab(); });
 $('#cmdModel').addEventListener('change', renderCmds);
 $('#cmdType').addEventListener('change', renderCmds);
+$('#cmdCat').addEventListener('change', renderCmds);
+$('#cmdKind').addEventListener('change', renderCmds);
+$('#cmdReset').onclick = () => { ['#cmdType', '#cmdCat', '#cmdKind', '#cmdModel'].forEach(s => $(s).value = ''); $('#paramSearch').value = ''; renderCmds(); renderParamTab(); };
 
 /* ---- script builder for Companion ---- */
 state.script = store.get('script', []);
@@ -1313,7 +1356,22 @@ $('#scriptSh').onclick = () => {
 const SHOW_ID = 'panasonic-toolbox-show';
 state.shows = store.get('shows', []);
 const saveShows = () => store.set('shows', state.shows);
-function addShow(show, fromFile) {
+const presetFile = sh => `${sh.name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'Preset'}.pshow`;
+const presetJson = sh => { const { sel, path, ...rest } = sh; return JSON.stringify(rest); };
+const b64 = s => { const u8 = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(bin); };
+// Renaming a preset also renames its saved .pshow file (and the name inside it)
+async function renamePreset(sh, name) {
+  name = name.trim(); if (!name || name === sh.name) return;
+  const old = sh.name; sh.name = name; saveShows();
+  if (sh.path && IN_APP) {
+    try { const j = await bridgeFetch('/api/rename', { path: sh.path, name: presetFile(sh), dataB64: b64(presetJson(sh)) }); sh.path = j.path; saveShows(); toast(`Renamed to ${j.path.split(/[\\/]/).pop()}`, j.path); }
+    catch (e) { info('The file could not be renamed', `The preset is now called “${esc(name)}”, but its file stayed as it was: ${esc(e.message)}. Use Save file to save it under the new name.`); delete sh.path; saveShows(); }
+  }
+  log(`Preset “${old}” renamed to “${name}”`);
+  renderShows();
+}
+function addShow(show, fromFile, path) {
+  if (path) show.path = path;
   if (!show || show.format !== SHOW_ID || !Array.isArray(show.items)) throw new Error('Not a Panasonic Toolbox preset');
   track(fromFile ? 'Open preset' : 'Save preset', () => { state.shows = state.shows.filter(s => s.name !== show.name); state.shows.push(show); });
   saveShows(); renderShows();
@@ -1330,17 +1388,21 @@ $('#saveShowBtn').onclick = async () => {
     items: jobs.map(j => { const s = srcById(j.srcId); const cam = state.cameras.find(c => c.ip === j.target); return { target: j.target, port: cam?.port || 80, targetTitle: cam?.title || cam?.model || '', targetScene: j.targetScene, kind: s.kind, sceneIdx: s.sceneIdx, fileName: s.fileName, file: s.file }; }),
   };
   addShow(show);
-  await download(`${name.replace(/[^\w.-]+/g, '_')}.pshow`, JSON.stringify(show));
+  const path = await download(presetFile(show), presetJson(show));
+  if (path) { show.path = path; saveShows(); renderShows(); }
 };
 function renderShows() {
   const tb = $('#showTable tbody'); tb.innerHTML = '';
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select preset"></td><td><b>${esc(sh.name)}</b></td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
+    tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select preset"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Preset name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
       <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> <button class="ghost small" data-act="file">Save file</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
     $('input[type=checkbox]', tr).onchange = e => { sh.sel = e.target.checked; updShowSel(); };
     $('[data-act=recall]', tr).onclick = () => recallShow(sh);
-    $('[data-act=file]', tr).onclick = () => download(`${sh.name.replace(/[^\w.-]+/g, '_')}.pshow`, JSON.stringify(sh));
+    const ni = $('.namein', tr);
+    ni.addEventListener('keydown', e => { if (e.key === 'Enter') ni.blur(); if (e.key === 'Escape') { ni.value = sh.name; ni.blur(); } });
+    ni.addEventListener('change', () => renamePreset(sh, ni.value));
+    $('[data-act=file]', tr).onclick = async () => { const p = await download(presetFile(sh), presetJson(sh)); if (p) { sh.path = p; saveShows(); renderShows(); } };
     $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete preset', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
     tb.appendChild(tr);
   }
@@ -1748,10 +1810,10 @@ function analyzeS15() {
 const live = { cam: null, sid: null, moving: null, poll: null, irisVal: null, keys: new Set() };
 function renderLiveCams() {
   const sel = $('#liveCam'); const cur = sel.value || store.get('liveCam', '');
-  const opt = c => `<option value="${esc(c.ip)}">${esc(c.title || c.model || c.ip)} · ${esc(c.ip)}</option>`;
+  const opt = c => `<option value="${esc(c.ip)}">${c.title ? esc(c.title) + ' · ' : ''}${esc(c.ip)}${c.model ? ' · ' + esc(c.model) : ''}</option>`;
   const zs = zoneNames();
   sel.innerHTML = !state.cameras.length ? '<option value="">No cameras yet</option>' : !zs.length ? state.cameras.map(opt).join('')
-    : zs.map(z => `<optgroup label="${esc(z)}">${state.cameras.filter(c => c.zone === z).map(opt).join('')}</optgroup>`).join('') + (state.cameras.some(c => !c.zone) ? `<optgroup label="No zone">${state.cameras.filter(c => !c.zone).map(opt).join('')}</optgroup>` : '');
+    : zs.map(z => `<optgroup label="${/^\d+$/.test(z) ? "Zone " + esc(z) : esc(z)}">${state.cameras.filter(c => c.zone === z).map(opt).join('')}</optgroup>`).join('') + (state.cameras.some(c => !c.zone) ? `<optgroup label="No zone">${state.cameras.filter(c => !c.zone).map(opt).join('')}</optgroup>` : '');
   sel.value = state.cameras.some(c => c.ip === cur) ? cur : (state.cameras[0]?.ip || '');
 }
 const liveActive = () => $('#tab-live').classList.contains('active');

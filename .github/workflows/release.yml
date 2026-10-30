@@ -99,10 +99,17 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.target }}" == "mac" ]]; then BIN="dist/Panasonic Toolbox.app/Contents/MacOS/Panasonic Toolbox"; else BIN="dist/Panasonic Toolbox/Panasonic Toolbox.exe"; fi
-          "$BIN" --headless --port 8799 &
-          for i in $(seq 1 60); do curl -sf http://127.0.0.1:8799/api/ping && break; sleep 1; done
+          ok=0
+          for attempt in 1 2; do
+            "$BIN" --headless --port 8799 > smoke.log 2>&1 &
+            for i in $(seq 1 60); do curl -sf http://127.0.0.1:8799/api/ping > /dev/null && { ok=1; break; }; sleep 1; done
+            [ "$ok" = 1 ] && break
+            echo "::warning title=Smoke test attempt $attempt::app did not answer within 60 s: $(tail -c 1500 smoke.log | tr '\n' ' ')"
+            kill %1 2>/dev/null || true; sleep 2
+          done
+          if [ "$ok" != 1 ]; then echo "::error title=Smoke test::app did not start: $(tail -c 1500 smoke.log | tr '\n' ' ')"; exit 1; fi
           curl -sf http://127.0.0.1:8799/api/ping | grep -q panasonic-scene
-          curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Toolbox</title>"
+          curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Toolbox</title>" || { echo "::error title=Smoke test::index page wrong"; exit 1; }
           curl -sf -X POST http://127.0.0.1:8799/api/quit || true
 
       - name: macOS — notariseren (enkel met Apple Developer-account)

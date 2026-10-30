@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="ps-token" content="__PS_TOKEN__">
+<meta name="ps-version" content="__PS_VERSION__">
 <title>Panasonic Toolbox</title>
 <meta name="description" content="Export and import scene files (shading) of Panasonic PTZ cameras.">
 <link rel="icon" href="icon.svg">
@@ -35,7 +36,9 @@
 <div class="bridge-help hidden" id="bridgeHelp">
   <div class="card warn">
     <h3>Lost connection to the Panasonic Toolbox app</h3>
-    <p>This window talks to the Panasonic Toolbox program running on this computer. If it was closed, start it again and choose <button class="small" id="retryBridge">Reconnect</button></p>
+    <p>The window gets no answer from the Panasonic Toolbox program on this computer. It keeps trying by itself every 10 seconds.</p>
+    <div class="row"><button class="small" id="retryBridge">Reconnect now</button><button class="ghost small" id="reloadWin">Reload window</button><button class="ghost small" id="copyDetail">Copy details</button></div>
+    <p class="muted small mono" id="bridgeDetail"></p>
   </div>
 </div>
 <div class="bridge-help hidden" id="updateBox"><div class="note ok" id="updateText"></div></div>
@@ -214,11 +217,14 @@
     <div class="live-video">
       <img id="liveImg" alt="Live picture of the selected camera">
       <div class="live-msg" id="liveMsg">Choose a camera.</div>
-      <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
     </div>
       <div class="live-block live-presets">
         <div class="row between"><h3>Camera presets</h3><label class="check small"><input type="checkbox" id="presetStore"> Store the current position</label></div>
         <div class="preset-row"><div class="preset-grid" id="presetGrid"></div><label class="w90">Presets <select id="presetPage"></select></label></div>
+      </div>
+      <div class="live-block">
+        <h3>Scene files</h3>
+        <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
       </div>
     </div>
 
@@ -351,8 +357,11 @@
       <div class="row between wrap">
         <p class="hint">Click a command to get its link for the selected camera. In Bitfocus Companion use the <b>Generic HTTP</b> connection with a <b>GET</b> action and paste the link.</p>
         <div class="row wrap">
-          <label class="w140">Show <select id="cmdType"><option value="">All commands</option><option value="common">Common actions</option><option value="cam">Camera commands (aw_cam)</option><option value="ptz">Pan/tilt commands (aw_ptz)</option><option value="rp">Controller commands</option></select></label>
+          <label class="w140">Type <select id="cmdType"><option value="">All commands</option><option value="common">Common actions</option><option value="cam">Camera commands (aw_cam)</option><option value="ptz">Pan/tilt commands (aw_ptz)</option><option value="rp">Controller commands</option></select></label>
+          <label class="w140">Category <select id="cmdCat"></select></label>
+          <label class="w140">Kind <select id="cmdKind"><option value="">Everything</option><option value="action">Actions (no value)</option><option value="setting">Settings (with a value)</option><option value="readable">Can be read back</option><option value="scene">Part of a scene file</option></select></label>
           <label class="w140">Model <select id="cmdModel"></select></label>
+          <button class="ghost small" id="cmdReset" title="Clear search and filters">Reset</button>
         </div>
       </div>
       <table class="tbl dense" id="cmdTable">
@@ -367,6 +376,7 @@
     <div class="card">
       <div class="row between wrap">
         <label class="w180">Camera model <select id="paramFam"></select></label>
+        <label class="w180">Group <select id="paramGroup"><option value="">All groups</option></select></label>
         <button class="ghost" id="paramCsv">Save as CSV</button>
       </div>
       <p class="muted" id="paramInfo"></p>

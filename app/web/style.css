@@ -316,3 +316,10 @@ input.zonein:hover,input.zonein:focus{background:var(--field);border-color:var(-
 .selbar .grow,.toolrow .grow{flex:1;min-width:0}
 .card-foot{display:flex;gap:12px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--rule-soft)}
 .selbar select{height:28px;font-size:12.5px;max-width:230px}
+/* scene buttons below the picture, not on it */
+.live-block .live-scenes{position:static;display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:5px}
+.live-block .live-scenes button{background:var(--raised);border:1px solid var(--rule);backdrop-filter:none;height:32px}
+.live-block .live-scenes button.on{background:var(--accent);border-color:var(--accent)}
+input.namein{font-weight:600;width:100%;min-width:180px;background:transparent;border-color:transparent;padding:3px 7px;height:28px}
+input.namein:hover{border-color:var(--rule)} input.namein:focus{background:var(--field)}
+.filepath{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:8px}
