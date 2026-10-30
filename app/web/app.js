@@ -98,14 +98,34 @@ function decode(p, raw) {
 /* ------------------------------------------------------------------ bridge */
 const TOKEN = document.querySelector('meta[name="ps-token"]')?.content || '';
 let tokenReloaded = false;
+// In the app window every call goes straight to the Python side through pywebview (no network involved).
+// In a normal browser (browser mode, development) the same calls go over local HTTP.
+const IN_WINDOW = /[?&]app=1\b/.test(location.search);
+let nativeApi = null;
+const nativeReady = !IN_WINDOW ? Promise.resolve(null) : new Promise(resolve => {
+  const done = () => { nativeApi = window.pywebview?.api?.call ? window.pywebview.api : null; resolve(nativeApi); };
+  if (window.pywebview?.api?.call) return done();
+  window.addEventListener('pywebviewready', done, { once: true });
+  setTimeout(done, 6000); // fall back to HTTP if the bridge never shows up
+});
 async function bridgeFetch(path, body, timeoutMs = 120000) {
+  const api = await nativeReady;
+  if (api) {
+    let to;
+    const timeout = new Promise((_, rej) => { to = setTimeout(() => rej(new Error('The app did not answer in time')), Math.max(timeoutMs, 15000)); });
+    try {
+      const j = await Promise.race([api.call(path, body ?? {}), timeout]);
+      if (!j || j.ok === false) throw new Error(j?.error || 'No answer from the app');
+      return j;
+    } finally { clearTimeout(to); }
+  }
   const ctl = new AbortController();
   const to = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const opts = { signal: ctl.signal, headers: { 'X-PS-Token': TOKEN } };
     if (body !== undefined) { opts.method = 'POST'; opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
     const r = await fetch(state.bridgeUrl.replace(/\/$/, '') + path, opts);
-    if (r.status === 401 && !tokenReloaded) { tokenReloaded = true; location.reload(); } // app herstart: nieuwe sessiesleutel
+    if (r.status === 401 && !tokenReloaded) { tokenReloaded = true; location.reload(); } // app restarted: new session key
     const j = await r.json().catch(() => ({ ok: false, error: 'Invalid response from the app' }));
     if (!r.ok || j.ok === false) throw new Error(j.error || `HTTP ${r.status}`);
     return j;

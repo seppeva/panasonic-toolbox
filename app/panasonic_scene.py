@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.4.1"
+VERSION = "2.4.2"
 DEFAULT_PORT = 8765
 
 
@@ -339,6 +339,109 @@ def close_stream(sid):
             s["closed"] = True
 
 
+def api_batch(req):
+    ip = str(req.get("ip", "")).strip()
+    if not target_allowed(ip):
+        raise ValueError(f"Target IP {ip!r} not allowed (private addresses only)")
+    port = int(req.get("port") or 80)
+    user, pw = req.get("user") or None, req.get("pass") or None
+    delay = max(0, min(2000, int(req.get("delayMs", 20)))) / 1000.0
+    timeout = float(req.get("timeout", 3.0))
+    items = req.get("items") or []
+    if len(items) > 1000:
+        raise ValueError("At most 1000 commands per batch")
+    results = []
+    with cam_lock(ip):
+        for i, it in enumerate(items):
+            if it.get("sleepMs"):
+                time.sleep(min(10000, int(it["sleepMs"])) / 1000.0)
+                results.append({"ok": True, "sleep": True})
+                continue
+            kind = "ptz" if it.get("type") == "ptz" else "cam"
+            r = send_command(ip, port, kind, str(it.get("cmd", "")), user, pw, timeout)
+            r["cmd"] = it.get("cmd")
+            results.append(r)
+            if r.get("status") == 401:
+                results += [{"ok": False, "status": 401, "cmd": x.get("cmd"), "error": "auth"} for x in items[i + 1:]]
+                break
+            if delay and i < len(items) - 1:
+                time.sleep(delay)
+    return {"ok": True, "ip": ip, "results": results}
+
+def api_scan(req):
+    targets = expand_targets(req.get("range", ""))
+    if not targets:
+        raise ValueError("No (allowed) addresses in range")
+    port = int(req.get("port") or 80)
+    user, pw = req.get("user") or None, req.get("pass") or None
+    with ThreadPoolExecutor(max_workers=64) as ex:
+        found = [r for r in ex.map(lambda ip: probe(ip, port, user, pw), targets) if r]
+    found.sort(key=lambda x: tuple(int(p) for p in x["ip"].split(".")))
+    return {"ok": True, "scanned": len(targets), "cameras": found}
+
+
+def api_info():
+    return {"ok": True, "name": "panasonic-scene", "version": VERSION, "localIps": local_ipv4s(), "platform": sys.platform,
+            "saveDir": save_dir(), "nativeDialogs": WINDOW is not None}
+
+
+def api_call(path, req):
+    """All app functions. Called by the window directly (pywebview bridge, no network) or over local HTTP (browser mode)."""
+    if path == "/api/info":
+        return api_info()
+    if path == "/api/batch":
+        return (api_batch(req))
+    if path == "/api/scan":
+        return (api_scan(req))
+    if path == "/api/save":
+        data = base64.b64decode(req.get("dataB64") or "", validate=True)
+        return ({"ok": True, "path": save_file(req.get("name"), data, req.get("dir")), "dir": req.get("dir") or save_dir()})
+    if path == "/api/reveal":
+        p = req.get("path")
+        if p and not os.path.exists(os.path.realpath(p)):
+            p = None
+        reveal(p)
+        return ({"ok": True})
+    if path == "/api/eip/discover":
+        return ({"ok": True, "cameras": easyip.discover(local_ipv4s(), float(req.get("timeout", 3)))})
+    if path == "/api/eip/set":
+        easyip.configure(str(req.get("mac", "")), str(req.get("ip", "")), str(req.get("mask", "")),
+                         str(req.get("gateway", "")), str(req.get("dns1", "0.0.0.0")), str(req.get("dns2", "0.0.0.0")),
+                         int(req.get("port") or 80), local_ipv4s())
+        return ({"ok": True})
+    if path == "/api/stream/open":
+        ip, port = str(req.get("ip", "")), int(req.get("port") or 80)
+        if not target_allowed(ip):
+            raise ValueError("Only cameras on the local network")
+        res = req.get("res") if req.get("res") in STREAM_RES else "640x360"
+        return ({"ok": True, "id": open_stream(ip, port, req.get("user") or None, req.get("pass") or "", res)})
+    if path == "/api/stream/close":
+        close_stream(str(req.get("id", "")))
+        return ({"ok": True})
+    if path == "/api/folder":
+        if req.get("set"):
+            d = os.path.realpath(os.path.expanduser(str(req["set"])))
+            os.makedirs(d, exist_ok=True)
+            SETTINGS["saveDir"] = d
+            save_settings()
+        return ({"ok": True, "dir": save_dir()})
+    if path == "/api/choose":
+        res = native_dialog(req.get("kind", "folder"), bool(req.get("multiple")))
+        if res is None:
+            return ({"ok": False, "error": "unavailable"})
+        return ({"ok": True, "paths": res})
+    if path == "/api/list_files":
+        return ({"ok": True, **list_files(req.get("folder") or save_dir())})
+    if path == "/api/read_file":
+        return ({"ok": True, **read_file(req.get("path"))})
+    if path == "/api/open_url":
+        return (open_camera_page(str(req.get("url", ""))))
+    if path == "/api/quit":
+        threading.Timer(0.3, lambda: os._exit(0)).start()
+        return {"ok": True}
+    raise LookupError("unknown endpoint")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "PanasonicToolbox"
     sys_version = ""
@@ -402,9 +505,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/info":
             if not self.token_ok():
                 return self.send_json(401, {"ok": False, "error": "token"})
-            return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION,
-                                        "localIps": local_ipv4s(), "platform": sys.platform,
-                                        "saveDir": save_dir(), "nativeDialogs": WINDOW is not None})
+            return self.send_json(200, api_info())
         if path.startswith("/api/stream/"):
             with _streams_guard:
                 s = STREAMS.get(path.rsplit("/", 1)[-1])
@@ -444,58 +545,9 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self.send_json(400, {"ok": False, "error": f"Invalid request: {e}"})
         try:
-            if path == "/api/batch":
-                return self.send_json(200, self.batch(req))
-            if path == "/api/scan":
-                return self.send_json(200, self.scan(req))
-            if path == "/api/save":
-                data = base64.b64decode(req.get("dataB64") or "", validate=True)
-                return self.send_json(200, {"ok": True, "path": save_file(req.get("name"), data, req.get("dir")), "dir": req.get("dir") or save_dir()})
-            if path == "/api/reveal":
-                p = req.get("path")
-                if p and not os.path.exists(os.path.realpath(p)):
-                    p = None
-                reveal(p)
-                return self.send_json(200, {"ok": True})
-            if path == "/api/eip/discover":
-                return self.send_json(200, {"ok": True, "cameras": easyip.discover(local_ipv4s(), float(req.get("timeout", 3)))})
-            if path == "/api/eip/set":
-                easyip.configure(str(req.get("mac", "")), str(req.get("ip", "")), str(req.get("mask", "")),
-                                 str(req.get("gateway", "")), str(req.get("dns1", "0.0.0.0")), str(req.get("dns2", "0.0.0.0")),
-                                 int(req.get("port") or 80), local_ipv4s())
-                return self.send_json(200, {"ok": True})
-            if path == "/api/stream/open":
-                ip, port = str(req.get("ip", "")), int(req.get("port") or 80)
-                if not target_allowed(ip):
-                    return self.send_json(400, {"ok": False, "error": "Only cameras on the local network"})
-                res = req.get("res") if req.get("res") in STREAM_RES else "640x360"
-                return self.send_json(200, {"ok": True, "id": open_stream(ip, port, req.get("user") or None, req.get("pass") or "", res)})
-            if path == "/api/stream/close":
-                close_stream(str(req.get("id", "")))
-                return self.send_json(200, {"ok": True})
-            if path == "/api/folder":
-                if req.get("set"):
-                    d = os.path.realpath(os.path.expanduser(str(req["set"])))
-                    os.makedirs(d, exist_ok=True)
-                    SETTINGS["saveDir"] = d
-                    save_settings()
-                return self.send_json(200, {"ok": True, "dir": save_dir()})
-            if path == "/api/choose":
-                res = native_dialog(req.get("kind", "folder"), bool(req.get("multiple")))
-                if res is None:
-                    return self.send_json(200, {"ok": False, "error": "unavailable"})
-                return self.send_json(200, {"ok": True, "paths": res})
-            if path == "/api/list_files":
-                return self.send_json(200, {"ok": True, **list_files(req.get("folder") or save_dir())})
-            if path == "/api/read_file":
-                return self.send_json(200, {"ok": True, **read_file(req.get("path"))})
-            if path == "/api/open_url":
-                return self.send_json(200, open_camera_page(str(req.get("url", ""))))
-            if path == "/api/quit":
-                self.send_json(200, {"ok": True})
-                threading.Timer(0.3, lambda: os._exit(0)).start()
-                return
-            return self.send_json(404, {"ok": False, "error": "unknown endpoint"})
+            return self.send_json(200, api_call(path, req))
+        except LookupError as e:
+            return self.send_json(404, {"ok": False, "error": str(e)})
         except ValueError as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         except Exception as e:
@@ -549,46 +601,6 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
 
-    def batch(self, req):
-        ip = str(req.get("ip", "")).strip()
-        if not target_allowed(ip):
-            raise ValueError(f"Target IP {ip!r} not allowed (private addresses only)")
-        port = int(req.get("port") or 80)
-        user, pw = req.get("user") or None, req.get("pass") or None
-        delay = max(0, min(2000, int(req.get("delayMs", 20)))) / 1000.0
-        timeout = float(req.get("timeout", 3.0))
-        items = req.get("items") or []
-        if len(items) > 1000:
-            raise ValueError("At most 1000 commands per batch")
-        results = []
-        with cam_lock(ip):
-            for i, it in enumerate(items):
-                if it.get("sleepMs"):
-                    time.sleep(min(10000, int(it["sleepMs"])) / 1000.0)
-                    results.append({"ok": True, "sleep": True})
-                    continue
-                kind = "ptz" if it.get("type") == "ptz" else "cam"
-                r = send_command(ip, port, kind, str(it.get("cmd", "")), user, pw, timeout)
-                r["cmd"] = it.get("cmd")
-                results.append(r)
-                if r.get("status") == 401:
-                    results += [{"ok": False, "status": 401, "cmd": x.get("cmd"), "error": "auth"} for x in items[i + 1:]]
-                    break
-                if delay and i < len(items) - 1:
-                    time.sleep(delay)
-        return {"ok": True, "ip": ip, "results": results}
-
-    def scan(self, req):
-        targets = expand_targets(req.get("range", ""))
-        if not targets:
-            raise ValueError("No (allowed) addresses in range")
-        port = int(req.get("port") or 80)
-        user, pw = req.get("user") or None, req.get("pass") or None
-        with ThreadPoolExecutor(max_workers=64) as ex:
-            found = [r for r in ex.map(lambda ip: probe(ip, port, user, pw), targets) if r]
-        found.sort(key=lambda x: tuple(int(p) for p in x["ip"].split(".")))
-        return {"ok": True, "scanned": len(targets), "cameras": found}
-
 
 def running_instance(port):
     """Draait de app al? Dan gewoon dat venster/die pagina openen."""
@@ -624,6 +636,20 @@ def app_data_dir():
     return d
 
 
+class WindowBridge:
+    """Direct line between the app window and the Python side: no network, ports or session key involved."""
+
+    def call(self, path, body=None):
+        try:
+            return api_call(str(path), body or {})
+        except LookupError as e:
+            return {"ok": False, "status": 404, "error": str(e)}
+        except ValueError as e:
+            return {"ok": False, "status": 400, "error": str(e)}
+        except Exception as e:
+            return {"ok": False, "status": 500, "error": f"{type(e).__name__}: {e}"}
+
+
 def open_window(url):
     """Eigen venster via pywebview; anders de standaardbrowser. Geeft True terug als er een venster was."""
     try:
@@ -637,7 +663,7 @@ def open_window(url):
     except Exception:
         pass
     global WINDOW
-    WINDOW = webview.create_window(APP_NAME, url, width=1320, height=900, min_size=(900, 600))
+    WINDOW = webview.create_window(APP_NAME, url + "?app=1", width=1320, height=900, min_size=(900, 600), js_api=WindowBridge())
     try:
         # Niet-privé modus + vaste map: camera-lijst en instellingen blijven bewaard tussen sessies
         webview.start(private_mode=False, storage_path=app_data_dir())
