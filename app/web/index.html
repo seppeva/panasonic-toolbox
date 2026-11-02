@@ -111,7 +111,7 @@
       <fieldset class="seg">
         <legend class="sr">Kind</legend>
         <label><input type="radio" name="expKind" value="scene" checked> Scene files <span class="muted">(shading)</span></label>
-        <label><input type="radio" name="expKind" value="operator"> Operator file <span class="muted">(presets, speeds, pan/tilt, lens and tally preferences)</span></label>
+        <label><input type="radio" name="expKind" value="operator"> Operator file <span class="muted">(presets, speeds, pan/tilt and lens preferences)</span></label>
       </fieldset>
       <h2 class="mt">Scenes</h2>
       <fieldset class="seg" id="expSceneBox">
@@ -331,16 +331,17 @@
 
 <!-- ================= PARAMETERS ================= -->
 <section id="tab-params" class="tab">
-  <header class="page-head"><h1>Parameters</h1><p>Every HTTP command the cameras understand, and what is in a scene file.</p></header>
+  <header class="page-head"><h1>Parameters</h1><p>Every REST command the cameras understand, and what is in a scene file and an operator file.</p></header>
   <div class="row wrap searchbar">
-    <label class="grow">Search commands and scene settings <input id="paramSearch" placeholder="zoom, preset, tally, knee, matrix, OSD:A4" autocomplete="off"></label>
+    <label class="grow">Search commands, scene and operator settings <input id="paramSearch" placeholder="zoom, preset, tally, knee, matrix, OSD:A4" autocomplete="off"></label>
     <label class="w180">Camera for the links <select id="httpCam"></select></label>
     <label class="w140" id="httpIpWrap">IP address <input id="httpIp" value="192.168.0.10"></label>
     <label class="w90">Port <input id="httpPort" type="number" value="80"></label>
   </div>
   <div class="subtabs" role="tablist">
-    <button role="tab" data-sub="http" class="active">HTTP commands <span class="count" id="cmdCount">0</span></button>
+    <button role="tab" data-sub="http" class="active">REST commands <span class="count" id="cmdCount">0</span></button>
     <button role="tab" data-sub="scene">Scene file contents <span class="count" id="sceneCount">0</span></button>
+    <button role="tab" data-sub="operator">Operator file contents <span class="count" id="operCount">0</span></button>
   </div>
 
   <div class="subtab active" id="sub-http">
@@ -382,6 +383,20 @@
       <p class="muted" id="paramInfo"></p>
       <table class="tbl dense" id="paramTable">
         <thead><tr><th>Group</th><th>Setting</th><th>Set command</th><th>Query</th><th>Values</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="subtab" id="sub-operator">
+    <div class="card">
+      <div class="row between wrap">
+        <label class="w180">Group <select id="operGroup"><option value="">All groups</option></select></label>
+        <button class="ghost" id="operCsv">Save as CSV</button>
+      </div>
+      <p class="muted" id="operInfo"></p>
+      <table class="tbl dense" id="operTable">
+        <thead><tr><th>Group</th><th>Setting</th><th>Set command</th><th>Query</th><th>Values</th><th>Models</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>

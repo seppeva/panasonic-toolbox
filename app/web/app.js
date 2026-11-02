@@ -360,7 +360,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
-  if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); }
+  if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); }
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
   $('.content').scrollTop = 0;
 }));
@@ -678,19 +678,19 @@ $('#browseFolderBtn').onclick = async () => {
 };
 
 /* ------------------------------------------------------------------ operator settings */
-// Personal operating preferences, separate from the scenes: presets, speeds, pan/tilt, lens and tally behaviour.
+// Personal operating preferences, separate from the scenes: presets, speeds, pan/tilt and lens behaviour.
+// Tally is left out on purpose: it belongs to the camera/studio setup, not to the operator.
 const OPERATOR_SPEC = [
   ['Presets', ['OSJ:29', '#PST', '#UPVS', 'OSE:71', 'OSJ:A8', 'OSJ:A9', 'OSJ:AA', 'OSJ:AB', 'OSJ:AC', 'OSJ:AD', 'OSJ:AE', 'OSE:7C', 'OSE:7D', 'OSJ:5B', 'OSJ:D5', 'OSJ:2B', 'OSJ:2C', '#PRF']],
   ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ', '#SPF', 'OSJ:45', 'OSJ:46']],
   ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E', 'OIS']],
-  ['Tally and display', ['#TAE', 'OSA:D3', 'OSJ:D9', 'OSJ:DA', 'OSE:75']],
 ];
 const OPERATOR_ID = 'panasonic-ptz-operator';
 const OPERATOR_PARAMS = (() => {
   const out = [];
   for (const [g, list] of OPERATOR_SPEC) for (const base of list) {
     const c = (window.PANA_COMMANDS || []).find(x => x.c && (x.c === base + '[Data]' || x.c === base + ':[Data]' || x.c.startsWith(base + ':[Data') || x.c.startsWith(base + '[Data')) && x.q);
-    if (c) out.push({ cmd: base, q: c.q, t: base.startsWith('#') ? 'ptz' : 'cam', name: c.n, g });
+    if (c) out.push({ cmd: base, q: c.q, t: base.startsWith('#') ? 'ptz' : 'cam', name: c.n, g, src: c });
   }
   return out;
 })();
@@ -860,7 +860,8 @@ function addImportFile(name, file) {
   }));
   renderImports();
 }
-const srcParams = s => s.kind === 'operator' ? s.file.settings.length : s.file.scenes[s.sceneIdx].params.length;
+const OPERATOR_CMDS = new Set(OPERATOR_PARAMS.map(p => p.cmd));
+const srcParams = s => s.kind === 'operator' ? s.file.settings.filter(x => OPERATOR_CMDS.has(x.cmd)).length : s.file.scenes[s.sceneIdx].params.length;
 const srcById = id => state.sources.find(s => s.id === +id);
 const srcLabel = s => `${s.file.camera?.title || s.file.camera?.model || s.fileName}, ${s.kind === 'operator' ? 'operator file' : 'scene ' + s.file.scenes[s.sceneIdx].scene}`;
 async function handleFiles(list) {
@@ -1115,7 +1116,31 @@ $('#paramCsv').onclick = () => {
   download(`panasonic_scene_parameters_${fam}.csv`, '﻿' + csv, 'text/csv');
 };
 
-/* ------------------------------------------------------------------ parameters: HTTP commands */
+/* ------------------------------------------------------------------ parameters: operator file contents */
+function operatorValues(c) {
+  if (!c?.d || (c.d.length === 1 && (c.d[0] === '-' || c.d[0] === '※'))) return '';
+  const d = c.d.map(x => x.replace(/h$/i, '')), v = c.v;
+  if (d.length !== v.length || !v.join('') || d.some(x => x !== '-' && !/^[0-9A-F]{1,5}$/i.test(x))) return valueHint(c);
+  // "00, -, 1E" with "0, -, 30" is a range: 00…1E = 0…30
+  if (d.length === 3 && d[1] === '-') return `${d[0]}…${d[2]} = ${v[0]}…${v[2]}`;
+  return d.map((x, i) => `${x}=${v[i]}`).join(', ');
+}
+function renderOperatorTab() {
+  const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const gsel = $('#operGroup'), groups = OPERATOR_SPEC.map(x => x[0]), g = groups.includes(gsel.value) ? gsel.value : '';
+  gsel.innerHTML = '<option value="">All groups</option>' + groups.map(x => `<option ${x === g ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  const list = OPERATOR_PARAMS.filter(p => (!g || p.g === g) && words.every(w => (p.name + ' ' + p.cmd + ' ' + p.q + ' ' + p.g).toLowerCase().includes(w)));
+  $('#operCount').textContent = list.length;
+  $('#operInfo').textContent = `${OPERATOR_PARAMS.length} settings go into an operator file (.poper): an operator's own way of working, separate from the scenes. Tally is not included; that stays with the camera. A camera skips whatever its model does not support.`;
+  $('#operTable tbody').innerHTML = list.map(p => `<tr><td class="grp">${esc(p.g)}</td><td>${esc(p.name)}</td><td class="mono">${esc(p.src.c)}</td><td class="mono">${esc(p.q)}</td><td class="small muted">${esc(operatorValues(p.src))}</td><td class="small muted">${esc(p.src.m.join(', '))}</td></tr>`).join('');
+}
+$('#operGroup').onchange = renderOperatorTab;
+$('#operCsv').onclick = () => {
+  const csv = ['Group;Setting;Set command;Query command;Values;Models'].concat(OPERATOR_PARAMS.map(p => [p.g, p.name, p.src.c, p.q, operatorValues(p.src), p.src.m.join(', ')].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
+  download('panasonic_operator_parameters.csv', '\ufeff' + csv, 'text/csv');
+};
+
+/* ------------------------------------------------------------------ parameters: REST commands */
 const COMMANDS = window.PANA_COMMANDS || [];
 const pad2 = n => String(n).padStart(2, '0');
 function encCmd(cmd) { return cmd.replace(/%/g, '%25').replace(/#/g, '%23').replace(/&/g, '%26').replace(/ /g, '%20').replace(/\+/g, '%2B'); }
@@ -1266,12 +1291,12 @@ function cmdRow(c) {
   tr.update();
   return tr;
 }
-$('#paramSearch').addEventListener('input', () => { renderCmds(); renderParamTab(); });
+$('#paramSearch').addEventListener('input', () => { renderCmds(); renderParamTab(); renderOperatorTab(); });
 $('#cmdModel').addEventListener('change', renderCmds);
 $('#cmdType').addEventListener('change', renderCmds);
 $('#cmdCat').addEventListener('change', renderCmds);
 $('#cmdKind').addEventListener('change', renderCmds);
-$('#cmdReset').onclick = () => { ['#cmdType', '#cmdCat', '#cmdKind', '#cmdModel'].forEach(s => $(s).value = ''); $('#paramSearch').value = ''; renderCmds(); renderParamTab(); };
+$('#cmdReset').onclick = () => { ['#cmdType', '#cmdCat', '#cmdKind', '#cmdModel'].forEach(s => $(s).value = ''); $('#paramSearch').value = ''; renderCmds(); renderParamTab(); renderOperatorTab(); };
 
 /* ---- script builder for Companion ---- */
 state.script = store.get('script', []);
@@ -1990,5 +2015,5 @@ document.addEventListener('keyup', e => {
 });
 
 /* ------------------------------------------------------------------ init */
-renderCams(); renderRp(); renderParamTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo();
+renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo();
 checkBridge().then(() => loadSaveDir());

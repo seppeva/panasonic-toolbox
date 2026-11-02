@@ -1,6 +1,6 @@
 # Panasonic Toolbox
 
-Desktop app for **macOS and Windows** to **export and import the scene files (all shading settings of a scene)** of Panasonic PTZ cameras, something an AW-RP120/RP150 cannot do. It also looks up every HTTP command of the cameras (for Bitfocus Companion), opens a camera's web pages already logged in, and helps assign cameras to an **AW-RP150**.
+Desktop app for **macOS and Windows** to **export and import the scene files (all shading settings of a scene)** of Panasonic PTZ cameras, something an AW-RP120/RP150 cannot do. It also looks up every REST command of the cameras (for Bitfocus Companion), opens a camera's web pages already logged in, and helps assign cameras to an **AW-RP150**.
 
 Download page: **https://seppeva.github.io/panasonic-toolbox/**
 
@@ -10,7 +10,7 @@ Download page: **https://seppeva.github.io/panasonic-toolbox/**
 |---|---|
 | `index.html`, `privacy.html`, `install.sh`, `install.ps1`, `assets/` | The website (GitHub Pages): download buttons, explanation, privacy statement and install scripts |
 | `app/panasonic_scene.py` | The app: a local server on `127.0.0.1:8765` plus its own window (pywebview) |
-| `app/web/` | The interface (HTML/JS/CSS), `catalog.js` (scene settings per model) and `commands.js` (all HTTP commands) |
+| `app/web/` | The interface (HTML/JS/CSS), `catalog.js` (scene settings per model) and `commands.js` (all REST commands) |
 | `app/panasonic_scene.spec`, `app/entitlements.plist` | PyInstaller build (macOS .app and Windows .exe) |
 | `installer/windows.iss` | Inno Setup script for the Windows installer |
 | `.github/workflows/release.yml` | Builds the Mac and Windows versions and publishes a GitHub Release |
