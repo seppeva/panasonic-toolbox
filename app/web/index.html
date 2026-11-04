@@ -143,7 +143,7 @@
   <div class="card">
     <div class="row between"><h2>1. Open files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ghost small" id="browseFolderBtn">Show files in folder</button></div></div>
     <div class="drop" id="dropZone">
-      <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,.ptproject,application/json,application/zip" multiple hidden></label></p>
+      <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,.ptproject,.ps1,.sh,application/json,application/zip" multiple hidden></label></p>
       <p class="muted small">Files you exported in this session are already listed below.</p>
     </div>
     <div id="folderList"></div>
@@ -372,13 +372,18 @@
 
   <div class="subtab active" id="sub-http">
     <div class="card hidden" id="scriptCard">
-      <div class="row between wrap"><h2>Script for Companion <span class="count" id="scriptCount">0</span></h2><button class="ghost small" id="scriptClear">Clear</button></div>
+      <div class="row between wrap"><h2><span id="scriptTitle">Script</span> <span class="count" id="scriptCount">0</span></h2><button class="ghost small" id="scriptClear">Close</button></div>
       <p class="hint">Runs the commands below on every ticked camera. In Companion add the internal action <b>System: Run shell path</b> with <span class="mono">powershell -ExecutionPolicy Bypass -File "path\to\script.ps1"</span> (Windows) or <span class="mono">bash "/path/to/script.sh"</span> (Mac).</p>
       <ol id="scriptList" class="script-list"></ol>
       <div class="row between wrap"><span class="muted small">Run on these cameras</span><span class="row"><span class="zonebar inline" id="scriptZones"></span><button class="ghost small" id="scriptAll">Select all</button><button class="ghost small" id="scriptNone">None</button></span></div>
       <div class="row wrap" id="scriptCams"></div>
       <label class="check"><input type="checkbox" id="scriptLogin"><span><b>Put the camera login in the script.</b> <span class="muted">Only needed when User Auth is on in the cameras. Leave it off to keep the password out of the file: the script then uses the environment variables <span class="mono">PANASONIC_USER</span> and <span class="mono">PANASONIC_PASS</span> if they are set on the Companion computer.</span></span></label>
-      <div class="row wrap"><label class="grow">Script name <input id="scriptName" value="panasonic-action"></label><button id="scriptPs1">Save PowerShell script</button><button class="secondary" id="scriptSh">Save Mac/Linux script</button></div>
+      <div class="row wrap"><label class="grow">Script name <input id="scriptName" value="panasonic-action"></label><button class="secondary" id="scriptSave">Save in list</button><button id="scriptPs1">Save PowerShell file</button><button class="secondary" id="scriptSh">Save Mac/Linux file</button></div>
+    </div>
+    <div class="card hidden" id="savedScripts">
+      <div class="row between wrap"><h2>Saved scripts <span class="count" id="savedScriptCount">0</span></h2><button class="ghost small" id="scriptOpenFile">Open script file…</button></div>
+      <p class="hint">Scripts are kept in the project. Edit one to change its actions, order or cameras, then save the file again.</p>
+      <table class="tbl" id="savedScriptTable"><thead><tr><th>Script</th><th>Actions</th><th>Cameras</th><th>Saved</th><th></th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card">
       <div class="row between wrap">

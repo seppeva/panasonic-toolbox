@@ -13,7 +13,7 @@ const FORMAT_ID = 'panasonic-ptz-scene';
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
 // timing, page paths and the update check are for the whole app. The first project ('default') keeps the
 // keys of earlier versions, so nothing is lost when updating.
-const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scriptCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
 // settings that moved into projects in 2.14: a project without its own value uses the value from before
 const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
 const ls = {
@@ -906,6 +906,7 @@ async function openPaths(paths) {
   }
 }
 async function openBytes(name, u8, path) {
+  if (/\.(ps1|sh)$/i.test(name)) { try { openScriptFile(name, new TextDecoder().decode(u8)); } catch (e) { info(`Could not open ${esc(name)}`, esc(e.message)); } return; }
   if (/\.zip$/i.test(name)) { for (const z of await readZip(u8.buffer)) openJson(z.name, JSON.parse(z.text)); }
   else openJson(name, JSON.parse(new TextDecoder().decode(u8)), path);
   log(`Opened: ${name}`);
@@ -1588,37 +1589,115 @@ function addToScript(name, t, cmd) {
   toast(`Added to script: ${name}`);
 }
 function renderScript() {
-  $('#scriptCard').classList.toggle('hidden', !state.script.length);
+  $('#scriptCard').classList.toggle('hidden', !state.script.length && !state.scriptEdit);
   $('#scriptCount').textContent = state.script.length;
-  $('#scriptList').innerHTML = state.script.map((s, i) => `<li><span>${esc(s.name)}</span> <span class="mono muted">${esc(s.cmd)}</span> <button class="icon" data-i="${i}" aria-label="Remove">×</button></li>`).join('');
-  $$('#scriptList [data-i]').forEach(b => b.onclick = () => { state.script.splice(+b.dataset.i, 1); saveScript(); renderScript(); });
+  const ed = state.scripts.find(x => x.id === state.scriptEdit);
+  $('#scriptTitle').textContent = ed ? `Editing script “${ed.name}”` : 'Script';
+  $('#scriptSave').textContent = ed ? 'Save changes' : 'Save in list';
+  $('#scriptList').innerHTML = state.script.map((s, i) => `<li data-i="${i}"><input class="sname" value="${esc(s.name)}" aria-label="Action name"><select class="stype" aria-label="Command type"><option value="cam" ${s.t !== 'ptz' ? 'selected' : ''}>aw_cam</option><option value="ptz" ${s.t === 'ptz' ? 'selected' : ''}>aw_ptz</option></select><input class="scmd mono" value="${esc(s.cmd)}" aria-label="Command"><span class="sbtns"><button class="icon" data-mv="-1" aria-label="Move up" ${i ? '' : 'disabled'}>↑</button><button class="icon" data-mv="1" aria-label="Move down" ${i < state.script.length - 1 ? '' : 'disabled'}>↓</button><button class="icon" data-del aria-label="Remove">×</button></span></li>`).join('');
+  $$('#scriptList li').forEach(li => {
+    const i = +li.dataset.i, it = state.script[i];
+    $('.sname', li).onchange = e => { it.name = e.target.value.trim() || it.cmd; saveScript(); };
+    $('.stype', li).onchange = e => { it.t = e.target.value; saveScript(); };
+    $('.scmd', li).onchange = e => { it.cmd = e.target.value.trim(); saveScript(); };
+    $$('[data-mv]', li).forEach(b => b.onclick = () => { const j = i + +b.dataset.mv; [state.script[i], state.script[j]] = [state.script[j], state.script[i]]; saveScript(); renderScript(); });
+    $('[data-del]', li).onclick = () => { state.script.splice(i, 1); saveScript(); renderScript(); };
+  });
+  renderSavedScripts();
   const prev = new Set(store.get('scriptCams', []));
   $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span>${c.zone ? ` <span class="pill">${esc(c.zone)}</span>` : ''}</label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you tick here.</span>';
-  $$('#scriptCams input').forEach(i => i.onchange = () => { store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); });
+  $$('#scriptCams label:not(.selall-row) input').forEach(i => i.onchange = () => { store.set('scriptCams', $$('#scriptCams label:not(.selall-row) input:checked').map(x => x.value)); renderScript(); });
   { const on = new Set(store.get('scriptCams', []));
     selAllRow($('#scriptCams'), state.cameras, c => on.has(c.ip), (c, v) => v ? on.add(c.ip) : on.delete(c.ip), () => { store.set('scriptCams', [...on]); renderScript(); }); }
-  const scriptBox = c => $$('#scriptCams input').find(i => i.value === c.ip);
+  const scriptBox = c => $$('#scriptCams label:not(.selall-row) input').find(i => i.value === c.ip);
   zoneChips($('#scriptZones'), { get: c => !!scriptBox(c)?.checked, set: (c, on) => { const i = scriptBox(c); if (i) i.checked = on; },
-    done: () => { store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); } }, 'Zone');
+    done: () => { store.set('scriptCams', $$('#scriptCams label:not(.selall-row) input:checked').map(x => x.value)); renderScript(); } }, 'Zone');
 }
-const setScriptCams = on => { $$('#scriptCams input').forEach(i => i.checked = on); store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); };
+const setScriptCams = on => { $$('#scriptCams label:not(.selall-row) input').forEach(i => i.checked = on); store.set('scriptCams', $$('#scriptCams label:not(.selall-row) input:checked').map(x => x.value)); renderScript(); };
 $('#scriptAll').onclick = () => setScriptCams(true);
 $('#scriptNone').onclick = () => setScriptCams(false);
 $('#scriptLogin').checked = store.get('scriptLogin', false);
 $('#scriptLogin').onchange = e => store.set('scriptLogin', e.target.checked);
-$('#scriptClear').onclick = () => { state.script = []; saveScript(); renderScript(); };
+$('#scriptClear').onclick = () => { state.script = []; saveScript(); state.scriptEdit = null; store.set('scriptEdit', null); renderScript(); };
+/* ---- saved scripts: kept in the project, editable like shows ---- */
+state.scripts = store.get('scripts', []);
+state.scriptEdit = store.get('scriptEdit', null);
+const saveScripts = () => store.set('scripts', state.scripts);
+const SCRIPT_MARK = '# panasonic-toolbox-script ';
+function scriptData() {
+  return { name: $('#scriptName').value.trim() || 'panasonic-action', items: state.script.map(x => ({ ...x })), cams: $$('#scriptCams label:not(.selall-row) input:checked').map(x => x.value), login: $('#scriptLogin').checked };
+}
+// store the script in the list (new, or the one being edited); returns the entry
+async function storeScript(confirmEdit = true) {
+  if (!state.script.length) { info('No actions', 'Add at least one command with + Script first.'); return null; }
+  const d = scriptData(), now = new Date().toISOString();
+  let ed = state.scripts.find(x => x.id === state.scriptEdit);
+  if (ed && confirmEdit) {
+    const was = ed.items.map(x => x.name), is = d.items.map(x => x.name);
+    const camN = ips => ips.map(ip => { const c = state.cameras.find(x => x.ip === ip); return c ? camName(c) : ip; }).join(', ') || '–';
+    if (!await ask({ title: `Save changes to “${esc(ed.name)}”?`, ok: 'Save changes', wide: true, body: `<table class="tbl dense"><thead><tr><th></th><th>Was</th><th>Becomes</th></tr></thead><tbody>
+      ${ed.name !== d.name ? `<tr><td>Name</td><td>${esc(ed.name)}</td><td>${esc(d.name)}</td></tr>` : ''}
+      <tr><td>Actions</td><td>${was.map(esc).join('<br>') || '–'}</td><td>${is.map(esc).join('<br>') || '–'}</td></tr>
+      <tr><td>Cameras</td><td>${esc(camN(ed.cams))}</td><td>${esc(camN(d.cams))}</td></tr>
+      ${ed.login !== d.login ? `<tr><td>Login in the file</td><td>${ed.login ? 'yes' : 'no'}</td><td>${d.login ? 'yes' : 'no'}</td></tr>` : ''}
+      </tbody></table><p class="small">Script files you saved before stay as they are; save the file again to update it.</p>` })) return null;
+  }
+  if (ed) Object.assign(ed, d, { modified: now });
+  else { ed = { id: 's' + Date.now().toString(36), ...d, created: now, modified: now }; state.scripts.push(ed); state.scriptEdit = ed.id; store.set('scriptEdit', ed.id); }
+  saveScripts(); renderScript(); return ed;
+}
+$('#scriptOpenFile').onclick = () => $('#openFilesBtn').click();
+$('#scriptSave').onclick = async () => { const e = await storeScript(); if (e) toast(`Script “${e.name}” saved in the list`); };
+function editScript(sc) {
+  state.script = sc.items.map(x => ({ ...x })); saveScript();
+  state.scriptEdit = sc.id; store.set('scriptEdit', sc.id);
+  $('#scriptName').value = sc.name; $('#scriptLogin').checked = !!sc.login; store.set('scriptCams', sc.cams || []);
+  renderScript(); $('#scriptCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function renderSavedScripts() {
+  const box = $('#savedScripts'); if (!box) return;
+  box.classList.toggle('hidden', !state.scripts.length);
+  $('#savedScriptCount').textContent = state.scripts.length;
+  $('#savedScriptTable tbody').innerHTML = state.scripts.map(sc => `<tr data-id="${esc(sc.id)}" class="${sc.id === state.scriptEdit ? 'editing' : ''}"><td><b>${esc(sc.name)}</b>${sc.id === state.scriptEdit ? ' <span class="pill info">editing</span>' : ''}</td><td class="small">${sc.items.map(x => esc(x.name)).join('<br>')}</td><td class="small">${(sc.cams || []).map(ip => { const c = state.cameras.find(x => x.ip === ip); return esc(c ? camName(c) : ip); }).join(', ') || '<span class="muted">no cameras</span>'}</td><td class="muted small">${new Date(sc.modified || sc.created).toLocaleString('en-GB')}</td>
+    <td class="end nowrap"><button class="ghost small" data-act="edit">Edit</button> <button class="ghost small" data-act="ps1">PowerShell</button> <button class="ghost small" data-act="sh">Mac/Linux</button> <button class="icon" data-act="del" aria-label="Delete script">×</button></td></tr>`).join('');
+  $$('#savedScriptTable tbody tr').forEach(tr => {
+    const sc = state.scripts.find(x => x.id === tr.dataset.id);
+    $('[data-act=edit]', tr).onclick = () => editScript(sc);
+    $('[data-act=ps1]', tr).onclick = () => { editScript(sc); $('#scriptPs1').click(); };
+    $('[data-act=sh]', tr).onclick = () => { editScript(sc); $('#scriptSh').click(); };
+    $('[data-act=del]', tr).onclick = async () => {
+      if (!await ask({ title: `Delete script “${esc(sc.name)}”?`, ok: 'Delete', danger: true, body: '<p>It is removed from the list. Script files you saved stay where they are.</p>' })) return;
+      state.scripts = state.scripts.filter(x => x !== sc); if (state.scriptEdit === sc.id) { state.scriptEdit = null; store.set('scriptEdit', null); }
+      saveScripts(); renderScript();
+    };
+  });
+}
+// a saved .ps1/.sh file carries its script on one comment line, so it can be opened and edited again
+function openScriptFile(name, text) {
+  const line = text.split(/\r?\n/).find(l => l.startsWith(SCRIPT_MARK));
+  if (!line) throw new Error('This script was not made with Panasonic Toolbox 2.15 or later, so it cannot be edited here');
+  const d = JSON.parse(line.slice(SCRIPT_MARK.length));
+  const ex = state.scripts.find(x => x.name === d.name);
+  const now = new Date().toISOString();
+  if (ex) Object.assign(ex, { items: d.items, cams: d.cams || [], login: !!d.login, modified: now });
+  else state.scripts.push({ id: 's' + Date.now().toString(36), name: d.name, items: d.items, cams: d.cams || [], login: !!d.login, created: now, modified: now });
+  saveScripts(); renderScript();
+  toast(`Script “${d.name}” ${ex ? 'updated' : 'added'} on the Parameters page`);
+}
 function scriptTargets() {
-  const ips = $$('#scriptCams input:checked').map(x => x.value);
+  const ips = $$('#scriptCams label:not(.selall-row) input:checked').map(x => x.value);
   return state.cameras.filter(c => ips.includes(c.ip)).map(c => ({ ip: c.ip, port: c.port || 80 }));
 }
 function scriptName(ext) { return ($('#scriptName').value.trim() || 'panasonic-action').replace(/[^\w.-]+/g, '_') + ext; }
-$('#scriptPs1').onclick = () => {
+$('#scriptPs1').onclick = async () => {
   const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
+  if (!await storeScript(false)) return;
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
   const withLogin = $('#scriptLogin').checked && !!user;
   const lines = [
     `# Panasonic Toolbox script: ${$('#scriptName').value.trim()}`,
     `# Generated ${new Date().toLocaleString('en-GB')}. Runs ${state.script.length} command(s) on ${cams.length} camera(s).`,
+    SCRIPT_MARK + JSON.stringify({ name: scriptData().name, items: state.script, cams: cams.map(c => c.ip), login: withLogin }),
     `# Companion: System > Run shell path:  powershell -ExecutionPolicy Bypass -File "<path to this file>"`,
     `$ErrorActionPreference = 'SilentlyContinue'`,
     `$ProgressPreference = 'SilentlyContinue'`,
@@ -1638,13 +1717,15 @@ $('#scriptPs1').onclick = () => {
   download(scriptName('.ps1'), lines.join('\r\n') + '\r\n', 'text/plain', 'script');
   if (withLogin) toast('Note: the camera login is stored in the script as plain text.');
 };
-$('#scriptSh').onclick = () => {
+$('#scriptSh').onclick = async () => {
   const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
+  if (!await storeScript(false)) return;
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
   const withLogin = $('#scriptLogin').checked && !!user;
   const lines = [
     '#!/bin/bash',
     `# Panasonic Toolbox script: ${$('#scriptName').value.trim()}`,
+    SCRIPT_MARK + JSON.stringify({ name: scriptData().name, items: state.script, cams: cams.map(c => c.ip), login: withLogin }),
     `# Companion: System > Run shell path:  bash "<path to this file>"`,
     ...(withLogin ? [`PANASONIC_USER='${user.replace(/'/g, "'\\''")}'`, `PANASONIC_PASS='${pass.replace(/'/g, "'\\''")}'`] : ['# Camera login (only needed when User Auth is on): export PANASONIC_USER and PANASONIC_PASS']),
     'AUTH=()',

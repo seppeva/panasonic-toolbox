@@ -381,3 +381,7 @@ ul.tight{margin:6px 0 0;padding-left:18px}ul.tight li{margin:2px 0}
 #cmdTable td.acts button[data-act=copy]{min-width:66px}
 #cmdTable td.acts .out{max-width:240px;min-height:16px}
 button.copied{color:#8fd19e}
+#scriptList li{display:grid;grid-template-columns:minmax(120px,1fr) 90px minmax(160px,1.4fr) auto;gap:6px;align-items:center;margin:4px 0}
+#scriptList li input,#scriptList li select{height:28px;font-size:12.5px}
+#scriptList .sbtns{display:flex;gap:2px}
+#savedScriptTable tr.editing td{background:var(--accent-soft)}

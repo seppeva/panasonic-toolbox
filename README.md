@@ -14,7 +14,7 @@ Website: **https://seppeva.github.io/panasonic-toolbox/**
 | **Export** | Save the shading settings of any scene (scene files, `.pscene.json`) or an operator's own preferences (operator files, `.poper`), from one or many cameras. |
 | **Import** | Put saved settings back on any camera and scene, with a comparison first, a backup and a check afterwards. |
 | **Shows** | A complete setup (which scene and operator file goes to which camera and scene) recalled with one click. Made from the cameras, or in a grid from saved files, and editable afterwards (`.pshow`). |
-| **Parameters** | Every REST command of the cameras and controllers with a ready-made link, scripts that run on many cameras at once, and what is in a scene file and an operator file per model. |
+| **Parameters** | Every REST command of the cameras and controllers with a ready-made link; scripts (PowerShell or shell) that run an action on many cameras at once, kept in the project and editable, also after reopening a saved script file; and what is in a scene file and an operator file per model. |
 | **RP150 assignment** | Assign cameras to the CAM buttons of an AW-RP150 through its `Network.s15` file (experimental). |
 | **Settings** | Projects (each with its own cameras, zones, shows, scripts, timing and web page paths), project files to open a project on another computer, closing a project, and the save folder. |
 
