@@ -568,14 +568,12 @@ async function openCamPage(c, kind) {
 function renderCams() {
   const tb = $('#camTable tbody'); tb.innerHTML = '';
   for (const c of state.cameras) {
-    const prof = c.model ? profileFor(c.model) : null;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
       <td class="mono">${esc(hostPort(c))}</td>
       <td>${c.title ? esc(c.title) : '<span class="muted">–</span>'}</td>
       <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
-      <td>${esc(c.model || '–')}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
-      <td>${prof ? `<span class="pill ${prof.fam === 'GENERIC' ? 'info' : ''}">${esc(prof.fam)}</span> <span class="muted small">${paramsFor(c).length} settings</span>` : ''}</td>
+      <td>${c.model ? `<span class="pill">${esc(c.model)}</span>` : '<span class="muted">–</span>'}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
       <td>${c.scene == null ? '–' : c.scene === 0 ? 'Off' : 'Scene ' + c.scene}</td>
       <td>${c.busy ? '<span class="pill busy">Busy</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : ''}</td>
       <td class="nowrap"><button class="ghost small" data-act="live">Live view</button> <button class="ghost small" data-act="setup">Settings</button></td>
@@ -644,14 +642,6 @@ function selAllClick(cb, list, get, set) {
   list.forEach(x => set(x, !any));
   cb.checked = !any && list.length > 0; cb.indeterminate = false;
 }
-$('#camSetZone').onclick = async () => {
-  const sel = state.cameras.filter(c => c.selected);
-  const cur = sel.every(c => (c.zone || '') === (sel[0].zone || '')) ? (sel[0].zone || '') : '';
-  if (!await ask({ title: `Zone for ${sel.length} camera${sel.length > 1 ? 's' : ''}`, ok: 'Set zone', body: `<label>Zone <input id="askZone" list="zoneList" value="${esc(cur)}" placeholder="Zone name" autocomplete="off"></label><p class="hint">Leave empty to remove these cameras from their zone.</p>` })) return;
-  const z = $('#askZone').value.trim();
-  track(z ? `Zone ${z} for ${sel.length} camera(s)` : `Clear zone of ${sel.length} camera(s)`, () => sel.forEach(c => c.zone = z));
-  saveCams(); renderCams(); toast(z ? `${sel.length} camera${sel.length > 1 ? 's' : ''} in zone ${z}` : 'Zone cleared');
-};
 $('#camDelSel').onclick = async () => {
   const sel = state.cameras.filter(c => c.selected);
   if (!await ask({ title: `Remove ${sel.length} camera${sel.length > 1 ? 's' : ''} from the list?`, body: '<p>The cameras themselves are not changed. You can undo this.</p>', ok: 'Remove', danger: true })) return;
