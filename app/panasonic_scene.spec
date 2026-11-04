@@ -36,8 +36,8 @@ if sys.platform == 'darwin':
             'CFBundleVersion': VERSION,
             'LSMinimumSystemVersion': '11.0',
             'NSHighResolutionCapable': True,
-            # macOS 15+: toestemming om camera's op het lokale netwerk te bereiken
-            'NSLocalNetworkUsageDescription': 'Panasonic Toolbox verbindt met je PTZ-camera\'s op het lokale netwerk om scene files uit te lezen en terug te zetten.',
+            # macOS 15+: permission to reach the cameras on the local network
+            'NSLocalNetworkUsageDescription': 'Panasonic Toolbox connects to your Panasonic PTZ cameras and remote controllers on the local network to find, control and set them up.',
             'NSAppTransportSecurity': {'NSAllowsArbitraryLoads': True, 'NSAllowsLocalNetworking': True},
         },
     )

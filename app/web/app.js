@@ -16,10 +16,57 @@ const FORMAT_ID = 'panasonic-ptz-scene';
 const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
 // settings that moved into projects in 2.14: a project without its own value uses the value from before
 const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
+// The app's data lives in state.json, kept by the app itself and handed to this page when it loads (#psState).
+// Changes are sent back in small batches. The window's own storage is only a fallback (page opened without the app).
+const SERVER_STATE = (() => { try { const t = document.getElementById('psState')?.textContent || ''; return t && !t.startsWith('__') ? JSON.parse(t) : null; } catch { return null; } })();
+const statePending = { set: {}, del: new Set() };
+let stateTimer = null, stateFlushing = null;
+function queueState(k, v) {
+  if (v === undefined) { delete statePending.set[k]; statePending.del.add(k); } else { statePending.set[k] = v; statePending.del.delete(k); }
+  clearTimeout(stateTimer); stateTimer = setTimeout(flushState, 150);
+}
+async function flushState() {
+  if (!SERVER_STATE) return;
+  if (stateFlushing) { await stateFlushing; }
+  if (!Object.keys(statePending.set).length && !statePending.del.size) return;
+  const body = { set: { ...statePending.set }, del: [...statePending.del] };
+  statePending.set = {}; statePending.del.clear();
+  stateFlushing = (async () => {
+    try { await bridgeFetch('/api/state/set', body); }
+    catch (e) { // put it back and try again shortly (app still starting, for example)
+      for (const [k, v] of Object.entries(body.set)) if (!(k in statePending.set) && !statePending.del.has(k)) statePending.set[k] = v;
+      for (const k of body.del) if (!(k in statePending.set)) statePending.del.add(k);
+      clearTimeout(stateTimer); stateTimer = setTimeout(flushState, 2000);
+    } finally { stateFlushing = null; }
+  })();
+  return stateFlushing;
+}
+const reloadAfterSave = () => flushState().finally(() => location.reload());
 const ls = {
-  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { if (v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
+  get(k, d) {
+    if (SERVER_STATE) return k in SERVER_STATE ? SERVER_STATE[k] : d;
+    try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; }
+  },
+  set(k, v) {
+    if (SERVER_STATE) { if (v === undefined) delete SERVER_STATE[k]; else SERVER_STATE[k] = v; queueState(k, v); return; }
+    try { if (v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ }
+  },
+  keys() {
+    if (SERVER_STATE) return Object.keys(SERVER_STATE);
+    const out = []; try { for (let i = 0; i < localStorage.length; i++) out.push(localStorage.key(i)); } catch { } return out;
+  },
 };
+// One-time move of what earlier versions kept in the window's storage into state.json.
+if (SERVER_STATE && !SERVER_STATE['pscene.migrated']) {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('pscene.') && !(k in SERVER_STATE)) { try { ls.set(k, JSON.parse(localStorage.getItem(k))); } catch { } }
+    }
+  } catch { }
+  ls.set('pscene.migrated', new Date().toISOString());
+}
+window.addEventListener('pagehide', () => { flushState(); });
 const projectId = () => ls.get('pscene.project', 'default');
 const keyFor = (k, pid = projectId()) => PROJECT_KEYS.test(k) && pid !== 'default' ? `pscene.p.${pid}.${k}` : 'pscene.' + k;
 const store = {
@@ -193,7 +240,7 @@ const isErr = body => /^e[rR]\d/.test(body || '');
 async function identify(cam) {
   const r = await batch(cam, [{ cmd: 'QID' }, { cmd: 'QSF' }, { type: 'ptz', cmd: '#O' }, { cmd: 'QSJ:5C' }]);
   if (r[0].status === 401) throw new Error('Login required (enter user name and password)');
-  if (!r[0].ok) throw new Error(r[0].error || 'no response');
+  if (!r[0].ok) throw new Error(r[0].unreachable ? 'Not reachable' : (r[0].error || 'no response'));
   if (!/^OID:/i.test(r[0].body)) throw new Error('Not a Panasonic camera response: ' + r[0].body);
   cam.model = r[0].body.slice(4);
   cam.scene = parseSceneResp(r[1], cam);
@@ -376,7 +423,8 @@ function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false, wide =
     dlg.showModal();
     // focus the first field, or else the blue button, so Enter confirms
     const first = $$('#askBody input:not([type=hidden]):not([type=checkbox]):not([type=radio]), #askBody textarea, #askBody select').find(x => !x.disabled && x.offsetParent);
-    (first || $('#askOk')).focus();
+    // red (destructive) dialogs: Cancel has the focus, so Enter never deletes by accident
+    (first || (danger && cancel ? $('#askCancel') : $('#askOk'))).focus();
   });
 }
 // Enter in a dialog presses its blue (primary) button, not Cancel; Enter in a text area still makes a new line.
@@ -431,13 +479,13 @@ function renderProjects() {
 function switchProject(id) {
   if (id === projectId()) return;
   ls.set('pscene.project', id);
-  location.reload();
+  reloadAfterSave();
 }
 // all localStorage keys of one project, without the project prefix
 function projectData(pid) {
   const out = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const full = localStorage.key(i); if (!full.startsWith('pscene.')) continue;
+  for (const full of ls.keys()) {
+    if (!full.startsWith('pscene.')) continue;
     if (pid === 'default') { const k = full.slice(7); if (PROJECT_KEYS.test(k)) out[k] = ls.get(full); }
     else if (full.startsWith(`pscene.p.${pid}.`)) out[full.slice(`pscene.p.${pid}.`.length)] = ls.get(full);
   }
@@ -445,8 +493,8 @@ function projectData(pid) {
 }
 function appData() {
   const out = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const full = localStorage.key(i); if (!full.startsWith('pscene.') || full.startsWith('pscene.p.')) continue;
+  for (const full of ls.keys()) {
+    if (!full.startsWith('pscene.') || full.startsWith('pscene.p.') || full === 'pscene.migrated') continue;
     const k = full.slice(7); if (!PROJECT_KEYS.test(k) && !/^(project|projects)$/.test(k)) out[k] = ls.get(full);
   }
   return out;
@@ -510,7 +558,7 @@ async function importProject(pf) {
   if (id) for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
   else { id = 'p' + Date.now().toString(36); list = list.concat([{ id, name }]); saveProjects(list); }
   for (const [k, v] of Object.entries(pf.data)) if (PROJECT_KEYS.test(k)) ls.set(keyFor(k, id), v);
-  ls.set('pscene.project', id); location.reload();
+  ls.set('pscene.project', id); reloadAfterSave();
 }
 $('#projOpen').onclick = async () => {
   $('#settingsDlg').close();
@@ -538,7 +586,7 @@ $('#projClose').onclick = async () => {
   let nm = 'New project', i = 2; while (rest.some(p => p.name === nm)) nm = `New project ${i++}`;
   const nid = 'p' + Date.now().toString(36);
   saveProjects(rest.concat([{ id: nid, name: nm }]));
-  ls.set('pscene.project', nid); location.reload();
+  ls.set('pscene.project', nid); reloadAfterSave();
 };
 async function importConfig(cfg) {
   if (cfg?.format !== CONFIG_ID || !Array.isArray(cfg.projects)) throw new Error('Not a Panasonic Toolbox config file');
@@ -567,7 +615,7 @@ async function importConfig(cfg) {
   for (const [k, v] of Object.entries(cfg.app || {})) if (!PROJECT_KEYS.test(k) && !/^(project|projects)$/.test(k)) ls.set('pscene.' + k, v);
   const cur = cfg.projects.find(p => p.id === cfg.current) || cfg.projects[0];
   ls.set('pscene.project', list.find(x => x.name === cur.name).id);
-  location.reload();
+  reloadAfterSave();
 }
 $('#projectName').textContent = projectName();
 $('#projectName').onclick = () => $('#bridgeSettingsBtn').click();
@@ -578,7 +626,7 @@ $('#quitBtn').onclick = async () => {
   document.body.innerHTML = '<p style="padding:40px;font:15px system-ui;color:#aaa">Panasonic Toolbox has quit. You can close this window.</p>';
 };
 $('#retryBridge').onclick = () => checkBridge();
-$('#reloadWin').onclick = () => location.reload();
+$('#reloadWin').onclick = () => reloadAfterSave();
 $('#copyDetail').onclick = e => copyText(`${$('#bridgeDetail').textContent}\n${navigator.userAgent}\n${location.href.replace(/\?.*/, '')}`, e.target);
 setInterval(() => { if (!document.hidden) bridgeFetch('/api/ping', undefined, 3000).then(() => { if (!state.bridgeOk) checkBridge(); }).catch(() => { if (state.bridgeOk) checkBridge(); }); }, 10000);
 
@@ -733,12 +781,13 @@ $('#camEditSel').onclick = async () => {
   const clash = sel.map((c, i) => ({ c, ip: ips[i] })).find(({ c, ip }, i) => ips.some((o, k) => k !== i && o === ip && newPort(sel[k]) === newPort(c)) || state.cameras.some(o => !sel.includes(o) && o.ip === ip && (o.port || 80) === newPort(c)));
   if (clash) return info('IP address used twice', `${esc(clash.ip)} would be used by two cameras in the list. Nothing was changed.`);
   const moved = sel.map((c, i) => ({ c, from: c.ip, to: ips[i] })).filter(m => m.from !== m.to);
-  track(`Edit ${sel.length} camera(s)`, () => sel.forEach((c, i) => {
+  const beforeApp = snapApp(), beforeShows = JSON.stringify(state.shows);
+  sel.forEach((c, i) => {
     c.ip = ips[i]; c.desc = descs[i];
     if (z) c.zone = z;
     if (port > 0 && port < 65536) c.port = port;
     if (general) { delete c.user; delete c.pass; } else if (user) { c.user = user; if (pass) c.pass = pass; }
-  }));
+  });
   if (moved.length) {
     for (const m of moved) {
       state.jobs.forEach(j => { if (j.target === m.from) j.target = m.to; });
@@ -750,6 +799,11 @@ $('#camEditSel').onclick = async () => {
     saveShows(); renderImports(); renderShows();
   }
   saveCams(); renderCams();
+  const afterApp = snapApp(), afterShows = JSON.stringify(state.shows);
+  if (beforeApp !== afterApp || beforeShows !== afterShows) {
+    const put = (app, shows) => { restoreApp(app); state.shows = JSON.parse(shows); saveShows(); renderShows(); };
+    pushHistory({ label: `Edit ${sel.length} camera(s)`, undo: async () => put(beforeApp, beforeShows), redo: async () => put(afterApp, afterShows) });
+  }
   if (moved.length && (state.bridgeOk || await checkBridge())) refreshAll(moved.map(m => m.c));
 };
 function updateSel() {
@@ -1006,8 +1060,14 @@ $('#exportBtn').onclick = async () => {
   const mode = $('input[name=expMode]:checked').value;
   const picked = $$('#expScenes input:checked').map(i => +i.value);
   if (kind === 'scene' && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Tick the scenes you want to export.');
+  // read the live scene first, so the confirmation shows the real scene numbers (and which cameras do not answer)
+  const offline = new Set();
+  $('#exportBtn').disabled = true; $('#expSel').textContent = 'Checking the cameras…';
+  await Promise.all(cams.map(async c => { try { if (!c.model) await identify(c); const n = await getScene(c); if (n != null) c.scene = n; else offline.add(c); } catch { offline.add(c); } }));
+  $('#exportBtn').disabled = false; renderCams();
   // what each camera will give, and the file it goes into
   const plan = cams.map(c => {
+    if (offline.has(c)) return { c, what: '<b class="warn-text">not reachable</b>', name: '', html: true };
     if (kind === 'operator') return { c, what: 'operator settings', name: operatorName(c) };
     const sc = mode === 'active' ? [c.scene || 1] : picked.filter(n => n <= (c.model ? profileFor(c.model).scenes : 4));
     return { c, what: mode === 'active' ? `live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : sc.length ? 'scene ' + sc.join(', ') : 'nothing (this model has fewer scenes)', name: sc.length || kind === 'operator' ? fileName(c, sc.map(n => ({ scene: n }))) : '' };
@@ -1017,7 +1077,7 @@ $('#exportBtn').onclick = async () => {
   const ok = await ask({
     title: `Export ${kind === 'operator' ? 'operator files' : 'scene files'} of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
     wide: true, danger: jumps, ok: jumps ? 'Switch scenes and export' : 'Export',
-    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
+    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${p.html ? p.what : esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
       <p>${zip ? `The files go into one ZIP: <span class="mono">${esc(zipName(kind, cams.length))}</span>, ` : 'The files are saved '}in <span class="mono">${esc(state.saveDir || 'Downloads › Panasonic Toolbox')}</span>. Existing files are never overwritten.</p>
       ${jumps ? '<p><b>The picture will change:</b> to read these scenes each camera switches to them and then returns to the scene that was live. Do not do this while a camera is on air.</p>' : '<p>Reading changes nothing on the cameras.</p>'}`,
   });
@@ -2486,11 +2546,16 @@ async function liveSend(t, cmd) {
 }
 const setToggle = (sel, on) => { const el = typeof sel === 'string' ? $(sel) : sel; el.classList.toggle('on', !!on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
 async function liveRead() {
-  const cam = live.cam; if (!cam) return;
+  const cam = live.cam; if (!cam || live.reading) return; // never stack status requests (e.g. on a camera that is off)
+  live.reading = true;
+  try { await liveReadNow(cam); } finally { live.reading = false; }
+}
+async function liveReadNow(cam) {
   let res;
   try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }], { delayMs: 0 }); }
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
+  if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
   const b = i => (res[i]?.ok ? (res[i].body || '').trim() : '');
   const power = b(0).toLowerCase();
   live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';
@@ -2502,7 +2567,15 @@ async function liveRead() {
     if (r) setToggle('#liveTallyR', r[1] === '1');
     if (g) setToggle('#liveTallyG', g[1] === '1');
   }
-  const wb = /^OAW:(\d)$/i.exec(b(9)); if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
+  const wb = /^OAW:(\d)$/i.exec(b(9));
+  if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
+  else if (!wb && /UE160/i.test(cam.model || '') && Date.now() - (live.wbAt || 0) > 3000) {
+    try {
+      const [atw, mem] = await batch(cam, [{ cmd: 'QSL:2A' }, { cmd: 'QSL:2B' }], { delayMs: 0 });
+      const a = /^OSL:2A:(\d)/i.exec(atw?.body || ''), m = /^OSL:2B:(\d)/i.exec(mem?.body || '');
+      if (a?.[1] === '1') showWb('auto'); else if (m) showWb({ 0: 'a', 1: 'b', 4: 'var' }[m[1]] || '');
+    } catch { }
+  }
   const sc = /^OSF:(\d)/.exec(b(6)); if (sc) { cam.scene = +sc[1] + 1; $$('#liveScenes button').forEach(x => x.classList.toggle('on', +x.dataset.scene === cam.scene)); }
   const ir = /^i(\d{2})$/i.exec(b(7)); live.irisVal = ir ? +ir[1] : null; $('#liveIris').textContent = ir ? ir[1] : '–';
   $('#liveStatus').textContent = `${cam.model || ''} ${live.power ? '· ' + live.power : ''}`;

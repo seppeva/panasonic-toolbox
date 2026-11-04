@@ -59,7 +59,9 @@ Panasonic Toolbox\
     └── Parameter lists\                 CSV exports
 ```
 
-Renaming a project renames its folder too. Camera names come from `QSJ:5C`, on older models from `/cgi-bin/get_basic`, otherwise from Easy IP (UDP 10669/10670), which is also used by Network setup.
+Renaming a project renames its folder too.
+
+The app's own data (projects, cameras, shows, scripts, settings) is kept in `state.json` in the app data folder: *~/Library/Application Support/Panasonic Toolbox* on a Mac, *%APPDATA%\Panasonic Toolbox* on Windows. It does not depend on the port or on the window, and data from versions before 2.16 is moved there automatically the first time. Camera names come from `QSJ:5C`, on older models from `/cgi-bin/get_basic`, otherwise from Easy IP (UDP 10669/10670), which is also used by Network setup.
 
 ## Releasing a new version
 

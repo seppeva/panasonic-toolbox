@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.15.0"
+VERSION = "2.16.0"
 DEFAULT_PORT = 8765
 
 
@@ -100,11 +100,14 @@ def build_opener(ip, port, user, password):
 
 
 def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, retries=2):
-    """Eén AW-commando. kind = 'cam' (aw_cam) of 'ptz' (aw_ptz)."""
+    """Eén AW-commando. kind = 'cam' (aw_cam) of 'ptz' (aw_ptz).
+    A busy camera (ER2) is asked again up to `retries` times. A camera that does not answer at all is tried
+    once more at most, so a camera that is switched off costs seconds, not minutes."""
     path = "aw_ptz" if kind == "ptz" else "aw_cam"
     url = f"http://{ip}:{port}/cgi-bin/{path}?cmd={urllib.parse.quote(cmd, safe=':')}&res=1"
     opener = build_opener(ip, port, user, password)
     last_err = None
+    net_tries = 0
     for attempt in range(retries + 1):
         try:
             with opener.open(url, timeout=timeout) as r:
@@ -119,9 +122,12 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
             last_err = f"HTTP {e.code}"
         except Exception as e:
             last_err = str(getattr(e, "reason", e))
+            net_tries += 1
+            refused = "refused" in last_err.lower() or "unreachable" in last_err.lower()
+            if refused or net_tries >= 2 or attempt >= retries:
+                return {"ok": False, "status": 0, "error": last_err, "unreachable": True}
         time.sleep(0.15)
     return {"ok": False, "status": 0, "error": last_err or "unknown error"}
-
 
 def get_basic(ip, port, user=None, password=None, timeout=2.0):
     """The camera's basic settings page (/cgi-bin/get_basic: lines like cam_title=PTZ1). Used for the camera
@@ -151,6 +157,58 @@ ALLOWED_EXT = (".json", ".zip", ".s15", ".html", ".csv", ".ps1", ".sh", ".pshow"
 
 def settings_path():
     return os.path.join(app_data_dir(), "settings.json")
+
+
+# The interface's data (projects, cameras, shows, scripts, ...) lives in state.json in the app data folder,
+# not in the window's storage: that storage depends on the port and the browser, so data could seem lost.
+STATE = {}
+_state_lock = threading.Lock()
+
+
+def state_path():
+    return os.path.join(app_data_dir(), "state.json")
+
+
+def load_state():
+    try:
+        with open(state_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            STATE.update(data)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        # keep a damaged file for inspection and start empty
+        try:
+            os.replace(state_path(), state_path() + ".damaged")
+        except OSError:
+            pass
+
+
+def write_state():
+    path = state_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(STATE, f, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def api_state_set(req):
+    with _state_lock:
+        for k, v in (req.get("set") or {}).items():
+            if isinstance(k, str) and k.startswith("pscene."):
+                STATE[k] = v
+        for k in (req.get("del") or []):
+            STATE.pop(k, None)
+        write_state()
+    return {"ok": True, "keys": len(STATE)}
+
+
+def state_for_page():
+    with _state_lock:
+        data = json.dumps(STATE, ensure_ascii=False)
+    return data.replace("<", "\\u003c").encode("utf-8")
 
 
 def load_settings():
@@ -479,6 +537,10 @@ def api_batch(req):
             if r.get("status") == 401:
                 results += [{"ok": False, "status": 401, "cmd": x.get("cmd"), "error": "auth"} for x in items[i + 1:]]
                 break
+            if r.get("unreachable"):
+                # the camera does not answer: don't wait for every other command too
+                results += [{"ok": False, "status": 0, "cmd": x.get("cmd"), "error": "Camera not reachable", "unreachable": True} for x in items[i + 1:]]
+                break
             if delay and i < len(items) - 1:
                 time.sleep(delay)
     return {"ok": True, "ip": ip, "results": results}
@@ -508,6 +570,8 @@ def api_call(path, req):
         return api_info()
     if path == "/api/batch":
         return (api_batch(req))
+    if path == "/api/state/set":
+        return api_state_set(req)
     if path == "/api/scan":
         return (api_scan(req))
     if path == "/api/save":
@@ -629,6 +693,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/ping":
             # publiek: enkel om te zien of de app al draait
             return self.send_json(200, {"ok": True, "name": "panasonic-scene", "version": VERSION})
+        if path == "/api/focus":
+            # public and harmless: a second start of the app asks this one to show its window
+            return self.send_json(200, {"ok": True, "window": focus_window()})
         if path == "/api/info":
             if not self.token_ok():
                 return self.send_json(401, {"ok": False, "error": "token"})
@@ -649,6 +716,7 @@ class Handler(BaseHTTPRequestHandler):
             data = f.read()
         if full.endswith("index.html"):
             data = data.replace(b"__PS_TOKEN__", SESSION_TOKEN.encode()).replace(b"__PS_VERSION__", VERSION.encode())
+            data = data.replace(b"__PS_STATE__", state_for_page())
         self.send_response(200)
         self.send_header("Content-Type", STATIC_TYPES.get(os.path.splitext(full)[1].lower(), "application/octet-stream"))
         self.send_header("Cache-Control", "no-store" if full.endswith(".html") else "no-cache")
@@ -666,7 +734,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            if n > (60_000_000 if path == "/api/save" else 2_000_000):
+            if n > (60_000_000 if path in ("/api/save", "/api/state/set") else 2_000_000):
                 raise ValueError("Request too large")
             req = json.loads(self.rfile.read(n) or b"{}")
         except Exception as e:
@@ -727,6 +795,35 @@ class Handler(BaseHTTPRequestHandler):
                 time.sleep(0.2)
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
+
+
+def focus_window():
+    """Bring our own window to the front. False when the app runs without a window (browser mode)."""
+    if WINDOW is None:
+        return False
+    try:
+        WINDOW.restore()
+    except Exception:
+        pass
+    try:
+        WINDOW.show()
+    except Exception:
+        pass
+    try:  # briefly on top, so it comes in front of other apps
+        WINDOW.on_top = True
+        threading.Timer(0.6, lambda: setattr(WINDOW, "on_top", False)).start()
+    except Exception:
+        pass
+    return True
+
+
+def ask_running_instance_to_focus(port):
+    try:
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+                f"http://127.0.0.1:{port}/api/focus", timeout=2) as r:
+            return bool(json.loads(r.read()).get("window"))
+    except Exception:
+        return False
 
 
 def running_instance(port):
@@ -812,8 +909,11 @@ def main():
     CONFIG["allow_public"] = a.allow_public_ips
 
     load_settings()
+    load_state()
     if running_instance(a.port):
-        webbrowser.open(f"http://127.0.0.1:{a.port}/")
+        # already running: show that window; only an instance without a window (browser mode) gets the browser
+        if not ask_running_instance_to_focus(a.port):
+            webbrowser.open(f"http://127.0.0.1:{a.port}/")
         return
     threading.Thread(target=_ips_refresher, daemon=True).start()
     srv, port = start_server(a.port)
