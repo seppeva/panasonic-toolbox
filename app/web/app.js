@@ -1381,54 +1381,54 @@ $('#scriptSh').onclick = () => {
 const SHOW_ID = 'panasonic-toolbox-show';
 state.shows = store.get('shows', []);
 const saveShows = () => store.set('shows', state.shows);
-const presetFile = sh => `${sh.name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'Preset'}.pshow`;
-const presetJson = sh => { const { sel, path, ...rest } = sh; return JSON.stringify(rest); };
+const showFile = sh => `${sh.name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'Show'}.pshow`;
+const showJson = sh => { const { sel, path, ...rest } = sh; return JSON.stringify(rest); };
 const b64 = s => { const u8 = new TextEncoder().encode(s); let bin = ''; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(bin); };
-// Renaming a preset also renames its saved .pshow file (and the name inside it)
-async function renamePreset(sh, name) {
+// Renaming a show also renames its saved .pshow file (and the name inside it)
+async function renameShow(sh, name) {
   name = name.trim(); if (!name || name === sh.name) return;
   const old = sh.name; sh.name = name; saveShows();
   if (sh.path && IN_APP) {
-    try { const j = await bridgeFetch('/api/rename', { path: sh.path, name: presetFile(sh), dataB64: b64(presetJson(sh)) }); sh.path = j.path; saveShows(); toast(`Renamed to ${j.path.split(/[\\/]/).pop()}`, j.path); }
-    catch (e) { info('The file could not be renamed', `The preset is now called “${esc(name)}”, but its file stayed as it was: ${esc(e.message)}. Use Save file to save it under the new name.`); delete sh.path; saveShows(); }
+    try { const j = await bridgeFetch('/api/rename', { path: sh.path, name: showFile(sh), dataB64: b64(showJson(sh)) }); sh.path = j.path; saveShows(); toast(`Renamed to ${j.path.split(/[\\/]/).pop()}`, j.path); }
+    catch (e) { info('The file could not be renamed', `The show is now called “${esc(name)}”, but its file stayed as it was: ${esc(e.message)}. Use Save file to save it under the new name.`); delete sh.path; saveShows(); }
   }
-  log(`Preset “${old}” renamed to “${name}”`);
+  log(`Show “${old}” renamed to “${name}”`);
   renderShows();
 }
 function addShow(show, fromFile, path) {
   if (path) show.path = path;
-  if (!show || show.format !== SHOW_ID || !Array.isArray(show.items)) throw new Error('Not a Panasonic Toolbox preset');
-  track(fromFile ? 'Open preset' : 'Save preset', () => { state.shows = state.shows.filter(s => s.name !== show.name); state.shows.push(show); });
+  if (!show || show.format !== SHOW_ID || !Array.isArray(show.items)) throw new Error('Not a Panasonic Toolbox show');
+  track(fromFile ? 'Open show' : 'Save show', () => { state.shows = state.shows.filter(s => s.name !== show.name); state.shows.push(show); });
   saveShows(); renderShows();
-  if (fromFile) toast(`Preset “${show.name}” added to Presets`);
+  if (fromFile) toast(`Show “${show.name}” added to Shows`);
 }
 $('#saveShowBtn').onclick = async () => {
   const jobs = state.jobs.filter(j => j.include && j.target);
-  if (!jobs.length) return info('Nothing to save', 'Choose a camera for at least one file first. A preset remembers which file goes to which camera and scene.');
-  const ok = await ask({ title: 'Save as preset', body: `<label>Name of the preset<input id="askPath" value="Preset ${new Date().toLocaleDateString('en-GB')}"></label><p class="hint">${jobs.length} destination${jobs.length > 1 ? 's' : ''}. The file contents are stored in the show, so it keeps working if the files are moved.</p>`, ok: 'Save preset' });
+  if (!jobs.length) return info('Nothing to save', 'Choose a camera for at least one file first. A show remembers which file goes to which camera and scene.');
+  const ok = await ask({ title: 'Save as show', body: `<label>Name of the show<input id="askPath" value="Show ${new Date().toLocaleDateString('en-GB')}"></label><p class="hint">${jobs.length} destination${jobs.length > 1 ? 's' : ''}. The file contents are stored in the show, so it keeps working if the files are moved.</p>`, ok: 'Save show' });
   if (!ok) return;
-  const name = $('#askPath').value.trim() || 'Preset';
+  const name = $('#askPath').value.trim() || 'Show';
   const show = {
     format: SHOW_ID, version: 1, name, created: new Date().toISOString(),
     items: jobs.map(j => { const s = srcById(j.srcId); const cam = state.cameras.find(c => c.ip === j.target); return { target: j.target, port: cam?.port || 80, targetTitle: cam?.title || cam?.model || '', targetScene: j.targetScene, kind: s.kind, sceneIdx: s.sceneIdx, fileName: s.fileName, file: s.file }; }),
   };
   addShow(show);
-  const path = await download(presetFile(show), presetJson(show));
+  const path = await download(showFile(show), showJson(show));
   if (path) { show.path = path; saveShows(); renderShows(); }
 };
 function renderShows() {
   const tb = $('#showTable tbody'); tb.innerHTML = '';
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select preset"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Preset name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
+    tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
       <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> <button class="ghost small" data-act="file">Save file</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
     $('input[type=checkbox]', tr).onchange = e => { sh.sel = e.target.checked; updShowSel(); };
     $('[data-act=recall]', tr).onclick = () => recallShow(sh);
     const ni = $('.namein', tr);
     ni.addEventListener('keydown', e => { if (e.key === 'Enter') ni.blur(); if (e.key === 'Escape') { ni.value = sh.name; ni.blur(); } });
-    ni.addEventListener('change', () => renamePreset(sh, ni.value));
-    $('[data-act=file]', tr).onclick = async () => { const p = await download(presetFile(sh), presetJson(sh)); if (p) { sh.path = p; saveShows(); renderShows(); } };
-    $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete preset', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
+    ni.addEventListener('change', () => renameShow(sh, ni.value));
+    $('[data-act=file]', tr).onclick = async () => { const p = await download(showFile(sh), showJson(sh)); if (p) { sh.path = p; saveShows(); renderShows(); } };
+    $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete show', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
     tb.appendChild(tr);
   }
   $('#showCount').textContent = state.shows.length;
@@ -1443,10 +1443,10 @@ function updShowSel() {
 $('#showSelAll').onchange = e => { state.shows.forEach(s => s.sel = e.target.checked); renderShows(); };
 $('#showDelSel').onclick = async () => {
   const sel = state.shows.filter(s => s.sel);
-  if (!await ask({ title: `Delete ${sel.length} preset${sel.length > 1 ? 's' : ''}?`, body: '<p>The cameras are not changed. Saved .pshow files stay where they are. You can undo this.</p>', ok: 'Delete', danger: true })) return;
+  if (!await ask({ title: `Delete ${sel.length} show${sel.length > 1 ? 's' : ''}?`, body: '<p>The cameras are not changed. Saved .pshow files stay where they are. You can undo this.</p>', ok: 'Delete', danger: true })) return;
   const before = state.shows.slice();
   state.shows = state.shows.filter(s => !s.sel); saveShows(); renderShows();
-  pushHistory({ label: `Delete ${sel.length} preset(s)`, undo: async () => { state.shows = before; saveShows(); renderShows(); }, redo: async () => { state.shows = before.filter(s => !sel.includes(s)); saveShows(); renderShows(); } });
+  pushHistory({ label: `Delete ${sel.length} show(s)`, undo: async () => { state.shows = before; saveShows(); renderShows(); }, redo: async () => { state.shows = before.filter(s => !sel.includes(s)); saveShows(); renderShows(); } });
 };
 async function recallShow(sh) {
   // make sure every camera of the show is in the list, then run it like an import
@@ -1457,7 +1457,7 @@ async function recallShow(sh) {
     return { id: ++jobId, srcId: src.id, target: it.target, targetScene: it.targetScene, include: true };
   });
   renderCams();
-  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Recall preset “${esc(sh.name)}”?`);
+  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Recall show “${esc(sh.name)}”?`);
   state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id)); // keep the import page clean
 }
 $('#showOpen').onclick = async () => {
@@ -1496,7 +1496,8 @@ function renderEip() {
   for (const r of state.eip) {
     const tr = document.createElement('tr');
     const changed = k => r.edit[k] !== r.orig[k] ? ' changed' : '';
-    tr.innerHTML = `<td><input type="checkbox" ${r.sel ? 'checked' : ''} aria-label="Select"></td><td class="mono small">${esc(r.mac)}</td><td>${esc(r.model)}</td><td>${esc(r.name)}</td>
+    tr.innerHTML = `<td><input type="checkbox" ${r.sel ? 'checked' : ''} aria-label="Select"></td><td class="mono small">${esc(r.mac)}</td><td>${esc(r.model)}</td>
+      <td><input data-k="name" class="${changed('name').trim()}" value="${esc(r.edit.name)}" maxlength="15" aria-label="Camera name" title="Up to 15 characters: letters, digits, space, - _ ."></td>
       <td><input data-k="ip" class="mono${changed('ip')}" value="${esc(r.edit.ip)}" aria-label="IP address"></td>
       <td><input data-k="mask" class="mono${changed('mask')}" value="${esc(r.edit.mask)}" aria-label="Subnet mask"></td>
       <td><input data-k="gateway" class="mono${changed('gateway')}" value="${esc(r.edit.gateway)}" aria-label="Gateway"></td>
@@ -1524,7 +1525,7 @@ async function eipDiscover() {
   try {
     const j = await bridgeFetch('/api/eip/discover', { timeout: 3 });
     const keep = new Map(state.eip.map(r => [r.mac, r.sel]));
-    state.eip = j.cameras.map(c => { const v = { ip: c.ip, mask: c.mask, gateway: c.gateway, port: c.port }; return { ...c, sel: keep.get(c.mac) || false, orig: { ...v }, edit: { ...v } }; });
+    state.eip = j.cameras.map(c => { const v = { name: c.name, ip: c.ip, mask: c.mask, gateway: c.gateway, port: c.port }; return { ...c, sel: keep.get(c.mac) || false, orig: { ...v }, edit: { ...v } }; });
     $('#eipStatus').textContent = `${state.eip.length} camera${state.eip.length === 1 ? '' : 's'} found.`;
     log(`Easy IP: ${state.eip.length} camera(s) found`);
   } catch (e) { $('#eipStatus').textContent = 'Search failed: ' + e.message; }
@@ -1545,12 +1546,38 @@ $('#eipFill').onclick = () => {
   }
   renderEip();
 };
+// Camera name (title): letters, digits, space and - _ . , at most 15 characters.
+const validCamName = n => /^[A-Za-z0-9 _.\-]{1,15}$/.test(n);
+const netChanged = (a, b) => ['ip', 'mask', 'gateway', 'port'].some(k => a[k] !== b[k]);
+// The name is set over the camera's REST interface (OSJ:5C), so the camera must be reachable from this computer.
+async function setCamName(r, v, waitForNetwork) {
+  const cam = { ip: v.ip, port: v.port || 80 };
+  const tries = waitForNetwork ? 10 : 1;
+  let last = '';
+  for (let i = 0; i < tries; i++) {
+    if (waitForNetwork) await sleep(i ? 2000 : 4000); // the camera restarts its network after an IP change
+    try {
+      const res = await batch(cam, [{ cmd: 'OSJ:5C:' + v.name }]);
+      if (res[0]?.status === 401) throw new Error('login required (enter it on the Cameras page)');
+      if (res[0]?.ok && !isErr(res[0].body)) { log(`Name of ${r.mac} set to "${v.name}"`); return; }
+      last = res[0]?.ok ? 'this model does not accept a new name this way (' + res[0].body + ')' : (res[0]?.error || 'no answer');
+      if (res[0]?.ok) break;
+    } catch (e) { last = e.message; if (/login/.test(last)) break; }
+  }
+  throw new Error(`name not changed: ${last}. The computer must be in the same IP range as ${v.ip}.`);
+}
 async function eipSend(list, field) {
   const fails = [];
   for (const r of list) {
-    const v = r[field];
-    try { await bridgeFetch('/api/eip/set', { mac: r.mac, ip: v.ip, mask: v.mask, gateway: v.gateway, dns1: r.dns1, dns2: r.dns2, port: v.port }); log(`Easy IP: ${r.mac} → ${v.ip}`); }
-    catch (e) { fails.push(`${r.mac}: ${e.message}`); }
+    const v = r[field], other = r[field === 'edit' ? 'orig' : 'edit'];
+    const net = netChanged(v, other);
+    if (net) {
+      try { await bridgeFetch('/api/eip/set', { mac: r.mac, ip: v.ip, mask: v.mask, gateway: v.gateway, dns1: r.dns1, dns2: r.dns2, port: v.port }); log(`Easy IP: ${r.mac} → ${v.ip}`); }
+      catch (e) { fails.push(`${r.mac}: ${e.message}`); continue; }
+    }
+    if (v.name !== other.name) {
+      try { await setCamName(r, v, net); } catch (e) { fails.push(`${r.model || r.mac}: ${e.message}`); }
+    }
   }
   if (fails.length) throw new Error(fails.join('; '));
 }
@@ -1558,17 +1585,20 @@ $('#eipApply').onclick = async () => {
   const list = state.eip.filter(r => JSON.stringify(r.edit) !== JSON.stringify(r.orig));
   const bad = list.find(r => !validIp(r.edit.ip, true) || !validIp(r.edit.mask, true) || (r.edit.gateway && r.edit.gateway !== '0.0.0.0' && !validIp(r.edit.gateway, true)));
   if (bad) return info('Check the values', `The settings for ${esc(bad.mac)} are not valid IPv4 addresses.`);
+  const badName = list.find(r => r.edit.name !== r.orig.name && !validCamName(r.edit.name));
+  if (badName) return info('Check the name', `“${esc(badName.edit.name)}” is not a valid camera name. Use at most 15 letters, digits, spaces, hyphens, underscores or dots.`);
   const dup = list.find(r => state.eip.some(o => o !== r && (o.edit.ip === r.edit.ip)));
   if (dup) return info('Duplicate IP address', `${esc(dup.edit.ip)} is used more than once.`);
   const ok = await ask({
     title: `Change the network settings of ${list.length} camera${list.length > 1 ? 's' : ''}?`,
-    body: `<ul>${list.map(r => `<li><b>${esc(r.model || r.mac)}</b> ${esc(r.name)}: <span class="mono">${esc(r.orig.ip)} → ${esc(r.edit.ip)}</span></li>`).join('')}</ul>
-      <p>The cameras restart their network and are briefly unreachable. Cameras only accept this within about 20 minutes after they were switched on; if a camera does not change, restart it and try again.</p>`,
+    body: `<ul>${list.map(r => `<li><b>${esc(r.model || r.mac)}</b> ${esc(r.orig.name)}: ${[r.edit.name !== r.orig.name ? `name → <b>${esc(r.edit.name)}</b>` : '', netChanged(r.edit, r.orig) ? `<span class="mono">${esc(r.orig.ip)} → ${esc(r.edit.ip)}</span>` : ''].filter(Boolean).join(', ')}</li>`).join('')}</ul>
+      ${list.some(r => netChanged(r.edit, r.orig)) ? '<p>The cameras restart their network and are briefly unreachable. Cameras only accept new network settings within about 20 minutes after they were switched on; if a camera does not change, restart it and try again.</p>' : ''}
+      ${list.some(r => r.edit.name !== r.orig.name) ? '<p>A new name is sent to the camera directly, so this computer must be in the same IP range as the camera (after any IP change).</p>' : ''}`,
     ok: 'Apply', danger: true,
   });
   if (!ok) return;
   $('#eipApply').disabled = true; $('#eipStatus').textContent = 'Sending…';
-  const snap = list.map(r => ({ mac: r.mac, dns1: r.dns1, dns2: r.dns2, orig: { ...r.orig }, edit: { ...r.edit } }));
+  const snap = list.map(r => ({ mac: r.mac, model: r.model, dns1: r.dns1, dns2: r.dns2, orig: { ...r.orig }, edit: { ...r.edit } }));
   try { await eipSend(snap, 'edit'); } catch (e) { info('Not every camera accepted the change', esc(e.message)); }
   pushHistory({ label: `Network settings of ${snap.length} camera${snap.length > 1 ? 's' : ''}`, camera: true, many: snap.length > 1,
     undo: async () => { await eipSend(snap, 'orig'); setTimeout(eipDiscover, 2500); }, redo: async () => { await eipSend(snap, 'edit'); setTimeout(eipDiscover, 2500); } });
@@ -1583,7 +1613,7 @@ $('#eipDelSel').onclick = () => {
 $('#eipToList').onclick = () => {
   const list = state.eip.filter(r => r.sel).length ? state.eip.filter(r => r.sel) : state.eip;
   if (!list.length) return info('No cameras found yet', 'Search the network first.');
-  track('Add cameras from network setup', () => list.forEach(r => upsertCam(r.orig.ip, r.orig.port, { model: r.model, title: r.name })));
+  track('Add cameras from network setup', () => list.forEach(r => upsertCam(r.orig.ip, r.orig.port, { model: r.model, title: r.orig.name })));
   renderCams(); refreshAll(state.cameras.filter(c => list.some(r => r.orig.ip === c.ip)));
   toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to Cameras`);
 };

@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panasonic Toolbox: export and import scene files of Panasonic PTZ cameras</title>
-<meta name="description" content="Desktop app for Mac and Windows to save, copy and restore the scene files (shading) of Panasonic PTZ cameras.">
+<title>Panasonic Toolbox: the all-in-one app for Panasonic PTZ cameras and remote controllers</title>
+<meta name="description" content="One free desktop app for Mac and Windows to set up, control, back up and automate Panasonic PTZ cameras and AW-RP remote controllers.">
 <link rel="icon" href="app/web/icon.svg">
 <style>
 /* IBM Plex (SIL Open Font License) is self-hosted: no connection to Google or other third parties. */
@@ -57,18 +57,11 @@ p{margin:0 0 1em}
 /* sections: title left, content right */
 .sec{display:grid;grid-template-columns:280px 1fr;gap:48px;padding:80px 0;border-top:1px solid var(--rule)}
 .sec:first-of-type{border-top:0}
+#features .sec{border-top:0;padding-top:96px}
 .sec-head h2{font-size:26px;line-height:1.2;letter-spacing:-.01em;margin-bottom:10px}
 .sec-head p{color:var(--muted);font-size:15.5px}
 .band{background:var(--band)}
 .band .sec{border-top:0}
-
-/* steps */
-ol.steps{list-style:none;margin:36px 0 0;padding:0;counter-reset:s}
-ol.steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;padding:18px 0;border-top:1px solid var(--rule)}
-ol.steps li::before{content:counter(s);font-weight:600;color:var(--action);font-size:17px}
-ol.steps h3{font-size:17px;margin-bottom:2px}
-ol.steps p{margin:0;max-width:62ch}
-.diagram svg{width:100%;height:auto;display:block}
 
 /* downloads */
 .dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px}
@@ -91,17 +84,31 @@ details li{margin:4px 0}
 .dl-col details{margin-top:22px}
 .dl-col details:last-child{border-bottom:1px solid var(--rule)}
 
-/* features */
-dl.features{display:grid;grid-template-columns:1fr 1fr;gap:32px 40px;margin:0}
-dl.features div{border-top:1px solid var(--rule);padding-top:14px}
-dl.features dt{color:var(--ink);font-weight:600;margin-bottom:6px}
-dl.features dd{margin:0;font-size:16px}
+/* features per app tab */
+.tabrows{border-bottom:1px solid var(--rule)}
+.tabrow{display:grid;grid-template-columns:220px 1fr;gap:32px;align-items:start;padding:22px 0;border-top:1px solid var(--rule)}
+.tabrow h3{display:flex;align-items:center;gap:10px;font-size:17px;line-height:1.4}
+.tabrow h3 svg{width:20px;height:20px;flex:none;fill:none;stroke:var(--action);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tabrow p{margin:0 0 6px;color:var(--ink)}
+.tabrow ul{margin:0;padding-left:20px;font-size:16px}
+.tabrow li{margin:3px 0}
+@media (max-width:900px){.tabrow{grid-template-columns:1fr;gap:8px}}
 
-/* table */
-table.models{width:100%;border-collapse:collapse;font-size:16px;margin-bottom:26px}
-table.models th,table.models td{text-align:left;padding:11px 0;border-bottom:1px solid var(--rule)}
+/* downloads closed */
+a[data-dl][aria-disabled="true"]{pointer-events:none;cursor:default}
+.btn[aria-disabled="true"]{background:#c9ced6;color:#fff}
+a[data-dl][aria-disabled="true"]:not(.btn){color:var(--muted);text-decoration:none}
+body:not(.dl-open) [data-dl-only]{display:none}
+body.dl-open #soonNote{display:none}
+.soon{font-size:15px;color:var(--ink);background:#fff;border:1px solid var(--rule);border-left:3px solid var(--action);border-radius:4px;padding:10px 12px}
+
+/* model tables */
+.tbl-title{font-size:14px;letter-spacing:.06em;text-transform:uppercase;color:var(--action);margin:0 0 6px}
+table.models{width:100%;border-collapse:collapse;font-size:16px;margin-bottom:36px}
+table.models th,table.models td{text-align:left;vertical-align:top;padding:11px 16px 11px 0;border-bottom:1px solid var(--rule)}
 table.models th{font-size:14px;color:var(--muted);font-weight:500}
-table.models td:last-child,table.models th:last-child{text-align:right}
+table.models td:first-child{color:var(--ink);width:55%}
+#models .sec{padding-top:40px}
 .mono{font-family:var(--mono);font-size:.88em}
 
 footer{border-top:1px solid var(--rule);padding:28px 0 48px;color:var(--muted);font-size:14.5px}
@@ -110,7 +117,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 @media (max-width:900px){
   .hero{padding-top:44px}.hero h1{font-size:38px}.hero .lead{font-size:18px}
   .sec{grid-template-columns:1fr;gap:20px;padding:56px 0}
-  .dl-grid,dl.features{grid-template-columns:1fr}
+  .dl-grid{grid-template-columns:1fr}
   .bar nav{display:none}
   .wrap{padding:0 20px}
 }
@@ -120,18 +127,18 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 
 <header class="wrap bar">
   <a class="brand" href="#top"><img src="app/web/icon.svg" alt="">Panasonic Toolbox</a>
-  <nav aria-label="Main"><a href="#how">How it works</a><a href="#download">Download</a><a href="#contents">Scene file contents</a><a href="#faq">Questions</a></nav>
+  <nav aria-label="Main"><a href="#features">Features</a><a href="#models">Supported models</a><a href="#download">Download</a></nav>
 </header>
 
 <main id="top">
   <div class="wrap hero">
     <div class="hero-text">
-      <h1>Save and restore the scene files of Panasonic PTZ cameras</h1>
-      <p class="lead">An AW-RP120 or AW-RP150 cannot export a camera's shading. Panasonic Toolbox reads every setting of a scene, saves it to a file and puts it back on the same camera or another one.</p>
+      <h1>The all-in-one toolbox for Panasonic PTZ cameras and remotes</h1>
+      <p class="lead">Everything you do around Panasonic PTZ cameras and remotes, in one app on your Mac or PC.</p>
       <div class="actions">
-        <a class="btn" id="mainDl" href="#download">
+        <a class="btn" id="mainDl" data-dl aria-disabled="true">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 17h12"/></svg>
-          <span id="mainDlLabel">Download</span>
+          <span id="mainDlLabel">Download coming soon</span>
         </a>
         <a href="#download" id="otherDl">Other systems and install help</a>
       </div>
@@ -142,53 +149,80 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
         <div class="chrome" aria-hidden="true"><i></i><i></i><i></i></div>
         <img src="assets/app-screenshot.jpg" width="1920" height="1200" alt="Panasonic Toolbox listing five cameras with model, title, active scene, status and buttons for their web pages.">
       </div>
-      <figcaption>After a network scan every camera is listed with its model, title and live scene.</figcaption>
+      <figcaption>Every camera on the network in one list, with its model, title, zone and live scene.</figcaption>
     </figure>
   </div>
 
-  <div class="wrap">
-    <section class="sec" id="how">
+  <div class="wrap" id="features">
+    <section class="sec">
       <div class="sec-head">
-        <h2>How it works</h2>
-        <p>The app runs on your computer and talks to the cameras over the network, with the same commands an RP150 uses. No internet connection is needed.</p>
+        <h2>Everything in one app</h2>
+        <p>No more switching between Easy IP Setup, web pages, the controller menu and a text file of commands.</p>
+      </div>
+      <div class="tabrows">
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="4.5" r="2"/><circle cx="4" cy="15.5" r="2"/><circle cx="16" cy="15.5" r="2"/><path d="M10 6.5v4M10 10.5L4.8 13.8M10 10.5l5.2 3.3"/></svg>Network setup</h3>
+          <div><p>Get the cameras on the right names and IP addresses, the way Panasonic's Easy IP Setup does.</p><ul><li>Find Panasonic cameras in any IP range, even outside your own</li><li>Give one or many cameras a new name, IP address, subnet mask and gateway in one go</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg>Cameras</h3>
+          <div><p>Your camera list: the starting point for everything else.</p><ul><li>Scan the network and see every camera with its model, title, live scene and status</li><li>Group cameras in zones and select a whole zone at once</li><li>Open a camera's live page or settings page in your browser, already logged in</li><li>Enter the login once for cameras with User Auth</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><circle cx="15.5" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg>Live</h3>
+          <div><p>Watch a camera and operate it from your computer.</p><ul><li>Live picture with pan, tilt, zoom, focus and iris</li><li>Recall presets, switch scenes and turn tally on or off</li><li>Keyboard control</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg>Export</h3>
+          <div><p>Save the settings of any scene, also the scenes that are not live on the camera.</p><ul><li>Scene files with every shading setting</li><li>Operator files</li><li>Several cameras at once into one ZIP</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg>Import</h3>
+          <div><p>Put saved settings back on any camera.</p><ul><li>Choose per file which camera and which scene it goes to, even across models</li><li>Compare first: see which values differ from what is on the camera now</li><li>Automatic backup before, and every value read back after</li><li>Undo and redo, also for changes sent to the cameras</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 7.5l4.5 2.5L8 12.5z"/></svg>Shows</h3>
+          <div><p>A whole setup back on the cameras with one click.</p><ul><li>Save which scene and operator file goes to which camera and scene</li><li>Recall a complete show at the start of a production</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h8"/></svg>Parameters</h3>
+          <div><p>The reference for everything the cameras understand, and the bridge to Companion.</p><ul><li>Search every REST command of the cameras and controllers and copy a ready-made GET link for Bitfocus Companion</li><li>Bundle commands into a PowerShell or shell script that runs on many cameras or a whole zone</li><li>See what is in a scene file and an operator file per model, and save it as CSV</li></ul></div>
+        </div>
+        <div class="tabrow">
+          <h3><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg>RP150 assignment</h3>
+          <div><p>Assign cameras to an AW-RP150 without going through its menus. Experimental.</p><ul><li>Put the found cameras on the CAM buttons</li><li>Renumber or move IP addresses in bulk and set the connection type</li><li>Works through the controller's Network.s15 file, with step-by-step instructions</li></ul></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap" id="models">
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Supported models</h2>
+        <p>Network setup, live control and REST commands work on every Panasonic PTZ camera. Scene files follow Panasonic's Interface Specifications per model.</p>
       </div>
       <div>
-        <div class="diagram">
-          <svg viewBox="0 0 820 260" role="img" aria-label="Diagram: a computer running Panasonic Toolbox and the AW-RP150 are connected through a network switch to three PTZ cameras.">
-            <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="14" fill="#16191d" stroke-linecap="round">
-              <g fill="none" stroke="#16191d" stroke-width="1.5">
-                <rect x="10" y="80" width="170" height="104" rx="6"/>
-                <path d="M0 196h190"/>
-                <rect x="320" y="104" width="150" height="56" rx="4"/>
-                <rect x="610" y="20" width="200" height="52" rx="4"/>
-                <rect x="610" y="104" width="200" height="52" rx="4"/>
-                <rect x="610" y="188" width="200" height="52" rx="4"/>
-              </g>
-              <g fill="none" stroke="#1d5fd0" stroke-width="2">
-                <path d="M180 132H320"/>
-                <path d="M470 124c70 0 70-78 140-78"/>
-                <path d="M470 132H610"/>
-                <path d="M470 140c70 0 70 74 140 74"/>
-              </g>
-              <path d="M395 160v62h-205" fill="none" stroke="#9aa2ad" stroke-width="1.5" stroke-dasharray="4 4"/>
-              <text x="95" y="126" text-anchor="middle" font-weight="600">Computer</text>
-              <text x="95" y="148" text-anchor="middle" fill="#6b7380" font-size="13">Panasonic Toolbox</text>
-              <text x="95" y="166" text-anchor="middle" fill="#6b7380" font-size="13">192.168.0.200</text>
-              <text x="395" y="137" text-anchor="middle" font-weight="600">Network switch</text>
-              <text x="250" y="122" text-anchor="middle" fill="#6b7380" font-size="12.5">LAN</text>
-              <text x="200" y="240" fill="#6b7380" font-size="12.5">AW-RP150 (keeps working as usual)</text>
-              <text x="628" y="43" font-weight="600">CAM 1  AW-UE150</text><text x="628" y="62" fill="#6b7380" font-size="13">192.168.0.11</text>
-              <text x="628" y="127" font-weight="600">CAM 2  AW-UE160</text><text x="628" y="146" fill="#6b7380" font-size="13">192.168.0.12</text>
-              <text x="628" y="211" font-weight="600">CAM 3  AW-UE100</text><text x="628" y="230" fill="#6b7380" font-size="13">192.168.0.13</text>
-            </g>
-          </svg>
-        </div>
-        <ol class="steps">
-          <li><div><h3>Put your computer in the cameras' IP range</h3><p>Give your computer a fixed address in the range of the cameras, for example 192.168.0.200 with subnet mask 255.255.255.0, and connect it to the same switch.</p></div></li>
-          <li><div><h3>Find the cameras</h3><p>Open Panasonic Toolbox and choose <em>Scan network</em>. Each PTZ shows up with its model, title and live scene. From the list you can also open a camera's live page or settings page, already logged in.</p></div></li>
-          <li><div><h3>Export</h3><p>Pick the cameras and either the live scene or scenes 1 to 4 (up to 8 on the AW-UE160). Each camera becomes a <span class="mono">.pscene.json</span> file in the folder you choose; several cameras go into one ZIP. Before the app switches scenes, it asks you to confirm.</p></div></li>
-          <li><div><h3>Import</h3><p>Open a file and choose for each scene which camera and which scene it goes to. The app saves the current settings as a backup first and reads everything back afterwards to check.</p></div></li>
-        </ol>
+        <h3 class="tbl-title">PTZ cameras</h3>
+        <table class="models">
+          <thead><tr><th>Model</th><th>Scene files</th></tr></thead>
+          <tbody>
+            <tr><td>AW-UE160</td><td>198 settings per scene, 8 scenes</td></tr>
+            <tr><td>AW-UE150, AW-UE155, AW-HE145</td><td>111 settings per scene</td></tr>
+            <tr><td>AW-UE150A</td><td>110 settings per scene</td></tr>
+            <tr><td>AW-UE100</td><td>98 settings per scene</td></tr>
+            <tr><td>AW-UE80, AW-UE50, AW-UE40, AW-UE30</td><td>85 settings per scene</td></tr>
+            <tr><td>AW-UE70, AW-UE20, AW-UR100, AW-HR140, AW-HE130, AW-HE120, AW-HE75, AW-HE70, AW-HE60, AW-HE50 and other models</td><td>Whatever the camera supports</td></tr>
+          </tbody>
+        </table>
+        <h3 class="tbl-title">Remote camera controllers</h3>
+        <table class="models">
+          <thead><tr><th>Model</th><th>What the app does</th></tr></thead>
+          <tbody>
+            <tr><td>AW-RP150</td><td>Camera assignment and controller REST commands</td></tr>
+            <tr><td>AW-RP120, AW-RP60</td><td>Controller REST commands</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
   </div>
@@ -200,15 +234,16 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <h2>Download</h2>
           <p>Free, no account needed. The app includes everything it needs; nothing else has to be installed.</p>
           <p id="verLine"></p>
+          <p class="soon" id="soonNote">The app is being tested. Downloads open as soon as this version is approved.</p>
         </div>
         <div class="dl-grid">
           <div class="dl-col">
             <h3>macOS</h3>
             <p class="os-req">macOS 11 Big Sur or later</p>
-            <a class="btn" href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-AppleSilicon.dmg">Mac with Apple silicon (M1–M4) <span class="size" data-asset="PanasonicToolbox-macOS-AppleSilicon.dmg"></span></a>
-            <p class="alt">Older Mac with an Intel processor? <a href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-Intel.dmg">Download the Intel version</a></p>
-            <p class="term-label">Or install from Terminal. This avoids the security warning when opening the app:</p>
-            <div class="term"><code data-cmd="install.sh">curl -fsSL https://seppeva.github.io/panasonic-toolbox/install.sh | bash</code><button type="button" data-copy>Copy</button></div>
+            <a class="btn" data-dl data-href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-AppleSilicon.dmg" aria-disabled="true">Mac with Apple silicon (M1–M4) <span class="size" data-asset="PanasonicToolbox-macOS-AppleSilicon.dmg"></span></a>
+            <p class="alt">Older Mac with an Intel processor? <a data-dl data-href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-Intel.dmg" aria-disabled="true">Download the Intel version</a></p>
+            <p class="term-label" data-dl-only>Or install from Terminal. This avoids the security warning when opening the app:</p>
+            <div class="term" data-dl-only><code data-cmd="install.sh">curl -fsSL https://seppeva.github.io/panasonic-toolbox/install.sh | bash</code><button type="button" data-copy>Copy</button></div>
             <details>
               <summary>Opening the app for the first time</summary>
               <ol>
@@ -222,10 +257,10 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
           <div class="dl-col">
             <h3>Windows</h3>
             <p class="os-req">Windows 10 or 11, 64-bit</p>
-            <a class="btn" href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Setup.exe">Installer <span class="size" data-asset="PanasonicToolbox-Windows-Setup.exe"></span></a>
-            <p class="alt">Prefer not to install? <a href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Portable.zip">Download the portable version</a></p>
-            <p class="term-label">Or install from PowerShell:</p>
-            <div class="term"><code data-cmd="install.ps1">irm https://seppeva.github.io/panasonic-toolbox/install.ps1 | iex</code><button type="button" data-copy>Copy</button></div>
+            <a class="btn" data-dl data-href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Setup.exe" aria-disabled="true">Installer <span class="size" data-asset="PanasonicToolbox-Windows-Setup.exe"></span></a>
+            <p class="alt">Prefer not to install? <a data-dl data-href="https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Portable.zip" aria-disabled="true">Download the portable version</a></p>
+            <p class="term-label" data-dl-only>Or install from PowerShell:</p>
+            <div class="term" data-dl-only><code data-cmd="install.ps1">irm https://seppeva.github.io/panasonic-toolbox/install.ps1 | iex</code><button type="button" data-copy>Copy</button></div>
             <details>
               <summary>Opening the app for the first time</summary>
               <ol>
@@ -241,65 +276,6 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
     </div>
   </div>
 
-  <div class="wrap">
-    <section class="sec">
-      <div class="sec-head">
-        <h2>Features</h2>
-        <p>Made for work on set: fast, predictable and without surprises in the picture.</p>
-      </div>
-      <dl class="features">
-        <div><dt>Export without touching the picture</dt><dd>Reading the live scene changes nothing on air. For other scenes the app asks first, switches briefly and returns to the scene that was live.</dd></div>
-        <div><dt>Import with backup and check</dt><dd>See which values differ before you start. The destination scene is saved first and every value is read back afterwards.</dd></div>
-        <div><dt>Any file to any camera and scene</dt><dd>Choose per scene which camera and which scene it goes to, or send one look to several cameras, even across models. Settings a camera doesn't support are skipped and reported.</dd></div>
-        <div><dt>REST commands and scripts for Companion</dt><dd>Search every Panasonic camera command, from zoom and presets to tally and night mode, and copy a ready-made link for a GET request in Bitfocus Companion. Or bundle commands into a PowerShell or shell script that runs on several cameras at once.</dd></div>
-        <div><dt>Live view and control</dt><dd>Watch a camera's picture and control pan, tilt, zoom, focus, iris, presets, scenes and tally from one screen, with the keyboard too.</dd></div>
-        <div><dt>Network setup</dt><dd>Find Panasonic cameras in any IP range, like Panasonic's Easy IP Setup, and give one or many of them a new IP address, subnet mask and gateway.</dd></div>
-        <div><dt>Presets</dt><dd>Save which scene and operator file goes to which camera and scene, and put a whole setup back on the cameras with one click.</dd></div>
-        <div><dt>Operator files</dt><dd>Take an operator's personal settings, such as preset speeds, pan/tilt and lens preferences, from one camera to another, separate from the scenes.</dd></div>
-        <div><dt>Zones</dt><dd>Group cameras by zone, such as stage or FOH, and select, export or script a whole zone at once. Edit or remove several cameras, rows or shows in one go.</dd></div>
-        <div><dt>Your own file names</dt><dd>Set how scene files, operator files and ZIPs are named, for example operatorfile_{title}, with the camera title, IP, zone, scene or date filled in.</dd></div>
-        <div><dt>Undo and redo</dt><dd>Step back through edits in the app as well as changes sent to the cameras.</dd></div>
-        <div><dt>Camera web pages in one click</dt><dd>Open a camera's live page or settings page in your browser from the camera list, logged in with the camera login you entered.</dd></div>
-        <div><dt>RP150 assignment</dt><dd>Assign the found cameras to CAM buttons, renumber or move their IP addresses in bulk, set connection type LAN or None, by editing the RP150's Network.s15 file from its SD card (experimental), with step-by-step instructions.</dd></div>
-        <div><dt>Works offline</dt><dd>Nothing goes through the internet and files stay on your computer. Only when you are online does the app check for a new version, and you can turn that off.</dd></div>
-        <div><dt>Cameras with a login</dt><dd>If User Auth is on, enter the user name and password once. You can choose to remember them on this computer.</dd></div>
-      </dl>
-    </section>
-
-    <section class="sec" id="contents">
-      <div class="sec-head">
-        <h2>Contents</h2>
-        <p>For each model exactly the settings that belong to a scene according to Panasonic's Interface Specifications.</p>
-      </div>
-      <div>
-        <table class="models">
-          <thead><tr><th>Camera</th><th>Settings per scene</th></tr></thead>
-          <tbody>
-            <tr><td>AW-UE150, AW-UE155, AW-HE145</td><td>111</td></tr>
-            <tr><td>AW-UE150A</td><td>110</td></tr>
-            <tr><td>AW-UE160 (8 scene files)</td><td>198</td></tr>
-            <tr><td>AW-UE100</td><td>98</td></tr>
-            <tr><td>AW-UE80, AW-UE50, AW-UE40, AW-UE30</td><td>85</td></tr>
-            <tr><td>Other models, such as the AW-HE130 and AW-UE70</td><td>Whatever the camera supports</td></tr>
-          </tbody>
-        </table>
-        <p>That includes picture level, iris mode and auto iris, shutter, gain and super gain, ND filter and day/night, white balance with color temperature and R/B gain, ATW, chroma level and phase, master and RGB pedestal, detail and skin detail, gamma and black gamma, knee and white clip, DRS, DNR, linear matrix and the color correction per color vector. The AW-UE160 adds flare, RGB gain per channel and HDR paint.</p>
-        <p>Not in a scene file: iris, zoom and focus position, presets, network and output settings. <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/PARAMETERS.md">Full list per model</a></p>
-      </div>
-    </section>
-
-    <section class="sec" id="faq">
-      <div class="sec-head"><h2>Questions</h2></div>
-      <div>
-        <details><summary>The scan finds no cameras</summary><ul><li>Check that your computer is in the same range, for example 192.168.0.x with subnet mask 255.255.255.0.</li><li>Turn Wi-Fi off or give the wired connection priority.</li><li>Mac: in System Settings › Privacy &amp; Security › Local Network, make sure Panasonic Toolbox is turned on.</li><li>Windows: allow Panasonic Toolbox on private networks in the firewall.</li></ul></details>
-        <details><summary>Does the picture change while exporting?</summary><p>Not when you export the live scene only. To read other scenes the camera has to switch to them, so the app asks you to confirm first. Don't do that while a camera is on air.</p></details>
-        <details><summary>Can I undo an import?</summary><p>Yes. Before every import the app saves the current settings of the destination scene as a separate file. Import that file to go back.</p></details>
-        <details><summary>Can the RP150 be used at the same time?</summary><p>Yes, both control the same cameras and changes made in the app show up on the controller. Preferably don't operate the controller during an import.</p></details>
-        <details><summary>Do I need to reinstall for an update?</summary><p>Install the new version over the old one, for example with the same Terminal or PowerShell command. Your camera list and settings are kept.</p></details>
-        <details><summary>Is this Panasonic software?</summary><p>No. Panasonic Toolbox uses the publicly documented camera functions, but it is an independent tool.</p></details>
-      </div>
-    </section>
-  </div>
 </main>
 
 <footer>
@@ -311,6 +287,8 @@ footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 
 <script>
 'use strict';
+// Set to true once the app is tested and approved: makes every download button and install command work.
+const DOWNLOADS_OPEN = false;
 const REPO = 'seppeva/panasonic-toolbox';
 const BASE = `https://github.com/${REPO}/releases/latest/download/`;
 const DL = {
@@ -332,8 +310,13 @@ async function detect() {
   }
   return null;
 }
+if (DOWNLOADS_OPEN) {
+  document.body.classList.add('dl-open');
+  document.querySelectorAll('a[data-dl]').forEach(a => { a.href = a.dataset.href || '#download'; a.removeAttribute('aria-disabled'); });
+  document.getElementById('mainDlLabel').textContent = 'Download';
+}
 (async () => {
-  const os = await detect();
+  const os = DOWNLOADS_OPEN ? await detect() : null;
   if (os) {
     document.getElementById('mainDl').href = BASE + DL[os].file;
     document.getElementById('mainDlLabel').textContent = DL[os].label;
