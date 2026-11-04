@@ -15,6 +15,7 @@
 <div class="shell">
 <aside class="side">
   <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Toolbox</span></div>
+  <button type="button" class="project-name" id="projectName" title="Project. Switch projects in Settings"></button>
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" data-tab="netsetup"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="2"/><circle cx="4" cy="15.5" r="2"/><circle cx="16" cy="15.5" r="2"/><path d="M10 6.5v4M10 10.5L4.8 13.8M10 10.5l5.2 3.3"/></svg><span>Network setup</span></button>
     <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Cameras</span></button>
@@ -88,7 +89,7 @@
     </div>
     <datalist id="zoneList"></datalist>
     <table class="tbl" id="camTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>Description</th><th>Name on camera</th><th>IP address</th><th>Model</th><th>Zone</th><th>Profile</th><th>Active scene</th><th>Status</th><th>Camera web pages</th><th><span class="sr">Remove</span></th></tr></thead>
+      <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>IP address</th><th>Name on camera</th><th>Description</th><th>Model</th><th>Zone</th><th>Profile</th><th>Active scene</th><th>Status</th><th>Camera web pages</th><th><span class="sr">Remove</span></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="empty muted" id="camEmpty">No cameras yet. Scan the network or add a camera by IP.</p>
@@ -97,7 +98,7 @@
 
 <!-- ================= EXPORT ================= -->
 <section id="tab-export" class="tab">
-  <header class="page-head"><h1>Export</h1><p>Saves the shading settings of the scenes, or an operator's personal settings, as files in the folder you choose.</p></header>
+  <header class="page-head"><h1>Export</h1><p>Saves the shading settings of the scenes, or an operator's personal settings, as files in the save folder from Settings.</p></header>
   <div class="grid2">
     <div class="card">
       <div class="row between"><h2>Cameras</h2><span class="row"><button class="ghost small" id="expAll">All</button><button class="ghost small" id="expNone">None</button></span></div>
@@ -120,18 +121,17 @@
         <div id="expScenes" class="chips indent"></div>
       </fieldset>
       <h2 class="mt">File name</h2>
-      <p class="hint">Every camera gets its own file.</p>
-      <label class="namefield"><span class="sr">File name</span><span class="row nowrap"><input id="expName" class="mono grow" autocomplete="off" aria-label="File name"><span class="mono muted ext" id="expExt">.pscene.json</span></span></label>
+      <p class="hint">Every camera gets its own file. Click the parts below to build the name.</p>
+      <label class="namefield"><span class="sr">File name</span><span class="row nowrap"><input id="expName" class="mono grow" autocomplete="off" aria-label="File name" placeholder="Click the parts below"><span class="mono muted ext" id="expExt">.pscene.json</span></span></label>
       <div class="chips tokens" id="expTokens"></div>
       <p class="hint" id="expNamePreview"></p>
       <h2 class="mt">Several cameras</h2>
       <label class="check"><input type="checkbox" id="expZip" checked> Put the files of several cameras in one ZIP</label>
       <div class="subbox" id="expZipBox">
-        <label class="namefield">ZIP name <span class="row nowrap"><input id="expZipName" class="mono grow" autocomplete="off"><span class="mono muted ext">.zip</span></span></label>
+        <label class="namefield">ZIP name <span class="row nowrap"><input id="expZipName" class="mono grow" autocomplete="off" placeholder="Click the parts below"><span class="mono muted ext">.zip</span></span></label>
         <div class="chips tokens" id="expZipTokens"></div>
         <p class="hint" id="expZipPreview"></p>
       </div>
-      <p class="hint">Saved to <span class="mono" data-savedir></span> <button class="ghost small" data-changedir>Change</button></p>
       <div class="card-foot"><button id="exportBtn">Export</button><span class="muted" id="expSel"></span></div>
     </div>
   </div>
@@ -147,7 +147,6 @@
       <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,application/json,application/zip" multiple hidden></label></p>
       <p class="muted small">Files you exported in this session are already listed below.</p>
     </div>
-    <p class="hint">Folder: <span class="mono" data-savedir></span> <button class="ghost small" data-changedir>Change</button></p>
     <div id="folderList"></div>
     <div id="srcList"></div>
   </div>
@@ -209,10 +208,6 @@
     <label class="w180">Camera <select id="liveCam"></select></label>
     <label class="w140">Picture <select id="liveRes"><option value="640x360">640 × 360</option><option value="1280x720">1280 × 720</option><option value="1920x1080">1920 × 1080</option><option value="320x180">320 × 180 (light)</option></select></label>
     <span class="grow live-status muted" id="liveStatus"></span>
-    <span class="row live-quick">
-      <button class="ghost small toggle" id="liveTallyR" title="Red tally">Red tally</button>
-      <button class="ghost small toggle" id="liveTallyG" title="Green tally">Green tally</button>
-    </span>
   </div>
   <div class="live-wrap">
     <div class="live-left">
@@ -236,6 +231,10 @@
         <div class="hold-row"><button class="toggle" id="livePowerOn" title="Switch the camera on">On</button><button class="toggle" id="livePowerStby" title="Put the camera in standby">Standby</button></div>
       </div>
       <div class="live-block">
+        <h3>Tally</h3>
+        <div class="hold-row"><button class="toggle" id="liveTallyR" title="Red tally on or off">Red</button><button class="toggle" id="liveTallyG" title="Green tally on or off">Green</button></div>
+      </div>
+      <div class="live-block">
         <h3>Pan / tilt</h3>
         <div class="ptpad" id="ptPad">
           <button data-pt="-1,1" aria-label="Up left">↖</button><button data-pt="0,1" aria-label="Up">↑</button><button data-pt="1,1" aria-label="Up right">↗</button>
@@ -257,7 +256,11 @@
       <div class="live-block">
         <h3>Iris</h3>
         <div class="hold-row"><button data-iris="-1">Close</button><span class="iris-val mono" id="liveIris">–</span><button data-iris="1">Open</button></div>
-        <div class="hold-row"><button class="toggle" id="liveAI">Auto iris</button><button class="toggle" id="liveNight" title="Night mode: IR cut filter out">Night</button></div>
+        <div class="hold-row"><button class="toggle" id="liveAI">Auto iris</button></div>
+      </div>
+      <div class="live-block">
+        <h3>Day / night</h3>
+        <div class="hold-row"><button class="toggle" id="liveDay" title="Day mode: IR cut filter in">Day</button><button class="toggle" id="liveNight" title="Night mode: IR cut filter out">Night</button></div>
       </div>
       <div class="live-block">
         <h3>White</h3>
@@ -285,6 +288,15 @@
       <tbody></tbody>
     </table>
     <p class="empty muted" id="showEmpty">No shows yet.</p>
+  </div>
+  <div class="card" id="gridCard">
+    <div class="row between wrap"><h2>Build a show from files</h2><span class="row"><button class="ghost small" id="gridOpen">Open files…</button><button class="ghost small" id="gridAuto" title="Put every opened scene on the camera it came from, in the same scene number">Fill from the same cameras</button><button class="ghost small" id="gridClear">Clear grid</button></span></div>
+    <p class="hint">Rows are cameras, columns are scenes. In each cell choose which opened scene goes into that scene of that camera. Files opened here or on the Import page can be used.</p>
+    <p class="muted small" id="gridFiles"></p>
+    <div class="zonebar" id="gridZones"></div>
+    <div class="grid-cams" id="gridCams"></div>
+    <div class="grid-wrap"><table class="tbl dense grid" id="gridTable"></table></div>
+    <div class="card-foot"><label class="w180">Show name <input id="gridName" autocomplete="off"></label><button id="gridSave">Save as show</button><span class="muted small" id="gridCount"></span></div>
   </div>
 </section>
 
@@ -421,6 +433,12 @@
 <dialog id="settingsDlg">
   <form method="dialog" class="dlg">
     <h3>Settings</h3>
+    <div class="setgroup">
+      <label>Project <span class="row"><select id="setProject" class="grow" aria-label="Project"></select><button type="button" class="ghost small" id="projNew">New…</button><button type="button" class="ghost small" id="projRename">Rename…</button><button type="button" class="ghost small danger-text" id="projDel">Delete…</button></span></label>
+      <p class="hint">Each project has its own cameras, zones, shows, RP150 rows, scripts and file names.</p>
+      <div class="row wrap"><button type="button" class="ghost small" id="cfgDownload">Download config file</button><button type="button" class="ghost small" id="cfgImport">Import config file…</button><input type="file" id="cfgFile" accept=".json,application/json" hidden></div>
+      <p class="hint">The config file holds every project and these settings, including saved camera logins if you chose to remember them.</p>
+    </div>
     <label>Pause between commands (ms) <input id="setDelay" type="number" min="0" max="500" value="20"></label>
     <label>Wait after a scene change (ms) <input id="setSceneWait" type="number" min="500" max="8000" value="2000"></label>
     <label>Save folder <span class="row"><input id="setSaveDir" class="mono grow"><button type="button" class="ghost small" data-changedir>Choose…</button></span></label>

@@ -10,9 +10,19 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const FORMAT_ID = 'panasonic-ptz-scene';
 
 /* ------------------------------------------------------------------ storage */
+// Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
+// timing, page paths and the update check are for the whole app. The first project ('default') keeps the
+// keys of earlier versions, so nothing is lost when updating.
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scriptCams|gridCams|liveCam|login|expZip|name_.*)$/;
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { if (v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
+};
+const projectId = () => ls.get('pscene.project', 'default');
+const keyFor = (k, pid = projectId()) => PROJECT_KEYS.test(k) && pid !== 'default' ? `pscene.p.${pid}.${k}` : 'pscene.' + k;
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('pscene.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('pscene.' + k, JSON.stringify(v)); } catch { /* private mode */ } },
+  get(k, d) { return ls.get(keyFor(k), d); },
+  set(k, v) { ls.set(keyFor(k), v); },
 };
 
 const state = {
@@ -244,7 +254,8 @@ function makeFile(cam, scenes) {
 const NAME_DEFAULTS = { scene: '{title}_{ip}_{scenes}_{date}', operator: '{title}_{ip}_operator_{date}', zipscene: 'scenes_{count}cams_{date}', zipoperator: 'operator_{count}cams_{date}' };
 const NAME_TOKENS = { title: 'name on the camera', desc: 'your description', model: 'model', ip: 'IP address', zone: 'zone', scenes: 'scene numbers', date: 'date', time: 'time' };
 const ZIP_TOKENS = { count: 'number of cameras', date: 'date', time: 'time' };
-const namePattern = k => store.get('name_' + k, NAME_DEFAULTS[k]) || NAME_DEFAULTS[k];
+// The name fields start empty; an empty field uses the default pattern.
+const namePattern = k => store.get('name_' + k, '') || NAME_DEFAULTS[k];
 function makeName(pattern, ctx = {}) {
   const d = new Date(), p2 = n => String(n).padStart(2, '0');
   const v = { date: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`, time: `${p2(d.getHours())}${p2(d.getMinutes())}`, ...ctx };
@@ -353,8 +364,14 @@ function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false, wide =
     dlg.returnValue = '';
     dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok'), { once: true });
     dlg.showModal();
+    // focus the first field, or else the blue button, so Enter confirms
+    const first = $$('#askBody input:not([type=hidden]):not([type=checkbox]):not([type=radio]), #askBody textarea, #askBody select').find(x => !x.disabled && x.offsetParent);
+    (first || $('#askOk')).focus();
   });
 }
+// Enter in a dialog presses its blue (primary) button, not Cancel; Enter in a text area still makes a new line.
+$('#askDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); $('#askOk').click(); } });
+$('#settingsDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); $('#saveSettings').click(); } });
 const info = (title, body) => ask({ title, body: `<p>${body}</p>`, ok: 'OK', cancel: null });
 
 /* ------------------------------------------------------------------ tabs + settings */
@@ -376,6 +393,7 @@ $$('.subtabs button').forEach(b => b.addEventListener('click', () => {
 state.livePath = store.get('livePath', '/live/index.html');
 state.setupPath = store.get('setupPath', '/admin/index.html');
 $('#bridgeSettingsBtn').onclick = () => {
+  renderProjects();
   $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
   $('#setUpdates').checked = store.get('updateCheck', true);
   $('#setLivePath').value = state.livePath; $('#setSetupPath').value = state.setupPath;
@@ -391,6 +409,109 @@ $('#saveSettings').onclick = () => {
   const d = $('#setSaveDir').value.trim();
   if (d && d !== state.saveDir) setSaveDir(d).catch(e => info('Cannot use this folder', esc(e.message)));
 };
+/* ---- projects and config files ---- */
+const CONFIG_ID = 'panasonic-toolbox-config';
+const projects = () => { const l = ls.get('pscene.projects', null); return Array.isArray(l) && l.length ? l : [{ id: 'default', name: 'Project 1' }]; };
+const saveProjects = l => ls.set('pscene.projects', l);
+const projectName = () => projects().find(p => p.id === projectId())?.name || 'Project 1';
+function renderProjects() {
+  const sel = $('#setProject');
+  sel.innerHTML = projects().map(p => `<option value="${esc(p.id)}" ${p.id === projectId() ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+  $('#projDel').disabled = projects().length < 2;
+}
+function switchProject(id) {
+  if (id === projectId()) return;
+  ls.set('pscene.project', id);
+  location.reload();
+}
+// all localStorage keys of one project, without the project prefix
+function projectData(pid) {
+  const out = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const full = localStorage.key(i); if (!full.startsWith('pscene.')) continue;
+    if (pid === 'default') { const k = full.slice(7); if (PROJECT_KEYS.test(k)) out[k] = ls.get(full); }
+    else if (full.startsWith(`pscene.p.${pid}.`)) out[full.slice(`pscene.p.${pid}.`.length)] = ls.get(full);
+  }
+  return out;
+}
+function appData() {
+  const out = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const full = localStorage.key(i); if (!full.startsWith('pscene.') || full.startsWith('pscene.p.')) continue;
+    const k = full.slice(7); if (!PROJECT_KEYS.test(k) && !/^(project|projects)$/.test(k)) out[k] = ls.get(full);
+  }
+  return out;
+}
+$('#setProject').onchange = e => switchProject(e.target.value);
+$('#projNew').onclick = async () => {
+  $('#settingsDlg').close();
+  if (!await ask({ title: 'New project', ok: 'Create', body: `<label>Name <input id="askProj" value="Project ${projects().length + 1}" autocomplete="off"></label>
+    <label class="check"><input type="checkbox" id="askProjCopy"> Start with a copy of the cameras of “${esc(projectName())}”</label>
+    <p class="hint">A project has its own cameras, zones, shows, RP150 rows, scripts, file names and camera login. Switch between projects in Settings.</p>` })) return;
+  const name = $('#askProj').value.trim() || `Project ${projects().length + 1}`;
+  const id = 'p' + Date.now().toString(36);
+  if (!ls.get('pscene.projects', null)) saveProjects(projects()); // make the first project explicit
+  saveProjects(projects().concat([{ id, name }]));
+  if ($('#askProjCopy').checked) ls.set(keyFor('cameras', id), store.get('cameras', []));
+  switchProject(id);
+};
+$('#projRename').onclick = async () => {
+  $('#settingsDlg').close();
+  if (!await ask({ title: 'Rename project', ok: 'Rename', body: `<label>Name <input id="askProj" value="${esc(projectName())}" autocomplete="off"></label>` })) return;
+  const name = $('#askProj').value.trim(); if (!name) return;
+  saveProjects(projects().map(p => p.id === projectId() ? { ...p, name } : p)); toast(`Project renamed to ${name}`);
+};
+$('#projDel').onclick = async () => {
+  $('#settingsDlg').close();
+  const id = projectId(), list = projects();
+  if (list.length < 2) return;
+  if (!await ask({ title: `Delete project “${esc(projectName())}”?`, ok: 'Delete', danger: true, body: '<p>Its cameras, shows, RP150 rows and scripts are removed from the app. Files you saved stay where they are, and the cameras are not changed. Download a config file first if you want to keep it.</p>' })) return;
+  for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
+  const rest = list.filter(p => p.id !== id); saveProjects(rest);
+  ls.set('pscene.project', rest[0].id); location.reload();
+};
+$('#cfgDownload').onclick = async () => {
+  const cfg = { format: CONFIG_ID, version: 1, generator: 'Panasonic Toolbox ' + (state.version || ''), created: new Date().toISOString(),
+    current: projectId(), app: appData(), projects: projects().map(p => ({ id: p.id, name: p.name, data: projectData(p.id) })) };
+  const d = new Date(), p2 = n => String(n).padStart(2, '0');
+  await download(`PanasonicToolbox_config_${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}.json`, JSON.stringify(cfg, null, 1));
+};
+async function importConfig(cfg) {
+  if (cfg?.format !== CONFIG_ID || !Array.isArray(cfg.projects)) throw new Error('Not a Panasonic Toolbox config file');
+  const names = cfg.projects.map(p => p.name).join(', ');
+  if (!await ask({ title: 'Import config file?', ok: 'Import', body: `<p>Projects in this file: <b>${esc(names)}</b>.</p><p>Projects with the same name are replaced; your other projects stay. The app settings (timing, page paths) are taken from the file. The app restarts its window afterwards.</p>` })) return;
+  let list = projects(); if (!ls.get('pscene.projects', null)) saveProjects(list);
+  for (const p of cfg.projects) {
+    let id = list.find(x => x.name === p.name)?.id;
+    if (id) for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
+    else { id = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); list = list.concat([{ id, name: p.name }]); }
+    for (const [k, v] of Object.entries(p.data || {})) if (PROJECT_KEYS.test(k)) ls.set(keyFor(k, id), v);
+  }
+  saveProjects(list);
+  for (const [k, v] of Object.entries(cfg.app || {})) if (!PROJECT_KEYS.test(k) && !/^(project|projects)$/.test(k)) ls.set('pscene.' + k, v);
+  const cur = cfg.projects.find(p => p.id === cfg.current) || cfg.projects[0];
+  ls.set('pscene.project', list.find(x => x.name === cur.name).id);
+  location.reload();
+}
+$('#cfgImport').onclick = async () => {
+  $('#settingsDlg').close();
+  try {
+    const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: false });
+    if (j.ok && j.paths?.length) {
+      const f = await bridgeFetch('/api/read_file', { path: j.paths[0] });
+      const bin = atob(f.dataB64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      return await importConfig(JSON.parse(new TextDecoder().decode(u8)));
+    }
+    if (j.ok) return;
+  } catch (e) { if (!/choose|dialog|unknown|not available/i.test(e.message)) return info('Could not import', esc(e.message)); }
+  $('#cfgFile').click();
+};
+$('#cfgFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { await importConfig(JSON.parse(await f.text())); } catch (err) { info('Could not import', esc(err.message)); }
+};
+$('#projectName').textContent = projectName();
+$('#projectName').onclick = () => $('#bridgeSettingsBtn').click();
 $('#quitBtn').onclick = async () => {
   $('#settingsDlg').close();
   if (!await ask({ title: 'Quit Panasonic Toolbox?', body: '<p>The window closes and the cameras are no longer controlled from this computer.</p>', ok: 'Quit', danger: true })) return;
@@ -447,9 +568,9 @@ function renderCams() {
     const prof = c.model ? profileFor(c.model) : null;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
-      <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
-      <td>${c.title ? esc(c.title) : '<span class="muted">–</span>'}</td>
       <td class="mono">${esc(hostPort(c))}</td>
+      <td>${c.title ? esc(c.title) : '<span class="muted">–</span>'}</td>
+      <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
       <td>${esc(c.model || '–')}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
       <td>${prof ? `<span class="pill ${prof.fam === 'GENERIC' ? 'info' : ''}">${esc(prof.fam)}</span> <span class="muted small">${paramsFor(c).length} settings</span>` : ''}</td>
       <td>${c.scene == null ? '–' : c.scene === 0 ? 'Off' : 'Scene ' + c.scene}</td>
@@ -457,8 +578,8 @@ function renderCams() {
       <td class="nowrap"><button class="ghost small" data-act="live">Live view</button> <button class="ghost small" data-act="setup">Settings</button></td>
       <td class="end"><button class="icon" data-act="del" title="Remove from list" aria-label="Remove ${esc(c.ip)}">×</button></td>`;
     $('input', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
-    $('.descin', tr).onchange = e => { const d = e.target.value.trim(); track(`Description of ${c.ip}`, () => { c.desc = d; }); saveCams(); };
-    $('.zonein', tr).onchange = e => { const z = e.target.value.trim(); track(`Zone of ${c.ip}`, () => { c.zone = z; }); saveCams(); renderZones(); };
+    $('.descin', tr).onchange = e => { const d = e.target.value.trim(); if (d === (c.desc || '')) return; track(`Description of ${c.ip}`, () => { c.desc = d; }); saveCams(); };
+    $('.zonein', tr).onchange = e => { const z = e.target.value.trim(); if (z === (c.zone || '')) return; track(`Zone of ${c.ip}`, () => { c.zone = z; }); saveCams(); renderZones(); };
     $('[data-act=live]', tr).onclick = () => openCamPage(c, 'live');
     $('[data-act=setup]', tr).onclick = () => openCamPage(c, 'setup');
     $('[data-act=del]', tr).onclick = () => { track(`Remove ${c.ip}`, () => { state.cameras = state.cameras.filter(x => x !== c); }); saveCams(); renderCams(); };
@@ -466,26 +587,44 @@ function renderCams() {
   }
   $('#camCount').textContent = state.cameras.length;
   $('#camEmpty').classList.toggle('hidden', state.cameras.length > 0);
-  $('#selAll').checked = state.cameras.length && state.cameras.every(c => c.selected);
-  updateSel(); renderZones();
+  selAllState($('#selAll'), state.cameras, c => c.selected);
+  updateSel(); renderZones(); renderGrid();
 }
 /* ---- zones: group cameras (stage, FOH, ...) and select them per zone ---- */
 const zoneNames = () => [...new Set(state.cameras.map(c => (c.zone || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
-// chips "Stage (3)"; onPick(zone, add) gets '' for cameras without a zone
-function zoneChips(box, onPick, label = 'Zone') {
+// Zone chips: click a zone to add its cameras to the selection; a zone whose cameras are all selected is blue,
+// and clicking it again deselects them. Several zones can be selected at once. sel = { get(c), set(c, on), done() }.
+function zoneChips(box, sel, label = 'Zone', allNone = false) {
   if (!box) return;
   const zs = zoneNames();
-  if (!zs.length) { box.innerHTML = ''; return; }
+  const cams = z => state.cameras.filter(c => inZone(c, z));
+  const isOn = z => cams(z).length > 0 && cams(z).every(c => sel.get(c));
   const none = state.cameras.filter(c => !c.zone).length;
-  box.innerHTML = `<span class="muted small">${label}:</span> ` + zs.map(z => `<button type="button" class="chip" data-zone="${esc(z)}" title="Select the cameras in ${esc(z)} (Shift: add to the selection)">${esc(z)} <span class="muted">${state.cameras.filter(c => c.zone === z).length}</span></button>`).join('') +
-    (none ? `<button type="button" class="chip" data-zone="" title="Cameras without a zone">No zone <span class="muted">${none}</span></button>` : '');
-  $$('[data-zone]', box).forEach(b => b.onclick = e => onPick(b.dataset.zone, e.shiftKey));
+  const btns = (zs.length ? zs.map(z => [z, z]) : []).concat(zs.length && none ? [['', 'No zone']] : []);
+  box.innerHTML = (btns.length ? `<span class="muted small">${label}:</span> ` + btns.map(([z, l]) => `<button type="button" class="chip${isOn(z) ? ' on' : ''}" data-zone="${esc(z)}" aria-pressed="${isOn(z)}" title="${isOn(z) ? 'Deselect' : 'Select'} the cameras in ${esc(l)}">${esc(l)} <span class="muted">${cams(z).length}</span></button>`).join('') : '')
+    + (allNone && state.cameras.length ? `<span class="row allnone"><button type="button" class="ghost small" data-all>All</button><button type="button" class="ghost small" data-none>None</button></span>` : '');
+  // act on press (before a field loses focus and the bar is redrawn); keyboard presses come in as clicks with detail 0
+  const act = (el, fn) => { if (!el) return; el.addEventListener('pointerdown', e => { if (e.button === 0) { e.preventDefault(); fn(); } }); el.addEventListener('click', e => { if (e.detail === 0) fn(); }); };
+  $$('[data-zone]', box).forEach(b => act(b, () => { const z = b.dataset.zone, on = !isOn(z); cams(z).forEach(c => sel.set(c, on)); sel.done(); }));
+  act($('[data-all]', box), () => { state.cameras.forEach(c => sel.set(c, true)); sel.done(); });
+  act($('[data-none]', box), () => { state.cameras.forEach(c => sel.set(c, false)); sel.done(); });
 }
 const inZone = (c, z) => (c.zone || '') === z;
+const camSel = after => ({ get: c => !!c.selected, set: (c, on) => { c.selected = on; }, done: () => { saveCams(); after(); } });
 function renderZones() {
   $('#zoneList').innerHTML = zoneNames().map(z => `<option value="${esc(z)}">`).join('');
-  zoneChips($('#camZoneBar'), (z, add) => { state.cameras.forEach(c => c.selected = inZone(c, z) || (add && c.selected)); saveCams(); renderCams(); }, 'Select zone');
-  zoneChips($('#expZones'), (z, add) => { state.cameras.forEach(c => c.selected = inZone(c, z) || (add && c.selected)); saveCams(); renderExport(); renderCams(); });
+  zoneChips($('#camZoneBar'), camSel(() => renderCams()), 'Select zone', true);
+  zoneChips($('#expZones'), camSel(() => { renderExport(); renderCams(); }));
+}
+// Select-all checkbox: shows a dash when some rows are selected; a click then clears the selection, the next click selects all.
+function selAllState(cb, list, get) {
+  const n = list.filter(get).length;
+  cb.checked = list.length > 0 && n === list.length; cb.indeterminate = n > 0 && n < list.length;
+}
+function selAllClick(cb, list, get, set) {
+  const any = list.some(get);
+  list.forEach(x => set(x, !any));
+  cb.checked = !any && list.length > 0; cb.indeterminate = false;
 }
 $('#camSetZone').onclick = async () => {
   const sel = state.cameras.filter(c => c.selected);
@@ -504,11 +643,13 @@ $('#camDelSel').onclick = async () => {
 $('#camEditSel').onclick = async () => {
   const sel = state.cameras.filter(c => c.selected);
   const same = k => sel.every(c => (c[k] ?? '') === (sel[0][k] ?? '')) ? (sel[0][k] ?? '') : '';
-  const ok = await ask({ title: `Edit ${sel.length} camera${sel.length > 1 ? 's' : ''}`, ok: 'Apply', wide: true, body: `
-      <table class="tbl dense edit-cams"><thead><tr><th>Camera</th><th>IP address</th><th>Description</th></tr></thead><tbody>${sel.map((c, i) => `<tr>
-        <td>${esc(c.title || c.model || '–')}<div class="muted small">${esc(c.model && c.title ? c.model : '')}</div></td>
+  const ok = ask({ title: `Edit ${sel.length} camera${sel.length > 1 ? 's' : ''}`, ok: 'Apply', wide: true, body: `
+      <table class="tbl dense edit-cams"><thead><tr><th>IP address</th><th>Name on camera</th><th>Description</th></tr></thead><tbody>${sel.map((c, i) => `<tr>
         <td><input class="mono" data-ed-ip="${i}" value="${esc(c.ip)}" aria-label="IP address"></td>
+        <td>${esc(c.title || '–')}<div class="muted small">${esc(c.model || '')}</div></td>
         <td><input data-ed-desc="${i}" value="${esc(c.desc || '')}" placeholder="e.g. balcony left" aria-label="Description"></td></tr>`).join('')}</tbody></table>
+      ${sel.length > 1 ? `<div class="row wrap bulk-desc"><label class="grow">Description for all selected cameras <input id="edDescAll" placeholder="e.g. Stage {n}" autocomplete="off"></label><button type="button" class="ghost small" id="edDescFill">Fill in</button></div>
+      <p class="hint">{n} becomes 1, 2, 3… in the order of the list, so “Stage {n}” gives Stage 1, Stage 2… Without {n} every camera gets the same description. You can still change single rows afterwards.</p>` : ''}
       <p class="hint">Change the IP address when a camera got a new one. The app then talks to the new address; destinations on the Import page and in your shows move along.</p>
       <div class="row wrap">
       <label class="w140">Zone <input id="edZone" list="zoneList" value="${esc(same('zone'))}" placeholder="${sel.length > 1 && !same('zone') ? 'several' : ''}"></label>
@@ -516,7 +657,10 @@ $('#camEditSel').onclick = async () => {
       <div class="row wrap"><label class="w140">Login user name <input id="edUser" autocomplete="off" value="${esc(same('user'))}"></label><label class="w140">Password <input id="edPass" type="password" autocomplete="off"></label></div>
       <label class="check"><input type="checkbox" id="edGeneral"> Use the general camera login for these cameras</label>
       <p class="hint">Empty zone, port and login fields stay as they are. A login here is only for these cameras and replaces the general one at the top of the page.</p>` });
-  if (!ok) return;
+  const fillDesc = () => { const t = $('#edDescAll').value; sel.forEach((c, i) => { $(`[data-ed-desc="${i}"]`).value = t.replace(/\{n\}/g, String(i + 1)); }); };
+  $('#edDescFill')?.addEventListener('click', fillDesc);
+  $('#edDescAll')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); fillDesc(); } });
+  if (!await ok) return;
   const ips = sel.map((c, i) => $(`[data-ed-ip="${i}"]`).value.trim()), descs = sel.map((c, i) => $(`[data-ed-desc="${i}"]`).value.trim());
   const z = $('#edZone').value.trim(), port = +$('#edPort').value, user = $('#edUser').value.trim(), pass = $('#edPass').value, general = $('#edGeneral').checked;
   const bad = ips.find(ip => !validIp(ip));
@@ -546,10 +690,11 @@ $('#camEditSel').onclick = async () => {
 };
 function updateSel() {
   const n = state.cameras.filter(c => c.selected).length;
+  selAllState($('#selAll'), state.cameras, c => c.selected); renderZones();
   $('#camSelN').textContent = n; $('#camSelBar').classList.toggle('hidden', !n);
   $('#expSel').textContent = n ? `${n} camera${n > 1 ? 's' : ''} selected` : 'Select at least one camera';
 }
-$('#selAll').onchange = e => { state.cameras.forEach(c => c.selected = e.target.checked); saveCams(); renderCams(); };
+$('#selAll').onchange = () => { selAllClick($('#selAll'), state.cameras, c => c.selected, (c, v) => c.selected = v); saveCams(); renderCams(); };
 function upsertCam(ip, port, data = {}) {
   let c = state.cameras.find(x => x.ip === ip && (x.port || 80) == (port || 80));
   if (!c) { c = { ip, port: port || 80, selected: true }; state.cameras.push(c); }
@@ -695,6 +840,7 @@ async function openBytes(name, u8, path) {
 }
 function openJson(name, data, path) {
   if (data?.format === SHOW_ID) return addShow(data, true, path);
+  if (data?.format === CONFIG_ID) return importConfig(data).catch(e => info('Could not import', esc(e.message)));
   return addImportFile(name, data);
 }
 $('#openFilesBtn').onclick = async () => {
@@ -839,7 +985,7 @@ $$('input[name=expKind]').forEach(r => r.onchange = () => $('#expSceneBox').clas
 function expKindNow() { return $('input[name=expKind]:checked')?.value || 'scene'; }
 function renderNameFields() {
   const k = expKindNow();
-  $('#expName').value = namePattern(k); $('#expZipName').value = namePattern('zip' + k);
+  $('#expName').value = store.get('name_' + k, ''); $('#expZipName').value = store.get('name_zip' + k, '');
   updNamePreview();
 }
 function updNamePreview() {
@@ -847,8 +993,8 @@ function updNamePreview() {
   $('#expExt').textContent = k === 'operator' ? '.poper' : '.pscene.json';
   const cam = state.cameras.find(c => c.selected) || state.cameras[0] || { ip: '192.168.0.11', title: 'CAM1', model: 'AW-UE150', zone: 'Stage' };
   const ex = k === 'operator' ? operatorName(cam) : fileName(cam, [{ scene: cam.scene || 1 }]);
-  $('#expNamePreview').innerHTML = `Example: <span class="mono">${esc(ex)}</span>`;
-  $('#expZipPreview').innerHTML = `Example: <span class="mono">${esc(zipName(k, Math.max(2, state.cameras.filter(c => c.selected).length)))}</span>`;
+  $('#expNamePreview').innerHTML = `Example: <span class="mono">${esc(ex)}</span>${$('#expName').value.trim() ? '' : ' <span class="muted">(standard name while the field is empty)</span>'}`;
+  $('#expZipPreview').innerHTML = `Example: <span class="mono">${esc(zipName(k, Math.max(2, state.cameras.filter(c => c.selected).length)))}</span>${$('#expZipName').value.trim() ? '' : ' <span class="muted">(standard name while the field is empty)</span>'}`;
   $('#expZipBox').classList.toggle('hidden', !$('#expZip').checked);
 }
 const tokenChips = (box, tokens, field) => {
@@ -933,6 +1079,7 @@ $('#addJobBtn').onclick = () => {
 };
 
 function renderImports() {
+  renderGrid();
   // step 1: list of opened scenes
   $('#srcList').innerHTML = state.sources.length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || '')} <span class="mono muted">${esc(s.file.camera?.ip || '')}</span> <span class="muted small">${esc(s.file.camera?.model || '')}</span></td><td>${s.kind === 'operator' ? 'Operator file' : 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end"><button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
   $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
@@ -963,9 +1110,9 @@ function renderImports() {
 function updImpSel() {
   const n = state.jobs.filter(j => j.include).length;
   $('#impSelN').textContent = n; $('#impSelBar').classList.toggle('hidden', !n);
-  $('#impSelAll').checked = state.jobs.length > 0 && state.jobs.every(j => j.include);
+  selAllState($('#impSelAll'), state.jobs, j => j.include);
 }
-$('#impSelAll').onchange = e => { state.jobs.forEach(j => j.include = e.target.checked); renderImports(); };
+$('#impSelAll').onchange = () => { selAllClick($('#impSelAll'), state.jobs, j => j.include, (j, v) => j.include = v); renderImports(); };
 $('#impSelApply').onclick = () => {
   const cam = $('#impSelCam').value, sc = $('#impSelScene').value; if (!cam && !sc) return;
   const js = state.jobs.filter(j => j.include);
@@ -1361,14 +1508,12 @@ function renderScript() {
   $$('#scriptList [data-i]').forEach(b => b.onclick = () => { state.script.splice(+b.dataset.i, 1); saveScript(); renderScript(); });
   const prev = new Set(store.get('scriptCams', []));
   $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span>${c.zone ? ` <span class="pill">${esc(c.zone)}</span>` : ''}</label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you tick here.</span>';
-  $$('#scriptCams input').forEach(i => i.onchange = () => store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)));
-  zoneChips($('#scriptZones'), (z, add) => {
-    $$('#scriptCams input').forEach(i => { const c = state.cameras.find(x => x.ip === i.value); i.checked = (c && inZone(c, z)) || (add && i.checked); });
-    store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value));
-    if (z && !add) { const n = $('#scriptName'); n.value = n.value.replace(/^zone-[^_]*_/, '') ; n.value = `zone-${z.replace(/[^\w-]+/g, '-')}_${n.value}`; }
-  }, 'Zone');
+  $$('#scriptCams input').forEach(i => i.onchange = () => { store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); });
+  const scriptBox = c => $$('#scriptCams input').find(i => i.value === c.ip);
+  zoneChips($('#scriptZones'), { get: c => !!scriptBox(c)?.checked, set: (c, on) => { const i = scriptBox(c); if (i) i.checked = on; },
+    done: () => { store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); } }, 'Zone');
 }
-const setScriptCams = on => { $$('#scriptCams input').forEach(i => i.checked = on); store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); };
+const setScriptCams = on => { $$('#scriptCams input').forEach(i => i.checked = on); store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); };
 $('#scriptAll').onclick = () => setScriptCams(true);
 $('#scriptNone').onclick = () => setScriptCams(false);
 $('#scriptLogin').checked = store.get('scriptLogin', false);
@@ -1486,9 +1631,9 @@ function renderShows() {
 function updShowSel() {
   const n = state.shows.filter(s => s.sel).length;
   $('#showSelN').textContent = n; $('#showSelBar').classList.toggle('hidden', !n);
-  $('#showSelAll').checked = state.shows.length > 0 && state.shows.every(s => s.sel);
+  selAllState($('#showSelAll'), state.shows, x => x.sel);
 }
-$('#showSelAll').onchange = e => { state.shows.forEach(s => s.sel = e.target.checked); renderShows(); };
+$('#showSelAll').onchange = () => { selAllClick($('#showSelAll'), state.shows, x => x.sel, (x, v) => x.sel = v); renderShows(); };
 $('#showDelSel').onclick = async () => {
   const sel = state.shows.filter(s => s.sel);
   if (!await ask({ title: `Delete ${sel.length} show${sel.length > 1 ? 's' : ''}?`, body: '<p>The cameras are not changed. Saved .pshow files stay where they are. You can undo this.</p>', ok: 'Delete', danger: true })) return;
@@ -1508,6 +1653,75 @@ async function recallShow(sh) {
   await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Recall show “${esc(sh.name)}”?`);
   state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id)); // keep the import page clean
 }
+/* ---- show grid: rows = cameras, columns = scenes; each cell picks an opened scene ---- */
+state.gridCams = new Set(store.get('gridCams', []));
+state.grid = {}; // ip -> { '1': srcId, ..., op: srcId }
+const saveGridCams = () => store.set('gridCams', [...state.gridCams]);
+function renderGrid() {
+  if (!$('#gridTable') || !state.gridCams) return;
+  const scenes = state.sources.filter(x => x.kind === 'scene'), opers = state.sources.filter(x => x.kind === 'operator');
+  $('#gridFiles').textContent = state.sources.length ? `Opened: ${scenes.length} scene${scenes.length === 1 ? '' : 's'}${opers.length ? ` and ${opers.length} operator file${opers.length === 1 ? '' : 's'}` : ''}.` : 'No files opened yet. Use Open files… or export from the cameras first.';
+  zoneChips($('#gridZones'), { get: c => state.gridCams.has(c.ip), set: (c, on) => on ? state.gridCams.add(c.ip) : state.gridCams.delete(c.ip), done: () => { saveGridCams(); renderGrid(); } }, 'Cameras', true);
+  $('#gridCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${state.gridCams.has(c.ip) ? 'checked' : ''}><span>${esc(c.title || c.model || 'Camera')} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('') : '<span class="muted">Find or add cameras on the Cameras page first.</span>';
+  $$('#gridCams input').forEach(i => i.onchange = () => { i.checked ? state.gridCams.add(i.value) : state.gridCams.delete(i.value); saveGridCams(); renderGrid(); });
+  const cams = state.cameras.filter(c => state.gridCams.has(c.ip));
+  const n = Math.max(0, ...cams.map(c => c.model ? profileFor(c.model).scenes : 4));
+  // drop assignments whose file was closed
+  for (const ip in state.grid) for (const k in state.grid[ip]) if (!srcById(state.grid[ip][k])) delete state.grid[ip][k];
+  const byFile = list => { const m = new Map(); list.forEach(x => { if (!m.has(x.fileName)) m.set(x.fileName, []); m.get(x.fileName).push(x); }); return m; };
+  const opts = (list, cur) => `<option value="">–</option>` + [...byFile(list)].map(([f, xs]) => `<optgroup label="${esc(f)}">${xs.map(x => `<option value="${x.id}" ${+cur === x.id ? 'selected' : ''}>${esc(srcLabel(x))}</option>`).join('')}</optgroup>`).join('');
+  const t = $('#gridTable');
+  if (!cams.length) { t.innerHTML = `<tbody><tr><td class="muted">Tick the cameras for this show above.</td></tr></tbody>`; }
+  else {
+    t.innerHTML = `<thead><tr><th>Camera</th>${Array.from({ length: n }, (_, i) => `<th>Scene ${i + 1}</th>`).join('')}<th>Operator file</th></tr></thead><tbody>${cams.map(c => {
+      const g = state.grid[c.ip] || {}, max = c.model ? profileFor(c.model).scenes : 4;
+      return `<tr data-ip="${esc(c.ip)}"><td class="nowrap"><b>${esc(c.title || c.model || 'Camera')}</b><div class="mono muted small">${esc(c.ip)}${c.desc ? ' · ' + esc(c.desc) : ''}</div></td>${Array.from({ length: n }, (_, i) => i < max
+        ? `<td><select data-col="${i + 1}" class="${g[i + 1] ? 'set' : ''}" aria-label="Scene ${i + 1} of ${esc(c.ip)}">${opts(scenes, g[i + 1])}</select></td>`
+        : '<td class="muted">–</td>').join('')}<td><select data-col="op" class="${g.op ? 'set' : ''}" aria-label="Operator file for ${esc(c.ip)}">${opts(opers, g.op)}</select></td></tr>`;
+    }).join('')}</tbody>`;
+    $$('#gridTable select').forEach(sel => sel.onchange = () => {
+      const ip = sel.closest('tr').dataset.ip, k = sel.dataset.col;
+      state.grid[ip] = state.grid[ip] || {};
+      if (sel.value) state.grid[ip][k] = +sel.value; else delete state.grid[ip][k];
+      sel.classList.toggle('set', !!sel.value); gridCount();
+    });
+  }
+  gridCount();
+}
+function gridItems() {
+  const items = [];
+  for (const c of state.cameras.filter(x => state.gridCams.has(x.ip))) {
+    const g = state.grid[c.ip] || {};
+    for (const [k, id] of Object.entries(g)) {
+      const src = srcById(id); if (!src) continue;
+      items.push({ target: c.ip, port: c.port || 80, targetTitle: c.title || c.model || '', targetScene: k === 'op' ? null : String(k), kind: src.kind, sceneIdx: src.sceneIdx, fileName: src.fileName, file: src.file });
+    }
+  }
+  return items;
+}
+function gridCount() { const n = gridItems().length; $('#gridCount').textContent = n ? `${n} cell${n === 1 ? '' : 's'} filled` : ''; $('#gridSave').disabled = !n; }
+$('#gridOpen').onclick = () => $('#openFilesBtn').click();
+$('#gridClear').onclick = () => { state.grid = {}; renderGrid(); };
+$('#gridAuto').onclick = () => {
+  let n = 0;
+  for (const c of state.cameras.filter(x => state.gridCams.has(x.ip))) for (const src of state.sources) {
+    if (src.file.camera?.ip !== c.ip) continue;
+    const k = src.kind === 'operator' ? 'op' : String(src.file.scenes[src.sceneIdx].scene);
+    if (k !== 'op' && +k > (c.model ? profileFor(c.model).scenes : 4)) continue;
+    state.grid[c.ip] = state.grid[c.ip] || {}; state.grid[c.ip][k] = src.id; n++;
+  }
+  renderGrid(); toast(n ? `${n} cell${n === 1 ? '' : 's'} filled` : 'No opened file comes from these cameras');
+};
+$('#gridSave').onclick = async () => {
+  const items = gridItems();
+  if (!items.length) return info('Nothing chosen', 'Choose a scene in at least one cell.');
+  const name = $('#gridName').value.trim() || `Show ${new Date().toLocaleDateString('en-GB')}`;
+  items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || (a.kind === 'operator') - (b.kind === 'operator') || String(a.targetScene).localeCompare(String(b.targetScene), 'en', { numeric: true }));
+  const show = { format: SHOW_ID, version: 1, name, created: new Date().toISOString(), items };
+  addShow(show); toast(`Show “${name}” saved`);
+  const path = await download(showFile(show), showJson(show));
+  if (path) { show.path = path; saveShows(); renderShows(); }
+};
 $('#showNew').onclick = async () => {
   if (!state.cameras.length) return info('No cameras yet', 'Find or add cameras on the Cameras page first.');
   const pre = state.cameras.some(c => c.selected) ? state.cameras.filter(c => c.selected) : state.cameras;
@@ -1631,7 +1845,7 @@ function renderEip() {
 function updEipSel() {
   const n = state.eip.filter(r => r.sel).length;
   $('#eipSelN').textContent = n; $('#eipSelBar').classList.toggle('hidden', !n);
-  $('#eipSelAll').checked = state.eip.length > 0 && state.eip.every(r => r.sel);
+  selAllState($('#eipSelAll'), state.eip, r => r.sel);
 }
 async function eipDiscover() {
   if (!state.bridgeOk && !(await checkBridge())) return;
@@ -1646,7 +1860,7 @@ async function eipDiscover() {
   $('#eipSearch').disabled = false; renderEip();
 }
 $('#eipSearch').onclick = eipDiscover;
-$('#eipSelAll').onchange = e => { state.eip.forEach(r => r.sel = e.target.checked); renderEip(); };
+$('#eipSelAll').onchange = () => { selAllClick($('#eipSelAll'), state.eip, r => r.sel, (r, v) => r.sel = v); renderEip(); };
 $('#eipFill').onclick = () => {
   const sel = state.eip.filter(r => r.sel);
   if (!sel.length) return info('Select cameras first', 'Tick the cameras you want to give new settings.');
@@ -1751,7 +1965,7 @@ function renderRp() {
     tb.appendChild(tr);
   });
   $('#rpEmpty').classList.toggle('hidden', state.rp.length > 0);
-  $('#rpSelAll').checked = state.rp.length > 0 && state.rp.every(r => r.sel);
+  selAllState($('#rpSelAll'), state.rp, r => r.sel);
   const n = state.rp.filter(r => r.sel).length;
   $('#rpBulkScope').textContent = n ? `${n} selected row${n > 1 ? 's' : ''}` : 'all rows';
   $('#rpSelN').textContent = n; $('#rpSelBar').classList.toggle('hidden', !n); $('#rpCount').textContent = state.rp.length;
@@ -1819,7 +2033,7 @@ $('#rpEditSel').onclick = async () => {
   track(`Edit ${sel.length} row(s)`, () => { state.rp = state.rp.map(r => ({ ...r })); const rows = state.rp.filter(r => r.sel).sort((a, b) => a.cam - b.cam); rows.forEach((r, i) => { if (cam0 > 0) r.cam = cam0 + i; if (port > 0 && port < 65536) r.port = port; if (conn) r.conn = conn; }); state.rp.sort((a, b) => a.cam - b.cam); });
   saveRp(); renderRp(); if (s15.a) analyzeS15();
 };
-$('#rpSelAll').onchange = e => { state.rp.forEach(r => r.sel = e.target.checked); saveRp(); renderRp(); };
+$('#rpSelAll').onchange = () => { selAllClick($('#rpSelAll'), state.rp, r => r.sel, (r, v) => r.sel = v); saveRp(); renderRp(); };
 $$('#rpSelBar [data-conn]').forEach(b => b.onclick = () => {
   const v = b.dataset.conn, sel = state.rp.filter(r => r.sel);
   track(`Set ${sel.length} row(s) to ${v === 'lan' ? 'LAN' : 'None'}`, () => { state.rp = state.rp.map(r => r.sel ? { ...r, conn: v } : r); });
@@ -2043,7 +2257,7 @@ async function liveRead() {
   live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';
   setToggle('#livePowerOn', live.power === 'on' || live.power === 'starting'); setToggle('#livePowerStby', live.power === 'standby');
   $('#livePowerOn').textContent = live.power === 'starting' ? 'Starting…' : 'On';
-  setToggle('#liveAF', b(1).toLowerCase() === 'd11'); setToggle('#liveAI', b(2).toLowerCase() === 'd31'); setToggle('#liveNight', b(3).toLowerCase() === 'd61');
+  setToggle('#liveAF', b(1).toLowerCase() === 'd11'); setToggle('#liveAI', b(2).toLowerCase() === 'd31'); { const dn = /^d6([01])$/i.exec(b(3)); if (dn) { setToggle('#liveNight', dn[1] === '1'); setToggle('#liveDay', dn[1] === '0'); } }
   if (Date.now() - (live.tallyAt || 0) > 3000) { // right after a click the camera may still answer the old state
     const r = /^OLR:([01])$/i.exec(b(4)) || /^dA([01])$/i.exec(b(8)), g = /^OLG:([01])$/i.exec(b(5));
     if (r) setToggle('#liveTallyR', r[1] === '1');
@@ -2094,7 +2308,13 @@ $$('[data-iris]').forEach(b => {
 const toggleCmd = (sel, t, on, off, after) => $(sel).onclick = async () => { const isOn = $(sel).classList.contains('on'); const r = await liveSend(t, isOn ? off : on); if (r?.ok && !isErr(r.body)) setToggle(sel, !isOn); after && after(); };
 toggleCmd('#liveAF', 'ptz', '#D11', '#D10');
 toggleCmd('#liveAI', 'ptz', '#D31', '#D30');
-toggleCmd('#liveNight', 'ptz', '#D61', '#D60');
+async function liveDayNight(night) {
+  const r = await liveSend('ptz', night ? '#D61' : '#D60');
+  if (r?.ok && !isErr(r.body)) { setToggle('#liveNight', night); setToggle('#liveDay', !night); $('#liveStatus').textContent = night ? 'Night mode' : 'Day mode'; }
+  else toast('Day/night is not available on this camera right now');
+}
+$('#liveDay').onclick = () => liveDayNight(false);
+$('#liveNight').onclick = () => liveDayNight(true);
 // Tally: the button flips at once; red falls back to the pan/tilt command (#DA) on models without TLR.
 async function liveTally(sel, color) {
   if (!live.cam) return;
