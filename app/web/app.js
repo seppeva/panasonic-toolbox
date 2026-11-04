@@ -242,7 +242,8 @@ function makeFile(cam, scenes) {
 }
 /* ---- file names: a pattern per kind, e.g. operatorfile_{title}; the extension is added automatically ---- */
 const NAME_DEFAULTS = { scene: '{title}_{ip}_{scenes}_{date}', operator: '{title}_{ip}_operator_{date}', zipscene: 'scenes_{count}cams_{date}', zipoperator: 'operator_{count}cams_{date}' };
-const NAME_TOKENS = { title: 'camera title', model: 'model', ip: 'IP address', zone: 'zone', scenes: 'scene numbers', date: 'date', time: 'time', count: 'number of cameras (ZIP)' };
+const NAME_TOKENS = { title: 'name on the camera', desc: 'your description', model: 'model', ip: 'IP address', zone: 'zone', scenes: 'scene numbers', date: 'date', time: 'time' };
+const ZIP_TOKENS = { count: 'number of cameras', date: 'date', time: 'time' };
 const namePattern = k => store.get('name_' + k, NAME_DEFAULTS[k]) || NAME_DEFAULTS[k];
 function makeName(pattern, ctx = {}) {
   const d = new Date(), p2 = n => String(n).padStart(2, '0');
@@ -251,7 +252,7 @@ function makeName(pattern, ctx = {}) {
     .replace(/[\\/:*?"<>|\s]+/g, '_').replace(/_+/g, '_').replace(/^[_.-]+|[_.-]+$/g, '');
   return out || 'file';
 }
-const camCtx = cam => ({ title: cam.title || cam.model || 'cam', model: cam.model || '', ip: cam.ip.replace(/\./g, '-'), zone: cam.zone || '' });
+const camCtx = cam => ({ title: cam.title || cam.model || 'cam', desc: cam.desc || '', model: cam.model || '', ip: cam.ip.replace(/\./g, '-'), zone: cam.zone || '' });
 function fileName(cam, scenes, suffix = '') {
   const sc = scenes.length === 1 ? `scene${scenes[0].scene}` : 'scenes' + scenes.map(s => s.scene).join('');
   return makeName(namePattern('scene'), { ...camCtx(cam), scenes: sc }) + suffix + '.pscene.json';
@@ -293,6 +294,7 @@ $('#toastClose').onclick = () => $('#toast').classList.add('hidden');
 function toast(text, path) {
   $('#toastText').textContent = text;
   $('#toastOpen').onclick = () => bridgeFetch('/api/reveal', { path }).catch(() => { });
+  $('#toastOpen').classList.toggle('hidden', !path);
   $('#toast').classList.remove('hidden');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => $('#toast').classList.add('hidden'), 8000);
 }
@@ -338,9 +340,10 @@ async function readZip(buf) {
 }
 
 /* ------------------------------------------------------------------ dialogs */
-function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false }) {
+function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false, wide = false }) {
   return new Promise(resolve => {
     const dlg = $('#askDlg');
+    dlg.classList.toggle('wide', !!wide);
     $('#askTitle').textContent = title;
     $('#askBody').innerHTML = body;
     $('#askOk').textContent = ok;
@@ -415,7 +418,7 @@ async function checkUpdate() {
 }
 
 /* ------------------------------------------------------------------ cameras */
-const saveCams = () => store.set('cameras', state.cameras.map(({ ip, port, model, title, selected, zone, user, pass }) => ({ ip, port, model, title, selected, zone, user, pass: $('#rememberLogin').checked ? pass : undefined })));
+const saveCams = () => store.set('cameras', state.cameras.map(({ ip, port, model, title, desc, selected, zone, user, pass }) => ({ ip, port, model, title, desc, selected, zone, user, pass: $('#rememberLogin').checked ? pass : undefined })));
 const login = store.get('login', null);
 if (login) { $('#authUser').value = login.user || ''; $('#authPass').value = login.pass || ''; $('#rememberLogin').checked = true; }
 function saveLogin() {
@@ -444,14 +447,17 @@ function renderCams() {
     const prof = c.model ? profileFor(c.model) : null;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
+      <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
+      <td>${c.title ? esc(c.title) : '<span class="muted">–</span>'}</td>
       <td class="mono">${esc(hostPort(c))}</td>
-      <td>${esc(c.model || '–')}</td><td>${esc(c.title || '')}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
+      <td>${esc(c.model || '–')}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
       <td>${prof ? `<span class="pill ${prof.fam === 'GENERIC' ? 'info' : ''}">${esc(prof.fam)}</span> <span class="muted small">${paramsFor(c).length} settings</span>` : ''}</td>
       <td>${c.scene == null ? '–' : c.scene === 0 ? 'Off' : 'Scene ' + c.scene}</td>
       <td>${c.busy ? '<span class="pill busy">Busy</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : ''}</td>
       <td class="nowrap"><button class="ghost small" data-act="live">Live view</button> <button class="ghost small" data-act="setup">Settings</button></td>
       <td class="end"><button class="icon" data-act="del" title="Remove from list" aria-label="Remove ${esc(c.ip)}">×</button></td>`;
     $('input', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
+    $('.descin', tr).onchange = e => { const d = e.target.value.trim(); track(`Description of ${c.ip}`, () => { c.desc = d; }); saveCams(); };
     $('.zonein', tr).onchange = e => { const z = e.target.value.trim(); track(`Zone of ${c.ip}`, () => { c.zone = z; }); saveCams(); renderZones(); };
     $('[data-act=live]', tr).onclick = () => openCamPage(c, 'live');
     $('[data-act=setup]', tr).onclick = () => openCamPage(c, 'setup');
@@ -481,8 +487,11 @@ function renderZones() {
   zoneChips($('#camZoneBar'), (z, add) => { state.cameras.forEach(c => c.selected = inZone(c, z) || (add && c.selected)); saveCams(); renderCams(); }, 'Select zone');
   zoneChips($('#expZones'), (z, add) => { state.cameras.forEach(c => c.selected = inZone(c, z) || (add && c.selected)); saveCams(); renderExport(); renderCams(); });
 }
-$('#camSetZone').onclick = () => {
-  const z = $('#camSelZone').value.trim(); const sel = state.cameras.filter(c => c.selected);
+$('#camSetZone').onclick = async () => {
+  const sel = state.cameras.filter(c => c.selected);
+  const cur = sel.every(c => (c.zone || '') === (sel[0].zone || '')) ? (sel[0].zone || '') : '';
+  if (!await ask({ title: `Zone for ${sel.length} camera${sel.length > 1 ? 's' : ''}`, ok: 'Set zone', body: `<label>Zone <input id="askZone" list="zoneList" value="${esc(cur)}" placeholder="Zone name" autocomplete="off"></label><p class="hint">Leave empty to remove these cameras from their zone.</p>` })) return;
+  const z = $('#askZone').value.trim();
   track(z ? `Zone ${z} for ${sel.length} camera(s)` : `Clear zone of ${sel.length} camera(s)`, () => sel.forEach(c => c.zone = z));
   saveCams(); renderCams(); toast(z ? `${sel.length} camera${sel.length > 1 ? 's' : ''} in zone ${z}` : 'Zone cleared');
 };
@@ -495,20 +504,45 @@ $('#camDelSel').onclick = async () => {
 $('#camEditSel').onclick = async () => {
   const sel = state.cameras.filter(c => c.selected);
   const same = k => sel.every(c => (c[k] ?? '') === (sel[0][k] ?? '')) ? (sel[0][k] ?? '') : '';
-  const ok = await ask({ title: `Edit ${sel.length} camera${sel.length > 1 ? 's' : ''}`, ok: 'Apply', body: `<div class="row wrap">
+  const ok = await ask({ title: `Edit ${sel.length} camera${sel.length > 1 ? 's' : ''}`, ok: 'Apply', wide: true, body: `
+      <table class="tbl dense edit-cams"><thead><tr><th>Camera</th><th>IP address</th><th>Description</th></tr></thead><tbody>${sel.map((c, i) => `<tr>
+        <td>${esc(c.title || c.model || '–')}<div class="muted small">${esc(c.model && c.title ? c.model : '')}</div></td>
+        <td><input class="mono" data-ed-ip="${i}" value="${esc(c.ip)}" aria-label="IP address"></td>
+        <td><input data-ed-desc="${i}" value="${esc(c.desc || '')}" placeholder="e.g. balcony left" aria-label="Description"></td></tr>`).join('')}</tbody></table>
+      <p class="hint">Change the IP address when a camera got a new one. The app then talks to the new address; destinations on the Import page and in your shows move along.</p>
+      <div class="row wrap">
       <label class="w140">Zone <input id="edZone" list="zoneList" value="${esc(same('zone'))}" placeholder="${sel.length > 1 && !same('zone') ? 'several' : ''}"></label>
       <label class="w90">Port <input id="edPort" type="number" value="${esc(same('port') || '')}" placeholder="${sel.length > 1 && !same('port') ? 'several' : '80'}"></label></div>
       <div class="row wrap"><label class="w140">Login user name <input id="edUser" autocomplete="off" value="${esc(same('user'))}"></label><label class="w140">Password <input id="edPass" type="password" autocomplete="off"></label></div>
       <label class="check"><input type="checkbox" id="edGeneral"> Use the general camera login for these cameras</label>
-      <p class="hint">Empty fields stay as they are. A login here is only for these cameras and replaces the general one at the top of the page.</p>` });
+      <p class="hint">Empty zone, port and login fields stay as they are. A login here is only for these cameras and replaces the general one at the top of the page.</p>` });
   if (!ok) return;
+  const ips = sel.map((c, i) => $(`[data-ed-ip="${i}"]`).value.trim()), descs = sel.map((c, i) => $(`[data-ed-desc="${i}"]`).value.trim());
   const z = $('#edZone').value.trim(), port = +$('#edPort').value, user = $('#edUser').value.trim(), pass = $('#edPass').value, general = $('#edGeneral').checked;
-  track(`Edit ${sel.length} camera(s)`, () => sel.forEach(c => {
+  const bad = ips.find(ip => !validIp(ip));
+  if (bad != null) return info('Invalid IP address', `“${esc(bad)}” is not a valid IPv4 address. Nothing was changed.`);
+  const newPort = (c) => (port > 0 && port < 65536 ? port : (c.port || 80));
+  const clash = sel.map((c, i) => ({ c, ip: ips[i] })).find(({ c, ip }, i) => ips.some((o, k) => k !== i && o === ip && newPort(sel[k]) === newPort(c)) || state.cameras.some(o => !sel.includes(o) && o.ip === ip && (o.port || 80) === newPort(c)));
+  if (clash) return info('IP address used twice', `${esc(clash.ip)} would be used by two cameras in the list. Nothing was changed.`);
+  const moved = sel.map((c, i) => ({ c, from: c.ip, to: ips[i] })).filter(m => m.from !== m.to);
+  track(`Edit ${sel.length} camera(s)`, () => sel.forEach((c, i) => {
+    c.ip = ips[i]; c.desc = descs[i];
     if (z) c.zone = z;
     if (port > 0 && port < 65536) c.port = port;
     if (general) { delete c.user; delete c.pass; } else if (user) { c.user = user; if (pass) c.pass = pass; }
   }));
+  if (moved.length) {
+    for (const m of moved) {
+      state.jobs.forEach(j => { if (j.target === m.from) j.target = m.to; });
+      state.shows.forEach(sh => sh.items.forEach(it => { if (it.target === m.from) it.target = m.to; }));
+      m.c.scene = null; m.c.status = ''; m.c.statusKind = '';
+      log(`${m.c.title || m.c.model || 'Camera'}: IP address changed in the app from ${m.from} to ${m.to}`);
+    }
+    state.cameras.sort((a, b) => ipNum(a.ip) - ipNum(b.ip));
+    saveShows(); renderImports(); renderShows();
+  }
   saveCams(); renderCams();
+  if (moved.length && (state.bridgeOk || await checkBridge())) refreshAll(moved.map(m => m.c));
 };
 function updateSel() {
   const n = state.cameras.filter(c => c.selected).length;
@@ -549,12 +583,12 @@ $('#addCamsBtn').onclick = async () => {
   const last = state.cameras[state.cameras.length - 1];
   const ok = await ask({ title: 'Add cameras', ok: 'Add', body: `<div class="row wrap">
       <label class="w140">First IP address <input id="acIp" class="mono" value="${esc(last ? ipStr(ipNum(last.ip) + 1) : (state.localIps[0] || '192.168.0.10').replace(/\.\d+$/, '.11'))}"></label>
-      <label class="w90">Number <input id="acCount" type="number" min="1" max="254" value="1"></label>
+      <label class="w90">Amount <input id="acCount" type="number" min="1" max="254" value="1"></label>
       <label class="w90">IP step <input id="acStep" type="number" min="1" max="50" value="1"></label>
       <label class="w90">Port <input id="acPort" type="number" value="80"></label>
       <label class="w140">Zone <input id="acZone" list="zoneList" placeholder="optional"></label></div>
       <label>Or paste a list <textarea id="acList" rows="5" placeholder="192.168.0.11&#10;192.168.0.12, 192.168.0.13"></textarea></label>
-      <p class="hint">With Number set to 4, 192.168.0.11 adds .11 to .14. A pasted list (one or more addresses per line, from Excel for example) is used instead when it is filled in.</p>` });
+      <p class="hint">With Amount set to 4, 192.168.0.11 adds .11 to .14. A pasted list (one or more addresses per line, from Excel for example) is used instead when it is filled in.</p>` });
   if (!ok) return;
   const listTxt = $('#acList').value.trim(), port = +$('#acPort').value || 80, zone = $('#acZone').value.trim();
   let ips;
@@ -580,7 +614,6 @@ async function refreshAll(cams) {
   saveCams(); renderCams();
 }
 $('#refreshBtn').onclick = async () => { if (state.bridgeOk || await checkBridge()) refreshAll(state.cameras); };
-$('#clearCamsBtn').onclick = async () => { if (await ask({ title: 'Clear the camera list?', body: '<p>The cameras themselves are not changed.</p>', ok: 'Clear list' })) { track('Clear camera list', () => { state.cameras = []; }); saveCams(); renderCams(); } };
 
 /* ------------------------------------------------------------------ undo / redo */
 // One history for app edits (lists and tables) and camera changes (imports, commands, network settings).
@@ -613,7 +646,7 @@ document.addEventListener('keydown', e => {
 });
 function snapApp() {
   return JSON.stringify({
-    cameras: state.cameras.map(({ ip, port, model, title, selected, scene, power, status, statusKind, zone, user, pass }) => ({ ip, port, model, title, selected, scene, power, status, statusKind, zone, user, pass })),
+    cameras: state.cameras.map(({ ip, port, model, title, desc, selected, scene, power, status, statusKind, zone, user, pass }) => ({ ip, port, model, title, desc, selected, scene, power, status, statusKind, zone, user, pass })),
     sources: state.sources, jobs: state.jobs, rp: state.rp,
   });
 }
@@ -726,6 +759,24 @@ function renderExportScenes() {
 $('#expAll').onclick = () => { state.cameras.forEach(c => c.selected = true); saveCams(); renderExport(); renderCams(); };
 $('#expNone').onclick = () => { state.cameras.forEach(c => c.selected = false); saveCams(); renderExport(); renderCams(); };
 
+// Read the live scene, or the picked scenes (switching to each and back to the scene that was live).
+async function readCamScenes(cam, mode, picked, status = () => { }) {
+  if (!cam.model) await identify(cam);
+  const orig = await getScene(cam);
+  const scenes = [];
+  const list = mode === 'active' ? [orig ?? 0] : picked.filter(n => n <= profileFor(cam.model).scenes);
+  let current = orig;
+  try {
+    for (const n of list) {
+      if (mode === 'pick' && n !== current) { await switchScene(cam, n); current = n; }
+      status(`reading scene ${n}…`);
+      scenes.push(await readSceneFile(cam, n));
+    }
+  } finally {
+    if (orig && current !== orig) await switchScene(cam, orig);
+  }
+  return scenes;
+}
 $('#exportBtn').onclick = async () => {
   const cams = state.cameras.filter(c => c.selected);
   if (!cams.length) return info('No cameras selected', 'Tick the cameras you want to export.');
@@ -754,20 +805,7 @@ $('#exportBtn').onclick = async () => {
     const row = document.createElement('div'); row.className = 'note'; row.textContent = `${cam.ip}: working…`; $('#expRows').appendChild(row);
     cam.busy = true; renderCams();
     try {
-      if (!cam.model) await identify(cam);
-      const orig = await getScene(cam);
-      const scenes = [];
-      const list = mode === 'active' ? [orig ?? 0] : picked.filter(n => n <= profileFor(cam.model).scenes);
-      let current = orig;
-      try {
-        for (const n of list) {
-          if (mode === 'pick' && n !== current) { await switchScene(cam, n); current = n; }
-          row.textContent = `${cam.ip}: reading scene ${n}…`;
-          scenes.push(await readSceneFile(cam, n));
-        }
-      } finally {
-        if (orig && current !== orig) await switchScene(cam, orig);
-      }
+      const scenes = await readCamScenes(cam, mode, picked, t => row.textContent = `${cam.ip}: ${t}`);
       const file = makeFile(cam, scenes);
       const name = fileName(cam, scenes);
       files.push({ name, text: JSON.stringify(file, null, 1), file });
@@ -802,20 +840,30 @@ function expKindNow() { return $('input[name=expKind]:checked')?.value || 'scene
 function renderNameFields() {
   const k = expKindNow();
   $('#expName').value = namePattern(k); $('#expZipName').value = namePattern('zip' + k);
+  updNamePreview();
+}
+function updNamePreview() {
+  const k = expKindNow();
   $('#expExt').textContent = k === 'operator' ? '.poper' : '.pscene.json';
   const cam = state.cameras.find(c => c.selected) || state.cameras[0] || { ip: '192.168.0.11', title: 'CAM1', model: 'AW-UE150', zone: 'Stage' };
   const ex = k === 'operator' ? operatorName(cam) : fileName(cam, [{ scene: cam.scene || 1 }]);
-  $('#expNamePreview').innerHTML = `Example: <span class="mono">${esc(ex)}</span> · ZIP: <span class="mono">${esc(zipName(k, Math.max(2, state.cameras.filter(c => c.selected).length)))}</span>`;
+  $('#expNamePreview').innerHTML = `Example: <span class="mono">${esc(ex)}</span>`;
+  $('#expZipPreview').innerHTML = `Example: <span class="mono">${esc(zipName(k, Math.max(2, state.cameras.filter(c => c.selected).length)))}</span>`;
+  $('#expZipBox').classList.toggle('hidden', !$('#expZip').checked);
 }
-$('#expTokens').innerHTML = '<span class="muted small">Insert:</span> ' + Object.entries(NAME_TOKENS).map(([k, l]) => `<button type="button" class="chip" data-token="${k}" title="${esc(l)}">{${k}}</button>`).join('');
-let lastNameField = $('#expName');
-['#expName', '#expZipName'].forEach(s => { $(s).addEventListener('focus', e => lastNameField = e.target); $(s).addEventListener('input', () => { const k = expKindNow(); store.set('name_' + (s === '#expName' ? k : 'zip' + k), $(s).value.trim()); renderNameFields2(); }); });
-function renderNameFields2() { const a = document.activeElement; const v1 = $('#expName').value, v2 = $('#expZipName').value; renderNameFields(); $('#expName').value = v1; $('#expZipName').value = v2; a?.focus?.(); }
-$$('#expTokens [data-token]').forEach(b => b.onclick = () => {
-  const f = lastNameField, t = `{${b.dataset.token}}`, s = f.selectionStart ?? f.value.length;
-  f.value = f.value.slice(0, s) + t + f.value.slice(f.selectionEnd ?? s); f.focus(); f.setSelectionRange(s + t.length, s + t.length);
-  f.dispatchEvent(new Event('input'));
-});
+const tokenChips = (box, tokens, field) => {
+  box.innerHTML = '<span class="muted small">Insert:</span> ' + Object.entries(tokens).map(([k, l]) => `<button type="button" class="chip" data-token="${k}" title="${esc(l)}">{${k}}</button>`).join('');
+  $$('[data-token]', box).forEach(b => b.onclick = () => {
+    const f = $(field), t = `{${b.dataset.token}}`, st = f.selectionStart ?? f.value.length;
+    f.value = f.value.slice(0, st) + t + f.value.slice(f.selectionEnd ?? st); f.focus(); f.setSelectionRange(st + t.length, st + t.length);
+    f.dispatchEvent(new Event('input'));
+  });
+};
+tokenChips($('#expTokens'), NAME_TOKENS, '#expName');
+tokenChips($('#expZipTokens'), ZIP_TOKENS, '#expZipName');
+['#expName', '#expZipName'].forEach(sel => $(sel).addEventListener('input', () => { const k = expKindNow(); store.set('name_' + (sel === '#expName' ? k : 'zip' + k), $(sel).value.trim()); updNamePreview(); }));
+$('#expZip').checked = store.get('expZip', true);
+$('#expZip').addEventListener('change', () => { store.set('expZip', $('#expZip').checked); updNamePreview(); });
 $$('input[name=expKind]').forEach(r => r.addEventListener('change', renderNameFields));
 async function exportOperator(cams) {
   if (!state.bridgeOk && !(await checkBridge())) return;
@@ -1460,6 +1508,72 @@ async function recallShow(sh) {
   await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Recall show “${esc(sh.name)}”?`);
   state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id)); // keep the import page clean
 }
+$('#showNew').onclick = async () => {
+  if (!state.cameras.length) return info('No cameras yet', 'Find or add cameras on the Cameras page first.');
+  const pre = state.cameras.some(c => c.selected) ? state.cameras.filter(c => c.selected) : state.cameras;
+  const maxSc = Math.max(4, ...state.cameras.map(c => c.model ? profileFor(c.model).scenes : 4));
+  const pending = ask({ title: 'New show from cameras', ok: 'Read cameras and save show', wide: true, body: `
+    <label>Name of the show <input id="nsName" value="Show ${new Date().toLocaleDateString('en-GB')}"></label>
+    <div><div class="row between"><b class="small">Cameras</b><span class="row"><button type="button" class="ghost small" id="nsAll">All</button><button type="button" class="ghost small" id="nsNone">None</button></span></div>
+      <div class="ns-cams">${state.cameras.map((c, i) => `<label class="check"><input type="checkbox" data-ns="${i}" ${pre.includes(c) ? 'checked' : ''}><span>${esc(c.title || c.model || 'Camera')}${c.desc ? ` <span class="muted">· ${esc(c.desc)}</span>` : ''} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('')}</div></div>
+    <div><b class="small">What goes in the show</b>
+      <label class="check"><input type="checkbox" id="nsScene" checked> Scene files</label>
+      <div class="subbox">
+        <label class="check"><input type="radio" name="nsMode" value="active" checked> The live scene of each camera <span class="muted">(the picture does not change)</span></label>
+        <label class="check"><input type="radio" name="nsMode" value="pick"> These scenes <span class="muted">(each camera switches to them and back)</span></label>
+        <div class="ns-scenes" id="nsScenes">${Array.from({ length: maxSc }, (_, i) => `<label class="check"><input type="checkbox" value="${i + 1}"> Scene ${i + 1}</label>`).join('')}</div>
+      </div>
+      <label class="check"><input type="checkbox" id="nsOper"> Operator files</label></div>
+    <p class="hint">The app reads the current settings of these cameras now and stores them in the show. Recalling the show later puts each scene back in the same scene number on the same camera.</p>` });
+  $('#nsAll').onclick = () => $$('[data-ns]').forEach(x => x.checked = true);
+  $('#nsNone').onclick = () => $$('[data-ns]').forEach(x => x.checked = false);
+  $$('#nsScenes input').forEach(x => x.onchange = () => { if (x.checked) $('input[name=nsMode][value=pick]').checked = true; });
+  if (!await pending) return;
+  const name = $('#nsName').value.trim() || 'Show';
+  const cams = $$('[data-ns]').filter(x => x.checked).map(x => state.cameras[+x.dataset.ns]);
+  const wantScene = $('#nsScene').checked, wantOper = $('#nsOper').checked;
+  const mode = $('input[name=nsMode]:checked').value, picked = $$('#nsScenes input:checked').map(x => +x.value);
+  if (!cams.length) return info('No cameras chosen', 'Tick at least one camera.');
+  if (!wantScene && !wantOper) return info('Nothing to save', 'Tick scene files, operator files or both.');
+  if (wantScene && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Tick the scenes to put in the show.');
+  if (wantScene && mode === 'pick' && !await ask({ title: 'The picture will change', danger: true, ok: 'Switch scenes and read',
+    body: `<p>To read scene ${picked.join(', ')} the cameras have to switch to ${picked.length > 1 ? 'each of those scenes' : 'that scene'}. Afterwards every camera returns to the scene it was on. Do not do this while a camera is on air.</p>` })) return;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  const out = $('#showProgress'); out.classList.remove('hidden'); out.innerHTML = '';
+  const items = [], fails = [];
+  await Promise.all(cams.map(async cam => {
+    const row = document.createElement('div'); row.className = 'note'; row.textContent = `${cam.ip}: working…`; out.appendChild(row);
+    cam.busy = true; renderCams();
+    const base = { target: cam.ip, port: cam.port || 80, targetTitle: cam.title || cam.model || '' };
+    try {
+      const parts = [];
+      if (wantScene) {
+        const scenes = await readCamScenes(cam, mode, picked, t => row.textContent = `${cam.ip}: ${t}`);
+        for (const sc of scenes) {
+          const file = makeFile(cam, [sc]);
+          items.push({ ...base, targetScene: sc.scene ? String(sc.scene) : 'active', kind: 'scene', sceneIdx: 0, fileName: fileName(cam, [sc]), file });
+        }
+        parts.push(scenes.map(sc => 'scene ' + sc.scene).join(', '));
+      }
+      if (wantOper) {
+        row.textContent = `${cam.ip}: reading operator settings…`;
+        const file = await readOperatorFile(cam);
+        items.push({ ...base, targetScene: null, kind: 'operator', sceneIdx: null, fileName: operatorName(cam), file });
+        parts.push('operator file');
+      }
+      row.className = 'note ok'; row.innerHTML = `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span>: ${esc(parts.join(' and '))}`;
+    } catch (e) { fails.push(cam.ip); row.className = 'note err'; row.textContent = `${cam.ip}: could not be read. ${e.message}`; }
+    cam.busy = false; renderCams();
+  }));
+  if (!items.length) return info('Show not saved', 'No camera could be read.');
+  items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || (a.kind === 'operator') - (b.kind === 'operator') || String(a.targetScene).localeCompare(String(b.targetScene)));
+  const show = { format: SHOW_ID, version: 1, name, created: new Date().toISOString(), items };
+  addShow(show);
+  if (!fails.length) setTimeout(() => out.classList.add('hidden'), 6000);
+  if (fails.length) info('Show saved without some cameras', `These cameras could not be read and are not in the show: ${esc(fails.join(', '))}.`);
+  const path = await download(showFile(show), showJson(show));
+  if (path) { show.path = path; saveShows(); renderShows(); }
+};
 $('#showOpen').onclick = async () => {
   try { const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: true }); if (j.ok) return openPaths(j.paths || []); } catch { }
   $('#fileInput').click();
@@ -1865,7 +1979,7 @@ function analyzeS15() {
 const live = { cam: null, sid: null, moving: null, poll: null, irisVal: null, keys: new Set() };
 function renderLiveCams() {
   const sel = $('#liveCam'); const cur = sel.value || store.get('liveCam', '');
-  const opt = c => `<option value="${esc(c.ip)}">${c.title ? esc(c.title) + ' · ' : ''}${esc(c.ip)}${c.model ? ' · ' + esc(c.model) : ''}</option>`;
+  const opt = c => `<option value="${esc(c.ip)}">${c.title ? esc(c.title) + ' - ' : ''}${esc(c.ip)}</option>`;
   const zs = zoneNames();
   sel.innerHTML = !state.cameras.length ? '<option value="">No cameras yet</option>' : !zs.length ? state.cameras.map(opt).join('')
     : zs.map(z => `<optgroup label="${/^\d+$/.test(z) ? "Zone " + esc(z) : esc(z)}">${state.cameras.filter(c => c.zone === z).map(opt).join('')}</optgroup>`).join('') + (state.cameras.some(c => !c.zone) ? `<optgroup label="No zone">${state.cameras.filter(c => !c.zone).map(opt).join('')}</optgroup>` : '');
@@ -1917,19 +2031,25 @@ async function liveSend(t, cmd) {
     return r;
   } catch (e) { $('#liveStatus').textContent = 'Failed: ' + e.message; return null; }
 }
-const setToggle = (sel, on) => { $(sel).classList.toggle('on', !!on); $(sel).setAttribute('aria-pressed', on ? 'true' : 'false'); };
+const setToggle = (sel, on) => { const el = typeof sel === 'string' ? $(sel) : sel; el.classList.toggle('on', !!on); el.setAttribute('aria-pressed', on ? 'true' : 'false'); };
 async function liveRead() {
   const cam = live.cam; if (!cam) return;
   let res;
-  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }], { delayMs: 0 }); }
+  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }], { delayMs: 0 }); }
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   const b = i => (res[i]?.ok ? (res[i].body || '').trim() : '');
   const power = b(0).toLowerCase();
   live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';
-  $('#livePower').textContent = live.power === 'standby' ? 'Power on' : 'Standby';
+  setToggle('#livePowerOn', live.power === 'on' || live.power === 'starting'); setToggle('#livePowerStby', live.power === 'standby');
+  $('#livePowerOn').textContent = live.power === 'starting' ? 'Starting…' : 'On';
   setToggle('#liveAF', b(1).toLowerCase() === 'd11'); setToggle('#liveAI', b(2).toLowerCase() === 'd31'); setToggle('#liveNight', b(3).toLowerCase() === 'd61');
-  setToggle('#liveTallyR', b(4) === 'OLR:1'); setToggle('#liveTallyG', b(5) === 'OLG:1');
+  if (Date.now() - (live.tallyAt || 0) > 3000) { // right after a click the camera may still answer the old state
+    const r = /^OLR:([01])$/i.exec(b(4)) || /^dA([01])$/i.exec(b(8)), g = /^OLG:([01])$/i.exec(b(5));
+    if (r) setToggle('#liveTallyR', r[1] === '1');
+    if (g) setToggle('#liveTallyG', g[1] === '1');
+  }
+  const wb = /^OAW:(\d)$/i.exec(b(9)); if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
   const sc = /^OSF:(\d)/.exec(b(6)); if (sc) { cam.scene = +sc[1] + 1; $$('#liveScenes button').forEach(x => x.classList.toggle('on', +x.dataset.scene === cam.scene)); }
   const ir = /^i(\d{2})$/i.exec(b(7)); live.irisVal = ir ? +ir[1] : null; $('#liveIris').textContent = ir ? ir[1] : '–';
   $('#liveStatus').textContent = `${cam.model || ''} ${live.power ? '· ' + live.power : ''}`;
@@ -1975,17 +2095,46 @@ const toggleCmd = (sel, t, on, off, after) => $(sel).onclick = async () => { con
 toggleCmd('#liveAF', 'ptz', '#D11', '#D10');
 toggleCmd('#liveAI', 'ptz', '#D31', '#D30');
 toggleCmd('#liveNight', 'ptz', '#D61', '#D60');
-toggleCmd('#liveTallyR', 'cam', 'TLR:1', 'TLR:0');
-toggleCmd('#liveTallyG', 'cam', 'TLG:1', 'TLG:0');
-$('#liveOPAF').onclick = () => liveSend('cam', 'OSE:69:1');
-$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body})` : 'Auto white balance started'); };
-$('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
-$('#livePower').onclick = async () => {
+// Tally: the button flips at once; red falls back to the pan/tilt command (#DA) on models without TLR.
+async function liveTally(sel, color) {
   if (!live.cam) return;
-  if (live.power !== 'standby') {
-    if (!await ask({ title: `Put ${esc(live.cam.title || live.cam.ip)} in standby?`, body: '<p>The camera stops sending a picture until you switch it on again.</p>', ok: 'Standby', danger: true })) return;
-    await liveSend('ptz', '#O0');
-  } else await liveSend('ptz', '#O1');
+  const on = !$(sel).classList.contains('on');
+  setToggle(sel, on); live.tallyAt = Date.now();
+  let r = await liveSend('cam', `TL${color}:${on ? 1 : 0}`);
+  if (color === 'R' && (!r?.ok || isErr(r.body))) r = await liveSend('ptz', `#DA${on ? 1 : 0}`);
+  if (!r?.ok || isErr(r.body)) { setToggle(sel, !on); toast(`${color === 'R' ? 'Red' : 'Green'} tally: not accepted by this camera`); }
+  else $('#liveStatus').textContent = `${color === 'R' ? 'Red' : 'Green'} tally ${on ? 'on' : 'off'}`;
+}
+$('#liveTallyR').onclick = () => liveTally('#liveTallyR', 'R');
+$('#liveTallyG').onclick = () => liveTally('#liveTallyG', 'G');
+// White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 9 = VAR.
+// The AW-UE160 uses OSL:2A (ATW on/off) and OSL:2B (0 = A, 1 = B, 4 = VAR) when OAW is refused.
+const WB_OAW = { auto: '0', a: '1', b: '2', var: '9' };
+const WB_FROM_OAW = { 0: 'auto', 1: 'a', 2: 'b', 9: 'var' };
+const WB_UE160 = { auto: ['OSL:2A:1'], a: ['OSL:2A:0', 'OSL:2B:0'], b: ['OSL:2A:0', 'OSL:2B:1'], var: ['OSL:2A:0', 'OSL:2B:4'] };
+const showWb = m => $$('#liveWB [data-wb]').forEach(x => setToggle(x, x.dataset.wb === m));
+$$('#liveWB [data-wb]').forEach(btn => btn.onclick = async () => {
+  if (!live.cam) return;
+  const m = btn.dataset.wb; live.wbAt = Date.now();
+  let r = await liveSend('cam', 'OAW:' + WB_OAW[m]);
+  if (!r?.ok || isErr(r.body)) { for (const c of WB_UE160[m]) r = await liveSend('cam', c); }
+  if (r?.ok && !isErr(r.body)) { showWb(m); $('#liveStatus').textContent = `White balance: ${btn.textContent}`; }
+  else toast('This white balance mode is not available on this camera right now');
+});
+$('#liveOPAF').onclick = () => liveSend('cam', 'OSE:69:1');
+$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first.` : 'Auto white balance started'); };
+$('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
+$('#livePowerOn').onclick = async () => {
+  if (!live.cam) return;
+  const r = await liveSend('ptz', '#O1');
+  if (r?.ok && !isErr(r.body)) { live.power = 'starting'; setToggle('#livePowerOn', true); setToggle('#livePowerStby', false); $('#livePowerOn').textContent = 'Starting…'; toast('Switching the camera on'); }
+  setTimeout(liveRead, 1500); setTimeout(liveRead, 6000);
+};
+$('#livePowerStby').onclick = async () => {
+  if (!live.cam || live.power === 'standby') return;
+  if (!await ask({ title: `Put ${esc(live.cam.title || live.cam.ip)} in standby?`, body: '<p>The camera stops sending a picture until you switch it on again.</p>', ok: 'Standby', danger: true })) return;
+  const r = await liveSend('ptz', '#O0');
+  if (r?.ok && !isErr(r.body)) { live.power = 'standby'; setToggle('#livePowerOn', false); setToggle('#livePowerStby', true); }
   setTimeout(liveRead, 1500);
 };
 

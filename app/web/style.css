@@ -143,6 +143,7 @@ fieldset.seg label{flex-direction:row;align-items:center;gap:8px;color:var(--tex
 #log{margin:0;padding:8px 14px;overflow:auto;flex:1;font:11.5px/1.55 var(--mono);color:var(--text-2);white-space:pre-wrap}
 dialog{background:var(--panel);color:var(--text);border:1px solid var(--rule);border-radius:10px;padding:0;width:420px;box-shadow:0 20px 50px rgba(0,0,0,.45)}
 dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog.wide{width:min(680px,94vw)}
 .dlg{padding:18px 20px;display:flex;flex-direction:column;gap:12px}
 .dlg h3{margin:0;font-size:15px}
 .dlg .row.between{margin-top:6px}
@@ -296,6 +297,12 @@ button.danger-text{color:#f0a49d}
 button.danger-text:hover{border-color:#e0574d;color:#fff}
 input.zonein{width:110px;height:26px;padding:2px 7px;background:transparent;border-color:transparent}
 input.zonein:hover,input.zonein:focus{background:var(--field);border-color:var(--rule)}
+input.descin{width:170px;height:26px;padding:2px 7px;background:transparent;border-color:transparent}
+input.descin:hover,input.descin:focus{background:var(--field);border-color:var(--rule)}
+input.descin::placeholder{color:var(--muted);opacity:.6}
+.edit-cams{margin-bottom:6px}.edit-cams input{width:100%;min-width:130px}.edit-cams td{vertical-align:middle}
+.subbox{margin:6px 0 4px 26px;padding-left:14px;border-left:2px solid var(--rule)}
+.namefield{margin-top:4px}
 .namefields label{min-width:220px}
 .namefields .ext{align-self:center;padding-left:6px;font-size:12px}
 .tokens{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px}
@@ -323,3 +330,15 @@ input.zonein:hover,input.zonein:focus{background:var(--field);border-color:var(-
 input.namein{font-weight:600;width:100%;min-width:180px;background:transparent;border-color:transparent;padding:3px 7px;height:28px}
 input.namein:hover{border-color:var(--rule)} input.namein:focus{background:var(--field)}
 .filepath{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:8px}
+
+.ns-cams{max-height:220px;overflow:auto;border:1px solid var(--rule-soft);border-radius:6px;padding:4px 8px;margin-top:4px}
+.ns-cams .check{margin:2px 0}
+.ns-scenes{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 0 24px}
+.ns-scenes .check{margin:0;font-size:13px}
+#showProgress{margin:8px 0}
+.seg-row{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:6px}
+.seg-row button{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:32px;padding:0 4px;font-size:13px}
+.seg-row button:hover{background:#353a40}
+.seg-row button.toggle.on{background:var(--accent-soft);border-color:var(--accent);color:#cfe0fb}
+#livePowerOn.on{background:rgba(71,178,108,.22);border-color:#47b26c;color:#fff}
+#livePowerStby.on{background:rgba(224,170,60,.2);border-color:#d9a33b;color:#fff}

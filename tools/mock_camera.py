@@ -62,7 +62,12 @@ class H(BaseHTTPRequestHandler):
             st = scenes[cur["scene"]]
             if ptz:
                 last["ptz"] = c
-                if c == "#O": return "p1"
+                if c == "#O": return "p" + cur.get("power", "1")
+                m = re.match(r"#O([01])$", c)
+                if m: cur["power"] = m.group(1); return "p" + m.group(1)
+                if c == "#DA": return "dA" + cur.get("tallyR", "0")
+                m = re.match(r"#DA([01])$", c)
+                if m: cur["tallyR"] = m.group(1); return "dA" + m.group(1)
                 m = re.match(r"#(PTS)(\d{4})$|#([ZFI])(\d{2})$|#([RM])(\d{2})$|#O([01])$|#D([13])([01])$", c)
                 if m: return c[1:].lower()
                 if c == "#D6": return "d6" + st["#D6"]
@@ -79,7 +84,17 @@ class H(BaseHTTPRequestHandler):
                 n = int(m.group(1))
                 if 1 <= n <= NSCENE: cur["scene"] = n; return c
                 return "ER3:XSF"
-            if c == "QSJ:5C": return "OSJ:5C:" + TITLE if TITLE else "ER1:QSJ"
+            if c == "QSJ:5C": return "OSJ:5C:" + cur.get("title", TITLE) if cur.get("title", TITLE) else "ER1:QSJ"
+            m = re.match(r"OSJ:5C:(.{1,40})$", c)
+            if m: cur["title"] = m.group(1); return c
+            m = re.match(r"TL([RG]):([01])$", c)
+            if m: cur["tally" + m.group(1)] = m.group(2); return c
+            m = re.match(r"QL([RG])$", c)
+            if m: return f"OL{m.group(1)}:" + cur.get("tally" + m.group(1), "0")
+            if c == "QAW": return "OAW:" + cur.get("wb", "1")
+            m = re.match(r"OAW:([0129])$", c)
+            if m: cur["wb"] = m.group(1); return c
+            if c in ("OWS", "OAS"): return c
             m = re.match(r"OSL:90:(\d)$", c)
             if m and fam == "UE160": cur["store"][int(m.group(1))] = dict(st); return c
             if c.startswith("Q"):
