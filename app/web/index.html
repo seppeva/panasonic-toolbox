@@ -210,7 +210,7 @@
   </div>
   <div class="live-wrap">
     <div class="live-left">
-    <div class="live-video">
+      <div class="live-video">
       <img id="liveImg" alt="Live picture of the selected camera">
       <div class="live-msg" id="liveMsg">Choose a camera.</div>
     </div>
@@ -218,21 +218,36 @@
         <div class="row between"><h3>Camera presets</h3><label class="check small"><input type="checkbox" id="presetStore"> Store the current position</label></div>
         <div class="preset-row"><div class="preset-grid" id="presetGrid"></div><label class="w90">Presets <select id="presetPage"></select></label></div>
       </div>
-      <div class="live-block">
+      <div class="live-tiles">
+        <div class="live-block t-power">
+        <h3>Power</h3>
+        <div class="hold-row"><button class="toggle" id="livePowerOn" title="Switch the camera on">On</button><button class="toggle" id="livePowerStby" title="Put the camera in standby">Standby</button></div>
+      </div>
+        <div class="live-block t-tally">
+        <h3>Tally</h3>
+        <div class="hold-row"><button class="toggle" id="liveTallyR" title="Red tally on or off">Red</button><button class="toggle" id="liveTallyG" title="Green tally on or off">Green</button></div>
+      </div>
+        <div class="live-block t-day">
+        <h3>Day / night</h3>
+        <div class="hold-row"><button class="toggle" id="liveDay" title="Day mode: IR cut filter in">Day</button><button class="toggle" id="liveNight" title="Night mode: IR cut filter out">Night</button></div>
+      </div>
+        <div class="live-block t-white">
+        <h3>White</h3>
+        <div class="seg-row" id="liveWB" role="group" aria-label="White balance mode"><button class="toggle" data-wb="auto" title="Automatic tracking white (ATW)">Auto</button><button class="toggle" data-wb="var" title="Variable colour temperature">Var</button><button class="toggle" data-wb="a" title="White balance memory A">A</button><button class="toggle" data-wb="b" title="White balance memory B">B</button></div>
+        <div class="hold-row"><button id="liveAWB" title="Auto white balance into memory A or B">AWB</button></div>
+      </div>
+        <div class="live-block t-black">
+        <h3>Black</h3>
+        <div class="hold-row"><button id="liveABB" title="Auto black balance">ABB</button></div>
+      </div>
+        <div class="live-block t-scenes">
         <h3>Scene files</h3>
         <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
+      </div>
       </div>
     </div>
 
     <div class="live-panel">
-      <div class="live-block">
-        <h3>Power</h3>
-        <div class="hold-row"><button class="toggle" id="livePowerOn" title="Switch the camera on">On</button><button class="toggle" id="livePowerStby" title="Put the camera in standby">Standby</button></div>
-      </div>
-      <div class="live-block">
-        <h3>Tally</h3>
-        <div class="hold-row"><button class="toggle" id="liveTallyR" title="Red tally on or off">Red</button><button class="toggle" id="liveTallyG" title="Green tally on or off">Green</button></div>
-      </div>
       <div class="live-block">
         <h3>Pan / tilt</h3>
         <div class="ptpad" id="ptPad">
@@ -256,19 +271,6 @@
         <h3>Iris</h3>
         <div class="hold-row"><button data-iris="-1">Close</button><span class="iris-val mono" id="liveIris">–</span><button data-iris="1">Open</button></div>
         <div class="hold-row"><button class="toggle" id="liveAI">Auto iris</button></div>
-      </div>
-      <div class="live-block">
-        <h3>Day / night</h3>
-        <div class="hold-row"><button class="toggle" id="liveDay" title="Day mode: IR cut filter in">Day</button><button class="toggle" id="liveNight" title="Night mode: IR cut filter out">Night</button></div>
-      </div>
-      <div class="live-block">
-        <h3>White</h3>
-        <div class="seg-row" id="liveWB" role="group" aria-label="White balance mode"><button class="toggle" data-wb="auto" title="Automatic tracking white (ATW)">Auto</button><button class="toggle" data-wb="var" title="Variable colour temperature">Var</button><button class="toggle" data-wb="a" title="White balance memory A">A</button><button class="toggle" data-wb="b" title="White balance memory B">B</button></div>
-        <div class="hold-row"><button id="liveAWB" title="Auto white balance into memory A or B">AWB</button></div>
-      </div>
-      <div class="live-block">
-        <h3>Black</h3>
-        <div class="hold-row"><button id="liveABB" title="Auto black balance">ABB</button></div>
       </div>
       <p class="hint small">Keyboard: arrow keys pan and tilt, + and − zoom, 1 to 9 recall presets. The picture needs JPEG streaming switched on in the camera (Video over IP).</p>
     </div>
@@ -431,23 +433,46 @@
 </div>
 
 <dialog id="settingsDlg">
-  <form method="dialog" class="dlg">
+  <form method="dialog" class="dlg settings">
     <h3>Settings</h3>
-    <div class="setgroup">
-      <label>Project <span class="row"><select id="setProject" class="grow" aria-label="Project"></select><button type="button" class="ghost small" id="projNew">New…</button><button type="button" class="ghost small" id="projRename">Rename…</button><button type="button" class="ghost small danger-text" id="projDel">Delete…</button></span></label>
+    <section class="setsec">
+      <h4>Project</h4>
       <p class="hint">Each project has its own cameras, zones, shows, RP150 rows, scripts and file names.</p>
+      <div class="row"><select id="setProject" class="grow" aria-label="Project"></select><button type="button" class="ghost small" id="projNew">New…</button><button type="button" class="ghost small" id="projRename">Rename…</button><button type="button" class="ghost small danger-text" id="projDel">Delete…</button></div>
       <div class="row wrap"><button type="button" class="ghost small" id="cfgDownload">Download config file</button><button type="button" class="ghost small" id="cfgImport">Import config file…</button><input type="file" id="cfgFile" accept=".json,application/json" hidden></div>
-      <p class="hint">The config file holds every project and these settings, including saved camera logins if you chose to remember them.</p>
-    </div>
-    <label>Pause between commands (ms) <input id="setDelay" type="number" min="0" max="500" value="20"></label>
-    <label>Wait after a scene change (ms) <input id="setSceneWait" type="number" min="500" max="8000" value="2000"></label>
-    <label>Save folder <span class="row"><input id="setSaveDir" class="mono grow"><button type="button" class="ghost small" data-changedir>Choose…</button></span></label>
-    <label>Camera live page path <input id="setLivePath" value="/live/index.html" class="mono"></label>
-    <label>Camera settings page path <input id="setSetupPath" value="/admin/index.html" class="mono"></label>
-    <label class="check"><input type="checkbox" id="setUpdates"> Check for new versions (asks GitHub for the latest version number; nothing about you or your cameras is sent)</label>
-    <p class="muted small" id="aboutText"></p>
-    <p class="small"><a href="https://github.com/seppeva/panasonic-toolbox/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/LICENSE" target="_blank" rel="noopener">License</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Open source components</a></p>
-    <div class="row between"><button type="button" class="danger" id="quitBtn">Quit app</button><span class="row"><button value="cancel" class="ghost">Cancel</button><button value="ok" id="saveSettings">Save</button></span></div>
+      <p class="hint">A config file holds every project and these settings, including saved camera logins if you chose to remember them.</p>
+    </section>
+    <section class="setsec">
+      <h4>Saving files</h4>
+      <label>Save folder <span class="row"><input id="setSaveDir" class="mono grow"><button type="button" class="ghost small" data-changedir>Choose…</button></span></label>
+      <p class="hint">Exports, backups, shows and config files are saved here.</p>
+    </section>
+    <section class="setsec">
+      <h4>Camera communication</h4>
+      <div class="row wrap">
+        <label class="w180">Pause between commands <span class="row nowrap"><input id="setDelay" type="number" min="0" max="500" value="20"><span class="muted small">ms</span></span></label>
+        <label class="w180">Wait after a scene change <span class="row nowrap"><input id="setSceneWait" type="number" min="500" max="8000" value="2000"><span class="muted small">ms</span></span></label>
+      </div>
+      <p class="hint">Raise these when a camera misses settings during an import or export.</p>
+    </section>
+    <section class="setsec">
+      <h4>Camera web pages</h4>
+      <div class="row wrap">
+        <label class="grow">Live page <input id="setLivePath" value="/live/index.html" class="mono"></label>
+        <label class="grow">Settings page <input id="setSetupPath" value="/admin/index.html" class="mono"></label>
+      </div>
+      <p class="hint">The pages that open with Live view and Settings on the Cameras page.</p>
+    </section>
+    <section class="setsec">
+      <h4>Updates</h4>
+      <label class="check"><input type="checkbox" id="setUpdates"> Check for new versions <span class="muted">(asks GitHub for the latest version number; nothing about you or your cameras is sent)</span></label>
+    </section>
+    <section class="setsec about">
+      <h4>About</h4>
+      <p class="muted small" id="aboutText"></p>
+      <p class="small"><a href="https://github.com/seppeva/panasonic-toolbox/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/LICENSE" target="_blank" rel="noopener">License</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Open source components</a></p>
+    </section>
+    <div class="row between setfoot"><button type="button" class="danger" id="quitBtn">Quit app</button><span class="row"><button value="cancel" class="ghost">Cancel</button><button value="ok" id="saveSettings">Save</button></span></div>
   </form>
 </dialog>
 

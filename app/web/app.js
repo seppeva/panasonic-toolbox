@@ -481,8 +481,20 @@ $('#cfgDownload').onclick = async () => {
 };
 async function importConfig(cfg) {
   if (cfg?.format !== CONFIG_ID || !Array.isArray(cfg.projects)) throw new Error('Not a Panasonic Toolbox config file');
-  const names = cfg.projects.map(p => p.name).join(', ');
-  if (!await ask({ title: 'Import config file?', ok: 'Import', body: `<p>Projects in this file: <b>${esc(names)}</b>.</p><p>Projects with the same name are replaced; your other projects stay. The app settings (timing, page paths) are taken from the file. The app restarts its window afterwards.</p>` })) return;
+  const count = d => `${(d?.cameras || []).length} camera${(d?.cameras || []).length === 1 ? '' : 's'}, ${(d?.shows || []).length} show${(d?.shows || []).length === 1 ? '' : 's'}`;
+  const mine = projects();
+  const prow = cfg.projects.map(p => { const m = mine.find(x => x.name === p.name);
+    return `<tr><td><b>${esc(p.name)}</b></td><td>${count(p.data)}</td><td>${m ? `<span class="warn-text">Replaces your project</span> <span class="muted">(${count(projectData(m.id))})</span>` : 'Added as a new project'}</td></tr>`; }).join('');
+  const kept = mine.filter(m => !cfg.projects.some(p => p.name === m.name));
+  const LABELS = { delayMs: 'Pause between commands (ms)', sceneWait: 'Wait after a scene change (ms)', livePath: 'Camera live page path', setupPath: 'Camera settings page path', updateCheck: 'Check for new versions', liveRes: 'Live picture size' };
+  const appRows = Object.entries(cfg.app || {}).filter(([k, v]) => LABELS[k] && JSON.stringify(ls.get('pscene.' + k, null)) !== JSON.stringify(v))
+    .map(([k, v]) => `<tr><td>${LABELS[k]}</td><td>${esc(String(ls.get('pscene.' + k, '–')))}</td><td>${esc(String(v))}</td></tr>`).join('');
+  const opens = cfg.projects.find(p => p.id === cfg.current) || cfg.projects[0];
+  if (!await ask({ title: 'Import config file?', ok: 'Import', wide: true, body: `
+    <table class="tbl dense"><thead><tr><th>Project in the file</th><th>Contains</th><th>What happens</th></tr></thead><tbody>${prow}</tbody></table>
+    ${kept.length ? `<p class="small">Your other projects stay as they are: ${kept.map(m => esc(m.name)).join(', ')}.</p>` : ''}
+    ${appRows ? `<table class="tbl dense"><thead><tr><th>Setting</th><th>Now</th><th>From the file</th></tr></thead><tbody>${appRows}</tbody></table>` : (Object.keys(cfg.app || {}).some(k => LABELS[k]) ? '<p class="small">The app settings in the file are the same as yours.</p>' : '<p class="small">The file has no app settings; yours stay as they are.</p>')}
+    <ul class="tight"><li>Afterwards the app opens project <b>${esc(opens.name)}</b>.</li><li>Nothing is sent to the cameras.</li><li>Tip: download your own config file first if you might want to go back.</li></ul>` })) return;
   let list = projects(); if (!ls.get('pscene.projects', null)) saveProjects(list);
   for (const p of cfg.projects) {
     let id = list.find(x => x.name === p.name)?.id;
@@ -945,20 +957,26 @@ $('#exportBtn').onclick = async () => {
   if (!cams.length) return info('No cameras selected', 'Tick the cameras you want to export.');
   if (!state.bridgeOk && !(await checkBridge())) return;
   const kind = $('input[name=expKind]:checked').value;
-  if (kind === 'operator') return exportOperator(cams);
   const mode = $('input[name=expMode]:checked').value;
   const picked = $$('#expScenes input:checked').map(i => +i.value);
-  if (mode === 'pick') {
-    if (!picked.length) return info('No scenes chosen', 'Tick the scenes you want to export.');
-    const ok = await ask({
-      title: 'The picture will change',
-      body: `<p>To read scene ${picked.join(', ')} the camera has to switch to ${picked.length > 1 ? 'each of those scenes' : 'that scene'}. The picture of these cameras will jump while exporting:</p>
-        <ul>${cams.map(c => `<li><b>${esc(c.title || c.model || c.ip)}</b> <span class="mono">${esc(c.ip)}</span>${c.scene ? `, now on scene ${c.scene}` : ''}</li>`).join('')}</ul>
-        <p>Afterwards every camera returns to the scene it was on. Do not do this while a camera is on air. Are you sure?</p>`,
-      ok: 'Switch scenes and export', danger: true,
-    });
-    if (!ok) return;
-  }
+  if (kind === 'scene' && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Tick the scenes you want to export.');
+  // what each camera will give, and the file it goes into
+  const plan = cams.map(c => {
+    if (kind === 'operator') return { c, what: 'operator settings', name: operatorName(c) };
+    const sc = mode === 'active' ? [c.scene || 1] : picked.filter(n => n <= (c.model ? profileFor(c.model).scenes : 4));
+    return { c, what: mode === 'active' ? `live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : sc.length ? 'scene ' + sc.join(', ') : 'nothing (this model has fewer scenes)', name: sc.length || kind === 'operator' ? fileName(c, sc.map(n => ({ scene: n }))) : '' };
+  });
+  const zip = cams.length > 1 && $('#expZip').checked;
+  const jumps = kind === 'scene' && mode === 'pick';
+  const ok = await ask({
+    title: `Export ${kind === 'operator' ? 'operator files' : 'scene files'} of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
+    wide: true, danger: jumps, ok: jumps ? 'Switch scenes and export' : 'Export',
+    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
+      <p>${zip ? `The files go into one ZIP: <span class="mono">${esc(zipName(kind, cams.length))}</span>, ` : 'The files are saved '}in <span class="mono">${esc(state.saveDir || 'Downloads › Panasonic Toolbox')}</span>. Existing files are never overwritten.</p>
+      ${jumps ? '<p><b>The picture will change:</b> to read these scenes each camera switches to them and then returns to the scene that was live. Do not do this while a camera is on air.</p>' : '<p>Reading changes nothing on the cameras.</p>'}`,
+  });
+  if (!ok) return;
+  if (kind === 'operator') return exportOperator(cams);
   $('#exportBtn').disabled = true;
   const card = $('#expResultCard'); card.classList.remove('hidden');
   const out = $('#expResult'); out.innerHTML = '<div class="progress"><i></i></div><div id="expRows"></div>';
@@ -1176,8 +1194,10 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
   for (const j of jobs) { const c = state.cameras.find(x => x.ip === j.target); if (!byCam.has(c)) byCam.set(c, []); byCam.get(c).push(j); }
   const ok = await ask({
     title,
-    body: `<ul>${[...byCam].map(([c, js]) => `<li><b>${esc(c.title || c.model || c.ip)}</b> <span class="mono">${esc(c.ip)}</span>: ${js.map(j => { const s = srcById(j.srcId); return `${esc(srcLabel(s))}${s.kind === 'operator' ? '' : ' → ' + (j.targetScene === 'active' ? 'live scene' : 'scene ' + j.targetScene)}`; }).join('; ')}</li>`).join('')}</ul>
-      <p>The picture of these cameras changes immediately. If a destination scene is not the live scene, the camera switches to it while importing. You can undo this afterwards.</p>`,
+    wide: true,
+    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Gets</th><th>Into</th><th>Settings</th></tr></thead><tbody>${[...byCam].map(([c, js]) => js.map((j, k) => { const sr = srcById(j.srcId); const into = sr.kind === 'operator' ? 'the camera (operator settings)' : j.targetScene === 'active' ? `the live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : `scene ${j.targetScene}${c.scene && +j.targetScene !== c.scene ? ' <span class="muted">(camera switches to it, then back)</span>' : ''}`;
+        return `<tr><td>${k ? '' : `${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span>`}</td><td>${esc(srcLabel(sr))}<div class="muted small mono">${esc(sr.fileName)}</div></td><td>${into}</td><td>${srcParams(sr)}</td></tr>`; }).join('')).join('')}</tbody></table>
+      <ul class="tight">${opts.backup !== false ? '<li>The current settings of every destination are saved first as a backup file.</li>' : ''}${opts.verify ? '<li>Afterwards every value is read back to check it.</li>' : ''}<li>The picture of these cameras changes immediately. You can undo this afterwards.</li></ul>`,
     ok: 'Import', danger: true,
   });
   if (!ok) return;
@@ -1771,6 +1791,23 @@ $('#gridSave').onclick = async () => {
   items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || (a.kind === 'operator') - (b.kind === 'operator') || String(a.targetScene).localeCompare(String(b.targetScene), 'en', { numeric: true }));
   const ed = state.gridEdit && state.shows.includes(state.gridEdit) ? state.gridEdit : null;
   if (ed) {
+    // what changes: per camera and scene, the old and the new content
+    const key = it => `${it.target}|${it.kind === 'operator' ? 'op' : it.targetScene}`;
+    const what = it => it ? `${it.kind === 'operator' ? 'operator file' : 'scene ' + (it.file.scenes?.[it.sceneIdx]?.scene ?? '?')} from ${it.file.camera?.title || it.file.camera?.model || it.file.camera?.ip || 'file'}` : '';
+    const olds = new Map(ed.items.map(it => [key(it), it])), news = new Map(items.map(it => [key(it), it]));
+    const rows = [];
+    for (const k of new Set([...olds.keys(), ...news.keys()])) {
+      const o = olds.get(k), n = news.get(k);
+      if (o && n && o.file === n.file && o.sceneIdx === n.sceneIdx) continue;
+      const [ip, col] = k.split('|'), c = state.cameras.find(x => x.ip === ip);
+      rows.push(`<tr><td>${esc(c ? camName(c) : (o || n).targetTitle || ip)} <span class="mono muted small">${esc(ip)}</span></td><td>${col === 'op' ? 'Operator file' : 'Scene ' + esc(col)}</td><td>${o ? esc(what(o)) : '<span class="muted">empty</span>'}</td><td>${n ? esc(what(n)) : '<span class="muted">removed</span>'}</td></tr>`);
+    }
+    const renamed = name !== ed.name;
+    if (!rows.length && !renamed) { info('Nothing changed', 'The show is the same as before.'); return; }
+    if (!await ask({ title: `Save changes to “${esc(ed.name)}”?`, ok: 'Save changes', wide: true, body: `
+      ${renamed ? `<p>New name: <b>${esc(name)}</b></p>` : ''}
+      ${rows.length ? `<table class="tbl dense"><thead><tr><th>Camera</th><th>Cell</th><th>Was</th><th>Becomes</th></tr></thead><tbody>${rows.join('')}</tbody></table>` : ''}
+      <ul class="tight"><li>${ed.path ? `The file <span class="mono">${esc(ed.path.split(/[\\/]/).pop())}</span> is overwritten with the new version.` : 'The show is updated in the app; use Save file to keep it as a file.'}</li><li>Nothing is sent to the cameras until you recall the show.</li></ul>` })) return;
     const before = JSON.stringify(state.shows);
     ed.items = items; ed.modified = new Date().toISOString();
     if (name !== ed.name) ed.name = name;
