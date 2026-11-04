@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.13.0"
+VERSION = "2.13.1"
 DEFAULT_PORT = 8765
 
 

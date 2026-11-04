@@ -1398,7 +1398,11 @@ function renderHttpTargets() {
 async function copyText(text, btn) {
   try { await navigator.clipboard.writeText(text); }
   catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
-  if (btn) { const t = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = t, 1400); }
+  if (btn) { // keep the button's width, so nothing next to it moves
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    btn.style.minWidth = btn.offsetWidth + 'px'; btn.classList.add('copied'); btn.textContent = 'Copied';
+    clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = btn.dataset.label; btn.classList.remove('copied'); }, 1400);
+  }
 }
 function urlRow(t, cmdFn, extraHtml = '') {
   const wrap = document.createElement('div'); wrap.className = 'urlrow';

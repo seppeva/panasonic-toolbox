@@ -377,3 +377,7 @@ ul.tight{margin:6px 0 0;padding-left:18px}ul.tight li{margin:2px 0}
 .setsec .hint{margin:0}
 .setsec .row.nowrap input{width:100px}
 .setfoot{position:sticky;bottom:0;background:var(--panel);padding:12px 0 18px;border-top:1px solid var(--rule-soft)}
+#cmdTable td.acts{width:250px;min-width:250px}
+#cmdTable td.acts button[data-act=copy]{min-width:66px}
+#cmdTable td.acts .out{max-width:240px;min-height:16px}
+button.copied{color:#8fd19e}

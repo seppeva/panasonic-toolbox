@@ -1,8 +1,24 @@
 # Panasonic Toolbox
 
-Desktop app for **macOS and Windows** to **export and import the scene files (all shading settings of a scene)** of Panasonic PTZ cameras, something an AW-RP120/RP150 cannot do. It also looks up every REST command of the cameras (for Bitfocus Companion), opens a camera's web pages already logged in, and helps assign cameras to an **AW-RP150**.
+The all-in-one desktop app for **Panasonic PTZ cameras and remotes**, for **macOS and Windows**. Set up the network, control the cameras live, save and copy their scene files, build shows, look up every camera command and assign cameras to an **AW-RP150**.
 
-Download page: **https://seppeva.github.io/panasonic-toolbox/**
+Website: **https://seppeva.github.io/panasonic-toolbox/**
+
+## What the app does
+
+| Tab | What it is for |
+|---|---|
+| **Network setup** | Find every Panasonic camera on the network, in any IP range, and set its name and IP address, like Easy IP Setup. |
+| **Cameras** | Your camera list: IP address, name on the camera, your own description, model, zone, live scene and status. Zones let you work on groups of cameras; a camera's IP address can be changed in the app when it got a new one. |
+| **Live** | Live picture with control buttons: pan/tilt, zoom, focus, iris, presets, scene files, power, tally, day/night, white and black balance. |
+| **Export** | Save the shading settings of any scene (scene files, `.pscene.json`) or an operator's own preferences (operator files, `.poper`), from one or many cameras. |
+| **Import** | Put saved settings back on any camera and scene, with a comparison first, a backup and a check afterwards. |
+| **Shows** | A complete setup (which scene and operator file goes to which camera and scene) recalled with one click. Made from the cameras, or in a grid from saved files, and editable afterwards (`.pshow`). |
+| **Parameters** | Every REST command of the cameras and controllers with a ready-made link, scripts that run on many cameras at once, and what is in a scene file and an operator file per model. |
+| **RP150 assignment** | Assign cameras to the CAM buttons of an AW-RP150 through its `Network.s15` file (experimental). |
+| **Settings** | Projects (each with its own cameras, zones, shows and scripts), a config file with everything to move to another computer, the save folder, timing and the camera web page paths. |
+
+Exports, imports, saving an edited show and importing a config file ask for confirmation first and show exactly what will happen. Changes in the app and on the cameras can be undone.
 
 ## Repository layout
 
@@ -10,6 +26,7 @@ Download page: **https://seppeva.github.io/panasonic-toolbox/**
 |---|---|
 | `index.html`, `privacy.html`, `install.sh`, `install.ps1`, `assets/` | The website (GitHub Pages): download buttons, explanation, privacy statement and install scripts |
 | `app/panasonic_scene.py` | The app: a local server on `127.0.0.1:8765` plus its own window (pywebview) |
+| `app/easyip.py` | Panasonic Easy IP protocol: find cameras in any IP range and change their network settings |
 | `app/web/` | The interface (HTML/JS/CSS), `catalog.js` (scene settings per model) and `commands.js` (all REST commands) |
 | `app/panasonic_scene.spec`, `app/entitlements.plist` | PyInstaller build (macOS .app and Windows .exe) |
 | `installer/windows.iss` | Inno Setup script for the Windows installer |
@@ -27,7 +44,7 @@ Panasonic Toolbox (app on your computer)
                                     http://<camera-ip>/cgi-bin/aw_ptz?cmd=…&res=1
 ```
 
-Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in *Downloads › Panasonic Toolbox* and are never overwritten.
+Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in the save folder from Settings (by default *Downloads › Panasonic Toolbox*) and are never overwritten. Camera names come from `QSJ:5C`, on older models from `/cgi-bin/get_basic`, otherwise from Easy IP (UDP 10669/10670), which is also used by Network setup.
 
 ## Releasing a new version
 
@@ -58,6 +75,8 @@ The install commands on the page adapt to the address automatically.
 pip install pywebview            # optional; without it the app opens in your browser
 python3 tools/mock_camera.py 127.0.0.11 8080 AW-UE150 "CAM 1" &
 python3 tools/mock_camera.py 127.0.0.12 8080 AW-UE160 "CAM 2" &
+python3 tools/mock_camera.py 127.0.0.13 8080 AW-HE130 "CAM 3" basic &   # older model: name only via get_basic
+python3 tools/mock_easyip.py &   # two cameras for Network setup
 python3 app/panasonic_scene.py   # or --browser / --headless
 # in the app: scan 127.0.0.10-13 on port 8080
 ```
@@ -76,6 +95,8 @@ python3 app/panasonic_scene.py   # or --browser / --headless
 
 `raw` is exactly what the camera answered; on import it is sent back as a command, in three passes (in order with modes first, retry what failed, simplify multi-field commands). Every value is then read back and compared. On an AW-UE160 the scene is also stored with `OSL:90` (SCENE FILE STORE).
 
+Other files the app writes: operator files (`.poper`, format `panasonic-ptz-operator`), shows (`.pshow`, format `panasonic-toolbox-show`, with the scene and operator files embedded) and config files (`PanasonicToolbox_config_*.json`, format `panasonic-toolbox-config`, every project plus the app settings).
+
 ## Which settings?
 
 | Model | Settings |
@@ -86,7 +107,7 @@ python3 app/panasonic_scene.py   # or --browser / --headless
 | UE100 | 98 |
 | UE80 series | 85 |
 
-The full list is in [PARAMETERS.md](PARAMETERS.md).
+Other models, such as the AW-HE130 and AW-UE70, get every scene setting they support. Operator files hold 30 settings (presets, pan/tilt and lens preferences); tally is not part of them. The scene settings per model are in [PARAMETERS.md](PARAMETERS.md); the operator settings are on the Parameters tab in the app.
 
 ---
 Not affiliated with Panasonic. Use at your own risk and don't test on a camera that is on air.
