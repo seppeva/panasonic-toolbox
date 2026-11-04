@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.11.0"
+VERSION = "2.12.0"
 DEFAULT_PORT = 8765
 
 
@@ -121,6 +121,27 @@ def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, ret
             last_err = str(getattr(e, "reason", e))
         time.sleep(0.15)
     return {"ok": False, "status": 0, "error": last_err or "unknown error"}
+
+
+def get_basic(ip, port, user=None, password=None, timeout=2.0):
+    """The camera's basic settings page (/cgi-bin/get_basic: lines like cam_title=PTZ1). Used for the camera
+    title on models that do not answer the QSJ:5C command."""
+    url = f"http://{ip}:{port}/cgi-bin/get_basic"
+    try:
+        with build_opener(ip, port, user, password).open(url, timeout=timeout) as r:
+            return {"ok": True, "status": r.status, "body": r.read(20000).decode("utf-8", "replace")}
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "status": e.code, "error": f"HTTP {e.code}"}
+    except Exception as e:
+        return {"ok": False, "status": 0, "error": str(getattr(e, "reason", e))}
+
+
+def title_from_basic(body):
+    for line in (body or "").replace("&", "\n").splitlines():
+        k, _, v = line.partition("=")
+        if k.strip().lower() == "cam_title":
+            return urllib.parse.unquote_plus(v.strip()).strip()
+    return ""
 
 
 SETTINGS = {}
@@ -353,6 +374,10 @@ def probe(ip, port, user, password):
     t = send_command(ip, port, "cam", "QSJ:5C", user, password, timeout=1.0, retries=0)
     if t.get("ok") and t["body"].upper().startswith("OSJ:5C:"):
         info["title"] = t["body"][7:]
+    if not info.get("title"):
+        b = get_basic(ip, port, user, password, timeout=1.5)
+        if b.get("ok"):
+            info["title"] = title_from_basic(b["body"])
     p = send_command(ip, port, "ptz", "#O", user, password, timeout=1.0, retries=0)
     if p.get("ok"):
         info["power"] = p["body"]
@@ -400,6 +425,13 @@ def api_batch(req):
             if it.get("sleepMs"):
                 time.sleep(min(10000, int(it["sleepMs"])) / 1000.0)
                 results.append({"ok": True, "sleep": True})
+                continue
+            if it.get("type") == "basic":
+                r = get_basic(ip, port, user, pw, min(timeout, 3.0))
+                if r.get("ok"):
+                    r["body"] = title_from_basic(r["body"])  # only the title goes back to the page
+                r["cmd"] = "get_basic"
+                results.append(r)
                 continue
             kind = "ptz" if it.get("type") == "ptz" else "cam"
             r = send_command(ip, port, kind, str(it.get("cmd", "")), user, pw, timeout)

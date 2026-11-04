@@ -359,3 +359,6 @@ table.grid td{vertical-align:middle}
 .project-name:hover{border-color:var(--accent);color:var(--text)}
 .project-name::before{content:'Project: ';color:var(--muted)}
 #settingsDlg{width:min(520px,94vw)}
+.selbar.idle{background:transparent;border-color:var(--rule-soft)}
+.selbar.idle .seln,.selbar.idle button{opacity:.45}
+.selall-row{font-weight:600;border-bottom:1px solid var(--rule-soft);padding-bottom:4px;margin-bottom:2px!important;flex-basis:100%}

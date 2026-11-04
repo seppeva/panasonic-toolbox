@@ -197,6 +197,9 @@ async function identify(cam) {
   cam.scene = parseSceneResp(r[1], cam);
   cam.power = r[2].ok ? (r[2].body === 'p1' ? 'aan' : r[2].body === 'p0' ? 'standby' : r[2].body) : '?';
   if (r[3].ok && /^OSJ:5C:/i.test(r[3].body)) cam.title = r[3].body.slice(7).trim();
+  else { // older models: the title from the camera's basic settings page
+    try { const [t] = await batch(cam, [{ type: 'basic' }]); if (t?.ok && t.body) cam.title = t.body.trim(); } catch { }
+  }
   return cam;
 }
 function parseSceneResp(res, cam) {
@@ -459,7 +462,7 @@ $('#projRename').onclick = async () => {
   $('#settingsDlg').close();
   if (!await ask({ title: 'Rename project', ok: 'Rename', body: `<label>Name <input id="askProj" value="${esc(projectName())}" autocomplete="off"></label>` })) return;
   const name = $('#askProj').value.trim(); if (!name) return;
-  saveProjects(projects().map(p => p.id === projectId() ? { ...p, name } : p)); toast(`Project renamed to ${name}`);
+  saveProjects(projects().map(p => p.id === projectId() ? { ...p, name } : p)); $('#projectName').textContent = name; toast(`Project renamed to ${name}`);
 };
 $('#projDel').onclick = async () => {
   $('#settingsDlg').close();
@@ -616,10 +619,25 @@ function renderZones() {
   zoneChips($('#camZoneBar'), camSel(() => renderCams()), 'Select zone', true);
   zoneChips($('#expZones'), camSel(() => { renderExport(); renderCams(); }));
 }
+// The bar with actions for the selected rows always keeps its place (no jumping rows); without a selection its controls are off.
+function selBar(bar, n) {
+  bar.classList.remove('hidden'); bar.classList.toggle('idle', !n);
+  $$('button, input, select', bar).forEach(x => { x.disabled = !n; });
+}
 // Select-all checkbox: shows a dash when some rows are selected; a click then clears the selection, the next click selects all.
 function selAllState(cb, list, get) {
   const n = list.filter(get).length;
   cb.checked = list.length > 0 && n === list.length; cb.indeterminate = n > 0 && n < list.length;
+}
+// A 'Select all' checkbox on top of a list of camera checkboxes, working like the one on the Cameras page.
+function selAllRow(box, list, get, set, done) {
+  if (!list.length) return;
+  const l = document.createElement('label'); l.className = 'check selall-row';
+  l.innerHTML = '<input type="checkbox" aria-label="Select all cameras"><span>Select all</span>';
+  box.prepend(l);
+  const cb = $('input', l); selAllState(cb, list, get);
+  cb.onchange = () => { selAllClick(cb, list, get, set); done(); };
+  return cb;
 }
 function selAllClick(cb, list, get, set) {
   const any = list.some(get);
@@ -691,7 +709,7 @@ $('#camEditSel').onclick = async () => {
 function updateSel() {
   const n = state.cameras.filter(c => c.selected).length;
   selAllState($('#selAll'), state.cameras, c => c.selected); renderZones();
-  $('#camSelN').textContent = n; $('#camSelBar').classList.toggle('hidden', !n);
+  $('#camSelN').textContent = n; selBar($('#camSelBar'), n);
   $('#expSel').textContent = n ? `${n} camera${n > 1 ? 's' : ''} selected` : 'Select at least one camera';
 }
 $('#selAll').onchange = () => { selAllClick($('#selAll'), state.cameras, c => c.selected, (c, v) => c.selected = v); saveCams(); renderCams(); };
@@ -756,6 +774,14 @@ async function refreshAll(cams) {
     catch (e) { c.status = e.message; c.statusKind = 'err'; log(`${c.ip}: ${e.message}`, 'ERROR'); }
     c.busy = false; renderCams();
   }));
+  // Still no name? Easy IP announces the camera name too (the name Easy IP Setup shows).
+  const noName = cams.filter(c => !c.title && c.statusKind === 'ok');
+  if (noName.length) {
+    try {
+      const j = await bridgeFetch('/api/eip/discover', { timeout: 2 });
+      for (const c of noName) { const f = j.cameras.find(x => x.ip === c.ip); if (f?.name) c.title = f.name; }
+    } catch { /* Easy IP not available (port in use); names stay empty */ }
+  }
   saveCams(); renderCams();
 }
 $('#refreshBtn').onclick = async () => { if (state.bridgeOk || await checkBridge()) refreshAll(state.cameras); };
@@ -889,9 +915,10 @@ function renderExport() {
   for (const c of state.cameras) {
     const l = document.createElement('label'); l.className = 'check camline';
     l.innerHTML = `<input type="checkbox" ${c.selected ? 'checked' : ''}><span class="mono">${esc(c.ip)}</span><span>${esc(c.title || c.model || '')}${c.zone ? ` <span class="pill">${esc(c.zone)}</span>` : ''}</span><span class="muted small">${c.scene ? 'Scene ' + c.scene + ' live' : ''}</span>`;
-    $('input', l).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); renderExportScenes(); };
+    $('input', l).onchange = e => { c.selected = e.target.checked; saveCams(); renderExport(); renderCams(); };
     box.appendChild(l);
   }
+  selAllRow(box, state.cameras, c => c.selected, (c, v) => c.selected = v, () => { saveCams(); renderExport(); renderCams(); });
   $('#expCamsEmpty').classList.toggle('hidden', state.cameras.length > 0);
   renderExportScenes(); updateSel(); renderNameFields();
 }
@@ -1081,7 +1108,7 @@ $('#addJobBtn').onclick = () => {
 function renderImports() {
   renderGrid();
   // step 1: list of opened scenes
-  $('#srcList').innerHTML = state.sources.length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || '')} <span class="mono muted">${esc(s.file.camera?.ip || '')}</span> <span class="muted small">${esc(s.file.camera?.model || '')}</span></td><td>${s.kind === 'operator' ? 'Operator file' : 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end"><button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $('#srcList').innerHTML = state.sources.filter(x => !x.fromShow).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.filter(x => !x.fromShow).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || '')} <span class="mono muted">${esc(s.file.camera?.ip || '')}</span> <span class="muted small">${esc(s.file.camera?.model || '')}</span></td><td>${s.kind === 'operator' ? 'Operator file' : 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end"><button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
   $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
   // step 2: jobs
   const tb = $('#impTable tbody'); tb.innerHTML = '';
@@ -1109,7 +1136,7 @@ function renderImports() {
 }
 function updImpSel() {
   const n = state.jobs.filter(j => j.include).length;
-  $('#impSelN').textContent = n; $('#impSelBar').classList.toggle('hidden', !n);
+  $('#impSelN').textContent = n; selBar($('#impSelBar'), n);
   selAllState($('#impSelAll'), state.jobs, j => j.include);
 }
 $('#impSelAll').onchange = () => { selAllClick($('#impSelAll'), state.jobs, j => j.include, (j, v) => j.include = v); renderImports(); };
@@ -1509,6 +1536,8 @@ function renderScript() {
   const prev = new Set(store.get('scriptCams', []));
   $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span>${c.zone ? ` <span class="pill">${esc(c.zone)}</span>` : ''}</label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you tick here.</span>';
   $$('#scriptCams input').forEach(i => i.onchange = () => { store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); });
+  { const on = new Set(store.get('scriptCams', []));
+    selAllRow($('#scriptCams'), state.cameras, c => on.has(c.ip), (c, v) => v ? on.add(c.ip) : on.delete(c.ip), () => { store.set('scriptCams', [...on]); renderScript(); }); }
   const scriptBox = c => $$('#scriptCams input').find(i => i.value === c.ip);
   zoneChips($('#scriptZones'), { get: c => !!scriptBox(c)?.checked, set: (c, on) => { const i = scriptBox(c); if (i) i.checked = on; },
     done: () => { store.set('scriptCams', $$('#scriptCams input:checked').map(x => x.value)); renderScript(); } }, 'Zone');
@@ -1614,9 +1643,10 @@ function renderShows() {
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
-      <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> <button class="ghost small" data-act="file">Save file</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
+      <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> <button class="ghost small" data-act="edit">Edit</button> <button class="ghost small" data-act="file">Save file</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
     $('input[type=checkbox]', tr).onchange = e => { sh.sel = e.target.checked; updShowSel(); };
     $('[data-act=recall]', tr).onclick = () => recallShow(sh);
+    $('[data-act=edit]', tr).onclick = () => editShow(sh);
     const ni = $('.namein', tr);
     ni.addEventListener('keydown', e => { if (e.key === 'Enter') ni.blur(); if (e.key === 'Escape') { ni.value = sh.name; ni.blur(); } });
     ni.addEventListener('change', () => renameShow(sh, ni.value));
@@ -1630,7 +1660,7 @@ function renderShows() {
 }
 function updShowSel() {
   const n = state.shows.filter(s => s.sel).length;
-  $('#showSelN').textContent = n; $('#showSelBar').classList.toggle('hidden', !n);
+  $('#showSelN').textContent = n; selBar($('#showSelBar'), n);
   selAllState($('#showSelAll'), state.shows, x => x.sel);
 }
 $('#showSelAll').onchange = () => { selAllClick($('#showSelAll'), state.shows, x => x.sel, (x, v) => x.sel = v); renderShows(); };
@@ -1653,6 +1683,8 @@ async function recallShow(sh) {
   await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Recall show “${esc(sh.name)}”?`);
   state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id)); // keep the import page clean
 }
+// Name to show for a camera: the name on the camera, else your description, else the model.
+const camName = c => c.title || c.desc || c.model || 'Camera';
 /* ---- show grid: rows = cameras, columns = scenes; each cell picks an opened scene ---- */
 state.gridCams = new Set(store.get('gridCams', []));
 state.grid = {}; // ip -> { '1': srcId, ..., op: srcId }
@@ -1662,8 +1694,9 @@ function renderGrid() {
   const scenes = state.sources.filter(x => x.kind === 'scene'), opers = state.sources.filter(x => x.kind === 'operator');
   $('#gridFiles').textContent = state.sources.length ? `Opened: ${scenes.length} scene${scenes.length === 1 ? '' : 's'}${opers.length ? ` and ${opers.length} operator file${opers.length === 1 ? '' : 's'}` : ''}.` : 'No files opened yet. Use Open files… or export from the cameras first.';
   zoneChips($('#gridZones'), { get: c => state.gridCams.has(c.ip), set: (c, on) => on ? state.gridCams.add(c.ip) : state.gridCams.delete(c.ip), done: () => { saveGridCams(); renderGrid(); } }, 'Cameras', true);
-  $('#gridCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${state.gridCams.has(c.ip) ? 'checked' : ''}><span>${esc(c.title || c.model || 'Camera')} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('') : '<span class="muted">Find or add cameras on the Cameras page first.</span>';
+  $('#gridCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${state.gridCams.has(c.ip) ? 'checked' : ''}><span>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('') : '<span class="muted">Find or add cameras on the Cameras page first.</span>';
   $$('#gridCams input').forEach(i => i.onchange = () => { i.checked ? state.gridCams.add(i.value) : state.gridCams.delete(i.value); saveGridCams(); renderGrid(); });
+  selAllRow($('#gridCams'), state.cameras, c => state.gridCams.has(c.ip), (c, v) => v ? state.gridCams.add(c.ip) : state.gridCams.delete(c.ip), () => { saveGridCams(); renderGrid(); });
   const cams = state.cameras.filter(c => state.gridCams.has(c.ip));
   const n = Math.max(0, ...cams.map(c => c.model ? profileFor(c.model).scenes : 4));
   // drop assignments whose file was closed
@@ -1675,7 +1708,7 @@ function renderGrid() {
   else {
     t.innerHTML = `<thead><tr><th>Camera</th>${Array.from({ length: n }, (_, i) => `<th>Scene ${i + 1}</th>`).join('')}<th>Operator file</th></tr></thead><tbody>${cams.map(c => {
       const g = state.grid[c.ip] || {}, max = c.model ? profileFor(c.model).scenes : 4;
-      return `<tr data-ip="${esc(c.ip)}"><td class="nowrap"><b>${esc(c.title || c.model || 'Camera')}</b><div class="mono muted small">${esc(c.ip)}${c.desc ? ' · ' + esc(c.desc) : ''}</div></td>${Array.from({ length: n }, (_, i) => i < max
+      return `<tr data-ip="${esc(c.ip)}"><td class="nowrap"><b>${esc(camName(c))}</b><div class="mono muted small">${esc(c.ip)}${c.desc && c.title ? ' · ' + esc(c.desc) : ''}${c.model ? ' · ' + esc(c.model) : ''}</div></td>${Array.from({ length: n }, (_, i) => i < max
         ? `<td><select data-col="${i + 1}" class="${g[i + 1] ? 'set' : ''}" aria-label="Scene ${i + 1} of ${esc(c.ip)}">${opts(scenes, g[i + 1])}</select></td>`
         : '<td class="muted">–</td>').join('')}<td><select data-col="op" class="${g.op ? 'set' : ''}" aria-label="Operator file for ${esc(c.ip)}">${opts(opers, g.op)}</select></td></tr>`;
     }).join('')}</tbody>`;
@@ -1701,7 +1734,36 @@ function gridItems() {
 }
 function gridCount() { const n = gridItems().length; $('#gridCount').textContent = n ? `${n} cell${n === 1 ? '' : 's'} filled` : ''; $('#gridSave').disabled = !n; }
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
-$('#gridClear').onclick = () => { state.grid = {}; renderGrid(); };
+$('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
+// Edit a saved show: its scenes go back into the grid (as opened files), its cameras are ticked.
+function editShow(sh) {
+  for (const it of sh.items) if (!state.cameras.some(c => c.ip === it.target)) upsertCam(it.target, it.port, { title: it.targetTitle });
+  state.sources = state.sources.filter(x => !x.fromShow);
+  state.grid = {}; state.gridCams = new Set(sh.items.map(it => it.target)); saveGridCams();
+  const skipped = [];
+  for (const it of sh.items) {
+    const src = { id: ++srcId, fileName: it.fileName || sh.name, file: it.file, sceneIdx: it.sceneIdx, kind: it.kind, fromShow: true };
+    state.sources.push(src);
+    const cam = state.cameras.find(c => c.ip === it.target);
+    const col = it.kind === 'operator' ? 'op' : it.targetScene === 'active' ? (cam?.scene ? String(cam.scene) : null) : String(it.targetScene);
+    if (!col) { skipped.push(it); continue; }
+    (state.grid[it.target] = state.grid[it.target] || {})[col] = src.id;
+  }
+  state.gridEdit = sh;
+  $('#gridName').value = sh.name;
+  $('#gridSave').textContent = 'Save changes';
+  $('#gridEditing').innerHTML = `Editing <b>${esc(sh.name)}</b>. Change the cells and choose Save changes. <button type="button" class="ghost small" id="gridEditStop">Stop editing</button>`;
+  $('#gridEditing').classList.remove('hidden');
+  $('#gridEditStop').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
+  renderCams(); renderImports();
+  $('#gridCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (skipped.length) info('Some items need a scene number', `${skipped.length} item${skipped.length > 1 ? 's go' : ' goes'} to “the live scene” of a camera whose live scene is unknown right now. Pick the scene for ${skipped.length > 1 ? 'them' : 'it'} in the grid; the file is in the cell lists.`);
+}
+function endGridEdit() {
+  state.gridEdit = null; $('#gridSave').textContent = 'Save as show';
+  $('#gridEditing').classList.add('hidden');
+  state.sources = state.sources.filter(x => !x.fromShow || Object.values(state.grid).some(g => Object.values(g).includes(x.id)));
+}
 $('#gridAuto').onclick = () => {
   let n = 0;
   for (const c of state.cameras.filter(x => state.gridCams.has(x.ip))) for (const src of state.sources) {
@@ -1717,6 +1779,21 @@ $('#gridSave').onclick = async () => {
   if (!items.length) return info('Nothing chosen', 'Choose a scene in at least one cell.');
   const name = $('#gridName').value.trim() || `Show ${new Date().toLocaleDateString('en-GB')}`;
   items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || (a.kind === 'operator') - (b.kind === 'operator') || String(a.targetScene).localeCompare(String(b.targetScene), 'en', { numeric: true }));
+  const ed = state.gridEdit && state.shows.includes(state.gridEdit) ? state.gridEdit : null;
+  if (ed) {
+    const before = JSON.stringify(state.shows);
+    ed.items = items; ed.modified = new Date().toISOString();
+    if (name !== ed.name) ed.name = name;
+    saveShows(); renderShows();
+    const after = JSON.stringify(state.shows);
+    pushHistory({ label: `Edit show ${name}`, undo: async () => { state.shows = JSON.parse(before); saveShows(); renderShows(); }, redo: async () => { state.shows = JSON.parse(after); saveShows(); renderShows(); } });
+    if (ed.path && IN_APP) {
+      try { const j = await bridgeFetch('/api/rename', { path: ed.path, name: showFile(ed), dataB64: b64(showJson(ed)) }); ed.path = j.path; saveShows(); renderShows(); toast(`Show “${name}” updated`, j.path); }
+      catch (e) { delete ed.path; saveShows(); renderShows(); info('Show updated in the app', `The file could not be updated (${esc(e.message)}). Use Save file to save it again.`); }
+    } else toast(`Show “${name}” updated`);
+    endGridEdit(); state.grid = {}; renderGrid();
+    return;
+  }
   const show = { format: SHOW_ID, version: 1, name, created: new Date().toISOString(), items };
   addShow(show); toast(`Show “${name}” saved`);
   const path = await download(showFile(show), showJson(show));
@@ -1728,8 +1805,8 @@ $('#showNew').onclick = async () => {
   const maxSc = Math.max(4, ...state.cameras.map(c => c.model ? profileFor(c.model).scenes : 4));
   const pending = ask({ title: 'New show from cameras', ok: 'Read cameras and save show', wide: true, body: `
     <label>Name of the show <input id="nsName" value="Show ${new Date().toLocaleDateString('en-GB')}"></label>
-    <div><div class="row between"><b class="small">Cameras</b><span class="row"><button type="button" class="ghost small" id="nsAll">All</button><button type="button" class="ghost small" id="nsNone">None</button></span></div>
-      <div class="ns-cams">${state.cameras.map((c, i) => `<label class="check"><input type="checkbox" data-ns="${i}" ${pre.includes(c) ? 'checked' : ''}><span>${esc(c.title || c.model || 'Camera')}${c.desc ? ` <span class="muted">· ${esc(c.desc)}</span>` : ''} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('')}</div></div>
+    <div><b class="small">Cameras</b><div class="zonebar" id="nsZones"></div>
+      <div class="ns-cams">${state.cameras.map((c, i) => `<label class="check"><input type="checkbox" data-ns="${i}" ${pre.includes(c) ? 'checked' : ''}><span>${esc(camName(c))}${c.desc && c.title ? ` <span class="muted">· ${esc(c.desc)}</span>` : ''} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('')}</div></div>
     <div><b class="small">What goes in the show</b>
       <label class="check"><input type="checkbox" id="nsScene" checked> Scene files</label>
       <div class="subbox">
@@ -1739,8 +1816,13 @@ $('#showNew').onclick = async () => {
       </div>
       <label class="check"><input type="checkbox" id="nsOper"> Operator files</label></div>
     <p class="hint">The app reads the current settings of these cameras now and stores them in the show. Recalling the show later puts each scene back in the same scene number on the same camera.</p>` });
-  $('#nsAll').onclick = () => $$('[data-ns]').forEach(x => x.checked = true);
-  $('#nsNone').onclick = () => $$('[data-ns]').forEach(x => x.checked = false);
+  const nsBox = c => $(`[data-ns="${state.cameras.indexOf(c)}"]`);
+  const nsSel = { get: c => !!nsBox(c)?.checked, set: (c, on) => { nsBox(c).checked = on; }, done: () => nsRender() };
+  let nsAllCb = null;
+  const nsRender = () => { zoneChips($('#nsZones'), nsSel, 'Zone', true); if (nsAllCb) selAllState(nsAllCb, state.cameras, nsSel.get); };
+  nsAllCb = selAllRow($('.ns-cams'), state.cameras, nsSel.get, nsSel.set, nsRender);
+  $$('[data-ns]').forEach(x => x.addEventListener('change', nsRender));
+  nsRender();
   $$('#nsScenes input').forEach(x => x.onchange = () => { if (x.checked) $('input[name=nsMode][value=pick]').checked = true; });
   if (!await pending) return;
   const name = $('#nsName').value.trim() || 'Show';
@@ -1844,7 +1926,7 @@ function renderEip() {
 }
 function updEipSel() {
   const n = state.eip.filter(r => r.sel).length;
-  $('#eipSelN').textContent = n; $('#eipSelBar').classList.toggle('hidden', !n);
+  $('#eipSelN').textContent = n; selBar($('#eipSelBar'), n);
   selAllState($('#eipSelAll'), state.eip, r => r.sel);
 }
 async function eipDiscover() {
@@ -1968,7 +2050,7 @@ function renderRp() {
   selAllState($('#rpSelAll'), state.rp, r => r.sel);
   const n = state.rp.filter(r => r.sel).length;
   $('#rpBulkScope').textContent = n ? `${n} selected row${n > 1 ? 's' : ''}` : 'all rows';
-  $('#rpSelN').textContent = n; $('#rpSelBar').classList.toggle('hidden', !n); $('#rpCount').textContent = state.rp.length;
+  $('#rpSelN').textContent = n; selBar($('#rpSelBar'), n); $('#rpCount').textContent = state.rp.length;
 }
 /* ---- bulk IP changes: selected rows, or all rows when none are selected ---- */
 const ipStr = n => [n >>> 24 & 255, n >>> 16 & 255, n >>> 8 & 255, n & 255].join('.');

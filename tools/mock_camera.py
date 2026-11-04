@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 HOST, PORT, MODEL, TITLE = sys.argv[1], int(sys.argv[2]), sys.argv[3], (sys.argv[4] if len(sys.argv) > 4 else "")
+BASIC_ONLY = len(sys.argv) > 5 and sys.argv[5] == "basic"  # title only on /cgi-bin/get_basic, like older models
 root = os.path.join(os.path.dirname(__file__), "..")
 cat = json.loads(re.search(r"window\.PANA_CATALOG = (.*);\s*$", open(os.path.join(root, "app", "web", "catalog.js")).read(), re.S).group(1))
 fam = "UE160" if "UE160" in MODEL else "UE80" if re.search(r"UE(80|50|40)", MODEL) else "UE150"
@@ -35,6 +36,9 @@ class H(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         if u.path == "/cgi-bin/mjpeg":
             return self.mjpeg()
+        if u.path == "/cgi-bin/get_basic":
+            b = f"cam_title={cur.get('title', TITLE)}\r\nmodel={MODEL}\r\n".encode(); self.send_response(200); self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         cmd = parse_qs(u.query).get("cmd", [""])[0]
         body = self.handle_cmd(cmd, u.path.endswith("aw_ptz"))
         b = body.encode(); self.send_response(200); self.send_header("Content-Type", "text/plain")
@@ -84,6 +88,7 @@ class H(BaseHTTPRequestHandler):
                 n = int(m.group(1))
                 if 1 <= n <= NSCENE: cur["scene"] = n; return c
                 return "ER3:XSF"
+            if c == "QSJ:5C" and BASIC_ONLY: return "ER1:QSJ"
             if c == "QSJ:5C": return "OSJ:5C:" + cur.get("title", TITLE) if cur.get("title", TITLE) else "ER1:QSJ"
             m = re.match(r"OSJ:5C:(.{1,40})$", c)
             if m: cur["title"] = m.group(1); return c
