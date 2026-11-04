@@ -13,7 +13,9 @@ const FORMAT_ID = 'panasonic-ptz-scene';
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
 // timing, page paths and the update check are for the whole app. The first project ('default') keeps the
 // keys of earlier versions, so nothing is lost when updating.
-const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scriptCams|gridCams|liveCam|login|expZip|name_.*)$/;
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scriptCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
+// settings that moved into projects in 2.14: a project without its own value uses the value from before
+const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
 const ls = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { if (v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
@@ -21,7 +23,7 @@ const ls = {
 const projectId = () => ls.get('pscene.project', 'default');
 const keyFor = (k, pid = projectId()) => PROJECT_KEYS.test(k) && pid !== 'default' ? `pscene.p.${pid}.${k}` : 'pscene.' + k;
 const store = {
-  get(k, d) { return ls.get(keyFor(k), d); },
+  get(k, d) { const v = ls.get(keyFor(k), undefined); return v !== undefined ? v : PROJECT_FALLBACK.test(k) ? ls.get('pscene.' + k, d) : d; },
   set(k, v) { ls.set(keyFor(k), v); },
 };
 
@@ -285,14 +287,19 @@ function uniqueNames(files) {
 
 /* ------------------------------------------------------------------ downloads + zip */
 const IN_APP = TOKEN && !TOKEN.startsWith('__');
-async function download(name, blobOrText, type = 'application/json') {
+// Where saved files go: <save folder>/<project>/<type folder>. Backups get a folder per day.
+const FOLDERS = { scene: 'Scene files', operator: 'Operator files', show: 'Shows', backup: 'Backups', script: 'Scripts', rp150: 'RP150', params: 'Parameter lists', project: '' };
+const today = () => { const d = new Date(), p2 = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
+const projectFolder = () => projectName().replace(/[^A-Za-z0-9._ ()&+-]+/g, '_').replace(/^[ .]+|[ .]+$/g, '') || 'Project';
+const subFor = kind => [projectFolder(), FOLDERS[kind] || '', kind === 'backup' ? today() : ''].filter(Boolean);
+async function download(name, blobOrText, type = 'application/json', kind = '') {
   const blob = blobOrText instanceof Blob ? blobOrText : new Blob([blobOrText], { type });
   if (IN_APP) {
     // In the app: save to Downloads/Panasonic Toolbox via the local server (never overwrites)
     try {
       const buf = new Uint8Array(await blob.arrayBuffer());
       let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-      const j = await bridgeFetch('/api/save', { name, dataB64: btoa(bin) });
+      const j = await bridgeFetch('/api/save', kind ? { name, dataB64: btoa(bin), sub: subFor(kind) } : { name, dataB64: btoa(bin) });
       log(`Saved: ${j.path}`);
       toast(`Saved to ${j.dir}`, j.path);
       return j.path;
@@ -420,7 +427,6 @@ const projectName = () => projects().find(p => p.id === projectId())?.name || 'P
 function renderProjects() {
   const sel = $('#setProject');
   sel.innerHTML = projects().map(p => `<option value="${esc(p.id)}" ${p.id === projectId() ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-  $('#projDel').disabled = projects().length < 2;
 }
 function switchProject(id) {
   if (id === projectId()) return;
@@ -460,24 +466,79 @@ $('#projNew').onclick = async () => {
 };
 $('#projRename').onclick = async () => {
   $('#settingsDlg').close();
-  if (!await ask({ title: 'Rename project', ok: 'Rename', body: `<label>Name <input id="askProj" value="${esc(projectName())}" autocomplete="off"></label>` })) return;
-  const name = $('#askProj').value.trim(); if (!name) return;
-  saveProjects(projects().map(p => p.id === projectId() ? { ...p, name } : p)); $('#projectName').textContent = name; toast(`Project renamed to ${name}`);
+  if (!await ask({ title: 'Rename project', ok: 'Rename', body: `<label>Name <input id="askProj" value="${esc(projectName())}" autocomplete="off"></label><p class="hint">Its folder in the save folder (<span class="mono">${esc(projectFolder())}</span>) gets the new name too.</p>` })) return;
+  const name = $('#askProj').value.trim(); if (!name || name === projectName()) return;
+  if (projects().some(p => p.name === name)) return info('Name already used', `There is already a project called “${esc(name)}”.`);
+  const oldFolder = projectFolder();
+  saveProjects(projects().map(p => p.id === projectId() ? { ...p, name } : p)); $('#projectName').textContent = name;
+  try { const j = await bridgeFetch('/api/rename_project_dir', { old: oldFolder, new: projectFolder() }); toast(j.renamed ? `Project and its folder renamed to ${name}` : `Project renamed to ${name}`); }
+  catch (e) { toast(`Project renamed to ${name}`); info('The project folder was not renamed', `${esc(e.message)}. New files go into a folder called “${esc(projectFolder())}”.`); }
 };
-$('#projDel').onclick = async () => {
+const PROJECT_ID = 'panasonic-toolbox-project';
+const PROJ_SETTINGS = ['delayMs', 'sceneWait', 'livePath', 'setupPath'];
+const projSummary = d => {
+  const cams = d?.cameras || [], shows = d?.shows || [], rp = d?.rpRows || [], zones = [...new Set(cams.map(c => c.zone).filter(Boolean))];
+  const n = (x, w) => `${x} ${w}${x === 1 ? '' : 's'}`;
+  return `${n(cams.length, 'camera')}${zones.length ? ` in ${n(zones.length, 'zone')}` : ''}, ${n(shows.length, 'show')}${rp.length ? ', ' + n(rp.length, 'RP150 row') : ''}`;
+};
+function currentProjectData() {
+  const d = projectData(projectId());
+  for (const k of PROJ_SETTINGS) if (d[k] === undefined) d[k] = store.get(k, { delayMs: 20, sceneWait: 2000, livePath: '/live/index.html', setupPath: '/admin/index.html' }[k]);
+  return d;
+}
+async function saveProjectFile() {
+  const pf = { format: PROJECT_ID, version: 1, generator: 'Panasonic Toolbox ' + (state.version || ''), created: new Date().toISOString(), name: projectName(), data: currentProjectData() };
+  return download(`${projectFolder()}_${today()}.ptproject`, JSON.stringify(pf, null, 1), 'application/json', 'project');
+}
+$('#projSave').onclick = async () => { $('#settingsDlg').close(); await saveProjectFile(); };
+async function importProject(pf) {
+  if (pf?.format !== PROJECT_ID || !pf.data) throw new Error('Not a Panasonic Toolbox project file');
+  const name = String(pf.name || 'Project').trim();
+  const same = projects().find(p => p.name === name);
+  const t = v => esc(String(v ?? '–'));
+  if (!await ask({ title: `Open project “${esc(name)}”?`, ok: same ? 'Replace and open' : 'Open', danger: !!same, wide: true, body: `
+    <table class="tbl dense"><tbody>
+      <tr><td>In the file</td><td>${projSummary(pf.data)}</td></tr>
+      <tr><td>Timing</td><td>${t(pf.data.delayMs)} ms between commands, ${t(pf.data.sceneWait)} ms after a scene change</td></tr>
+      <tr><td>Web pages</td><td class="mono small">${t(pf.data.livePath)} · ${t(pf.data.setupPath)}</td></tr>
+      <tr><td>Saved</td><td>${pf.created ? new Date(pf.created).toLocaleString('en-GB') : '–'}${pf.generator ? ' · ' + esc(pf.generator) : ''}</td></tr>
+    </tbody></table>
+    <ul class="tight">${same ? `<li><span class="warn-text">Replaces your project “${esc(name)}”</span> (${projSummary(projectData(same.id))}). Save that one first if you want to keep it.</li>` : '<li>Added as a new project; your other projects stay as they are.</li>'}
+      <li>The app switches to this project. Nothing is sent to the cameras.</li>${(pf.data.login?.pass || (pf.data.cameras || []).some(c => c.pass)) ? '<li>The file contains saved camera logins.</li>' : ''}</ul>` })) return;
+  let list = projects(); if (!ls.get('pscene.projects', null)) saveProjects(list);
+  let id = same?.id;
+  if (id) for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
+  else { id = 'p' + Date.now().toString(36); list = list.concat([{ id, name }]); saveProjects(list); }
+  for (const [k, v] of Object.entries(pf.data)) if (PROJECT_KEYS.test(k)) ls.set(keyFor(k, id), v);
+  ls.set('pscene.project', id); location.reload();
+}
+$('#projOpen').onclick = async () => {
   $('#settingsDlg').close();
-  const id = projectId(), list = projects();
-  if (list.length < 2) return;
-  if (!await ask({ title: `Delete project “${esc(projectName())}”?`, ok: 'Delete', danger: true, body: '<p>Its cameras, shows, RP150 rows and scripts are removed from the app. Files you saved stay where they are, and the cameras are not changed. Download a config file first if you want to keep it.</p>' })) return;
-  for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
-  const rest = list.filter(p => p.id !== id); saveProjects(rest);
-  ls.set('pscene.project', rest[0].id); location.reload();
+  try {
+    const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: false });
+    if (j.ok && j.paths?.length) return openPaths(j.paths);
+    if (j.ok) return;
+  } catch { }
+  $('#projFile').click();
 };
-$('#cfgDownload').onclick = async () => {
-  const cfg = { format: CONFIG_ID, version: 1, generator: 'Panasonic Toolbox ' + (state.version || ''), created: new Date().toISOString(),
-    current: projectId(), app: appData(), projects: projects().map(p => ({ id: p.id, name: p.name, data: projectData(p.id) })) };
-  const d = new Date(), p2 = n => String(n).padStart(2, '0');
-  await download(`PanasonicToolbox_config_${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}.json`, JSON.stringify(cfg, null, 1));
+$('#projFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { await importProject(JSON.parse(await f.text())); } catch (err) { info('Could not open', esc(err.message)); }
+};
+$('#projClose').onclick = async () => {
+  $('#settingsDlg').close();
+  const id = projectId(), name = projectName(), d = currentProjectData();
+  if (!await ask({ title: `Close project “${esc(name)}”?`, ok: 'Close project', danger: true, body: `
+    <p>The project is removed from the app: ${projSummary(d)}, its scripts, file names and settings.</p>
+    <label class="check"><input type="checkbox" id="askSaveFirst" checked> Save a project file first <span class="muted">(in the folder ${esc(projectFolder())})</span></label>
+    <ul class="tight"><li>The app then opens an empty project.</li><li>Files already saved stay where they are, and the cameras are not changed.</li></ul>` })) return;
+  if ($('#askSaveFirst').checked && !(await saveProjectFile()) && IN_APP) return info('Project not closed', 'The project file could not be saved, so the project stays open.');
+  for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
+  const rest = projects().filter(p => p.id !== id);
+  let nm = 'New project', i = 2; while (rest.some(p => p.name === nm)) nm = `New project ${i++}`;
+  const nid = 'p' + Date.now().toString(36);
+  saveProjects(rest.concat([{ id: nid, name: nm }]));
+  ls.set('pscene.project', nid); location.reload();
 };
 async function importConfig(cfg) {
   if (cfg?.format !== CONFIG_ID || !Array.isArray(cfg.projects)) throw new Error('Not a Panasonic Toolbox config file');
@@ -508,23 +569,6 @@ async function importConfig(cfg) {
   ls.set('pscene.project', list.find(x => x.name === cur.name).id);
   location.reload();
 }
-$('#cfgImport').onclick = async () => {
-  $('#settingsDlg').close();
-  try {
-    const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: false });
-    if (j.ok && j.paths?.length) {
-      const f = await bridgeFetch('/api/read_file', { path: j.paths[0] });
-      const bin = atob(f.dataB64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      return await importConfig(JSON.parse(new TextDecoder().decode(u8)));
-    }
-    if (j.ok) return;
-  } catch (e) { if (!/choose|dialog|unknown|not available/i.test(e.message)) return info('Could not import', esc(e.message)); }
-  $('#cfgFile').click();
-};
-$('#cfgFile').onchange = async e => {
-  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-  try { await importConfig(JSON.parse(await f.text())); } catch (err) { info('Could not import', esc(err.message)); }
-};
 $('#projectName').textContent = projectName();
 $('#projectName').onclick = () => $('#bridgeSettingsBtn').click();
 $('#quitBtn').onclick = async () => {
@@ -869,6 +913,7 @@ async function openBytes(name, u8, path) {
 function openJson(name, data, path) {
   if (data?.format === SHOW_ID) return addShow(data, true, path);
   if (data?.format === CONFIG_ID) return importConfig(data).catch(e => info('Could not import', esc(e.message)));
+  if (data?.format === PROJECT_ID) return importProject(data).catch(e => info('Could not open', esc(e.message)));
   return addImportFile(name, data);
 }
 $('#openFilesBtn').onclick = async () => {
@@ -877,9 +922,9 @@ $('#openFilesBtn').onclick = async () => {
 };
 $('#browseFolderBtn').onclick = async () => {
   try {
-    const j = await bridgeFetch('/api/list_files', {});
+    const j = await bridgeFetch('/api/list_files', { sub: [projectFolder()], withRoot: true });
     const files = j.files.filter(f => /\.(json|zip|pshow|poper)$/i.test(f.name)).sort((a, b) => b.mtime - a.mtime);
-    $('#folderList').innerHTML = files.length ? `<table class="tbl dense"><thead><tr><th>File in ${esc(j.folder)}</th><th>Saved</th><th></th></tr></thead><tbody>${files.map(f => `<tr><td>${esc(f.name)}</td><td class="muted small">${new Date(f.mtime * 1000).toLocaleString('en-GB')}</td><td class="end"><button class="ghost small" data-open="${esc(f.path)}">Open</button></td></tr>`).join('')}</tbody></table>` : `<p class="muted">No Panasonic Toolbox files in ${esc(j.folder)}.</p>`;
+    $('#folderList').innerHTML = files.length ? `<table class="tbl dense"><thead><tr><th>File in ${esc(j.folder)}</th><th>Folder</th><th>Saved</th><th></th></tr></thead><tbody>${files.map(f => { const dir = (f.rel || '').split(/[\\/]/).slice(0, -1).join(' › '); return `<tr><td>${esc(f.name)}</td><td class="muted small">${dir === '..' ? 'Main folder (older files)' : esc(dir || projectFolder())}</td><td class="muted small">${new Date(f.mtime * 1000).toLocaleString('en-GB')}</td><td class="end"><button class="ghost small" data-open="${esc(f.path)}">Open</button></td></tr>`; }).join('')}</tbody></table>` : `<p class="muted">No Panasonic Toolbox files in ${esc(j.folder)}.</p>`;
     $$('#folderList [data-open]').forEach(b => b.onclick = () => openPaths([b.dataset.open]));
   } catch (e) { info('Could not read the folder', esc(e.message)); }
 };
@@ -993,7 +1038,7 @@ $('#exportBtn').onclick = async () => {
       addImportFile(name, file);
       const cnt = scenes.map(s => `Scene ${s.scene}: ${s.params.length} settings${s.unavailable.length ? `, ${s.unavailable.length} not available in the current mode` : ''}`).join('. ');
       row.className = 'note ok'; row.innerHTML = `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(cnt)}<span class="row-actions"><button class="ghost small" data-dl>Save again</button><button class="ghost small" data-view>Show values</button></span>`;
-      $('[data-dl]', row).onclick = () => download(name, JSON.stringify(file, null, 1));
+      $('[data-dl]', row).onclick = () => download(name, JSON.stringify(file, null, 1), undefined, 'scene');
       $('[data-view]', row).onclick = () => showSceneTable(row, file);
       log(`${cam.ip}: exported. ${cnt}`);
     } catch (e) {
@@ -1002,10 +1047,10 @@ $('#exportBtn').onclick = async () => {
     cam.busy = false; renderCams();
     $('.progress > i', out).style.width = (++done / total * 100) + '%';
   }));
-  if (files.length === 1) await download(files[0].name, files[0].text);
+  if (files.length === 1) await download(files[0].name, files[0].text, undefined, 'scene');
   else if (files.length > 1) {
-    if ($('#expZip').checked) await download(zipName('scene', files.length), makeZip(uniqueNames(files)));
-    else for (const f of files) await download(f.name, f.text);
+    if ($('#expZip').checked) await download(zipName('scene', files.length), makeZip(uniqueNames(files)), undefined, 'scene');
+    else for (const f of files) await download(f.name, f.text, undefined, 'scene');
   }
   $('#exportBtn').disabled = false;
 };
@@ -1063,8 +1108,8 @@ async function exportOperator(cams) {
       row.className = 'note ok'; row.innerHTML = `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${f.settings.length} operator settings${f.unavailable.length ? `, ${f.unavailable.length} not supported by this camera` : ''}`;
     } catch (e) { row.className = 'note err'; row.textContent = `${cam.ip}: export failed. ${e.message}`; }
   }));
-  if (files.length === 1) await download(files[0].name, files[0].text);
-  else if (files.length > 1) await download(zipName('operator', files.length), makeZip(uniqueNames(files)));
+  if (files.length === 1) await download(files[0].name, files[0].text, undefined, 'operator');
+  else if (files.length > 1) await download(zipName('operator', files.length), makeZip(uniqueNames(files)), undefined, 'operator');
   $('#exportBtn').disabled = false;
 }
 
@@ -1230,8 +1275,8 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
     label: `Import ${undos.length} file${undos.length > 1 ? 's' : ''}`, camera: true, many: byCam.size > 1,
     undo: async () => { for (const u of [...undos].reverse()) await u.undo(); }, redo: async () => { for (const u of undos) await u.redo(); },
   });
-  if (backups.length === 1) await download(backups[0].name, backups[0].text);
-  else if (backups.length > 1) await download(`backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`, makeZip(backups));
+  if (backups.length === 1) await download(backups[0].name, backups[0].text, undefined, 'backup');
+  else if (backups.length > 1) await download(`backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`, makeZip(backups), undefined, 'backup');
   $('#importBtn').disabled = false;
 }
 
@@ -1345,7 +1390,7 @@ $('#paramGroup').onchange = renderParamTab;
 $('#paramCsv').onclick = () => {
   const fam = $('#paramFam').value;
   const csv = ['Group;Setting;Set command;Query command;Values'].concat(CATALOG[fam].map(p => [p.g, p.name, p.cmd, p.q, rangeText(p)].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
-  download(`panasonic_scene_parameters_${fam}.csv`, '﻿' + csv, 'text/csv');
+  download(`panasonic_scene_parameters_${fam}.csv`, '﻿' + csv, 'text/csv', 'params');
 };
 
 /* ------------------------------------------------------------------ parameters: operator file contents */
@@ -1369,7 +1414,7 @@ function renderOperatorTab() {
 $('#operGroup').onchange = renderOperatorTab;
 $('#operCsv').onclick = () => {
   const csv = ['Group;Setting;Set command;Query command;Values;Models'].concat(OPERATOR_PARAMS.map(p => [p.g, p.name, p.src.c, p.q, operatorValues(p.src), p.src.m.join(', ')].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
-  download('panasonic_operator_parameters.csv', '\ufeff' + csv, 'text/csv');
+  download('panasonic_operator_parameters.csv', '\ufeff' + csv, 'text/csv', 'params');
 };
 
 /* ------------------------------------------------------------------ parameters: REST commands */
@@ -1590,7 +1635,7 @@ $('#scriptPs1').onclick = () => {
     `  }`,
     `}`,
   ];
-  download(scriptName('.ps1'), lines.join('\r\n') + '\r\n', 'text/plain');
+  download(scriptName('.ps1'), lines.join('\r\n') + '\r\n', 'text/plain', 'script');
   if (withLogin) toast('Note: the camera login is stored in the script as plain text.');
 };
 $('#scriptSh').onclick = () => {
@@ -1609,7 +1654,7 @@ $('#scriptSh').onclick = () => {
     ...state.script.map(s => `  curl -s -m 3 "\${AUTH[@]}" "http://$CAM/cgi-bin/${s.t === 'ptz' ? 'aw_ptz' : 'aw_cam'}?cmd=${encCmd(s.cmd)}&res=1" > /dev/null  # ${s.name.replace(/[\r\n]/g, ' ')}`),
     `done`,
   ];
-  download(scriptName('.sh'), lines.join('\n') + '\n', 'text/plain');
+  download(scriptName('.sh'), lines.join('\n') + '\n', 'text/plain', 'script');
 };
 
 /* ------------------------------------------------------------------ shows */
@@ -1649,7 +1694,7 @@ $('#saveShowBtn').onclick = async () => {
     items: jobs.map(j => { const s = srcById(j.srcId); const cam = state.cameras.find(c => c.ip === j.target); return { target: j.target, port: cam?.port || 80, targetTitle: cam?.title || cam?.model || '', targetScene: j.targetScene, kind: s.kind, sceneIdx: s.sceneIdx, fileName: s.fileName, file: s.file }; }),
   };
   addShow(show);
-  const path = await download(showFile(show), showJson(show));
+  const path = await download(showFile(show), showJson(show), undefined, 'show');
   if (path) { show.path = path; saveShows(); renderShows(); }
 };
 function renderShows() {
@@ -1664,7 +1709,7 @@ function renderShows() {
     const ni = $('.namein', tr);
     ni.addEventListener('keydown', e => { if (e.key === 'Enter') ni.blur(); if (e.key === 'Escape') { ni.value = sh.name; ni.blur(); } });
     ni.addEventListener('change', () => renameShow(sh, ni.value));
-    $('[data-act=file]', tr).onclick = async () => { const p = await download(showFile(sh), showJson(sh)); if (p) { sh.path = p; saveShows(); renderShows(); } };
+    $('[data-act=file]', tr).onclick = async () => { const p = await download(showFile(sh), showJson(sh), undefined, 'show'); if (p) { sh.path = p; saveShows(); renderShows(); } };
     $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete show', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
     tb.appendChild(tr);
   }
@@ -1827,7 +1872,7 @@ $('#gridSave').onclick = async () => {
   }
   const show = { format: SHOW_ID, version: 1, name, created: new Date().toISOString(), items };
   addShow(show); toast(`Show “${name}” saved`);
-  const path = await download(showFile(show), showJson(show));
+  const path = await download(showFile(show), showJson(show), undefined, 'show');
   if (path) { show.path = path; saveShows(); renderShows(); }
 };
 $('#showNew').onclick = async () => {
@@ -1898,7 +1943,7 @@ $('#showNew').onclick = async () => {
   addShow(show);
   if (!fails.length) setTimeout(() => out.classList.add('hidden'), 6000);
   if (fails.length) info('Show saved without some cameras', `These cameras could not be read and are not in the show: ${esc(fails.join(', '))}.`);
-  const path = await download(showFile(show), showJson(show));
+  const path = await download(showFile(show), showJson(show), undefined, 'show');
   if (path) { show.path = path; saveShows(); renderShows(); }
 };
 $('#showOpen').onclick = async () => {
@@ -2294,8 +2339,8 @@ function analyzeS15() {
         }
       }
     } catch (e) { return info('Cannot save', esc(e.message)); }
-    await download('Network_ORIGINAL_backup.s15', new Blob([u8]), 'application/octet-stream');
-    await download('Network.s15', new Blob([copy]), 'application/octet-stream');
+    await download('Network_ORIGINAL_backup.s15', new Blob([u8]), 'application/octet-stream', 'rp150');
+    await download('Network.s15', new Blob([copy]), 'application/octet-stream', 'rp150');
     log(`Network.s15 changed for ${state.rp.length} camera(s)${lanVal != null ? ', connection type included' : ' (IP addresses only)'}`);
     info('Network.s15 saved', `The new file and a backup of the original are in ${esc(state.saveDir || 'Downloads › Panasonic Toolbox')}. Copy the new file to the SD card as <code>Network.s15</code> and load it on the RP150 with DATA LOAD › YES+NW.` +
       (lanVal == null ? '<br><br>The connection type could not be set automatically. Set CNNCT MD to LAN on the controller for each CAM, or open a second version of the file as explained above.' : ''));

@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.13.1"
+VERSION = "2.14.0"
 DEFAULT_PORT = 8765
 
 
@@ -146,7 +146,7 @@ def title_from_basic(body):
 
 SETTINGS = {}
 WINDOW = None  # pywebview window (for native file dialogs)
-ALLOWED_EXT = (".json", ".zip", ".s15", ".html", ".csv", ".ps1", ".sh", ".pshow", ".poper")
+ALLOWED_EXT = (".json", ".zip", ".s15", ".html", ".csv", ".ps1", ".sh", ".pshow", ".poper", ".ptproject")
 
 
 def settings_path():
@@ -199,17 +199,40 @@ def native_dialog(kind, multiple=False):
     return list(res) if res else []
 
 
-def list_files(folder):
+def list_files(folder, recursive=False, extra_root=None):
+    """Files the app can open in a folder; recursive for a project folder with its subfolders.
+    extra_root: also the loose files directly in that folder (files saved by older versions)."""
     folder = os.path.realpath(os.path.expanduser(folder))
-    if not os.path.isdir(folder):
-        raise ValueError("Folder not found")
     out = []
-    for name in sorted(os.listdir(folder)):
-        full = os.path.join(folder, name)
-        if os.path.isfile(full) and name.lower().endswith(ALLOWED_EXT):
-            st = os.stat(full)
-            out.append({"name": name, "path": full, "size": st.st_size, "mtime": int(st.st_mtime)})
+    if os.path.isdir(folder):
+        walker = os.walk(folder) if recursive else [(folder, [], os.listdir(folder))]
+        for root, dirs, names in walker:
+            dirs.sort()
+            for name in sorted(names):
+                full = os.path.join(root, name)
+                if os.path.isfile(full) and name.lower().endswith(ALLOWED_EXT):
+                    st = os.stat(full)
+                    out.append({"name": name, "path": full, "rel": os.path.relpath(full, folder), "size": st.st_size, "mtime": int(st.st_mtime)})
+    if extra_root:
+        r = os.path.realpath(os.path.expanduser(extra_root))
+        if os.path.isdir(r):
+            for name in sorted(os.listdir(r)):
+                full = os.path.join(r, name)
+                if os.path.isfile(full) and name.lower().endswith(ALLOWED_EXT):
+                    st = os.stat(full)
+                    out.append({"name": name, "path": full, "rel": os.path.join("..", name), "size": st.st_size, "mtime": int(st.st_mtime)})
     return {"folder": folder, "files": out}
+
+
+def rename_project_dir(old, new):
+    """Rename a project folder inside the save folder. Nothing happens when it does not exist yet."""
+    src, dst = sub_dir([old]), sub_dir([new])
+    if not os.path.isdir(src) or os.path.realpath(src) == os.path.realpath(dst):
+        return {"renamed": False, "path": dst}
+    if os.path.exists(dst):
+        raise ValueError(f"A folder named {os.path.basename(dst)} already exists")
+    os.rename(src, dst)
+    return {"renamed": True, "path": dst}
 
 
 def read_file(path):
@@ -228,6 +251,22 @@ def safe_name(name):
     if not base.lower().endswith(ALLOWED_EXT):
         raise ValueError("File type not allowed")
     return base[:150]
+
+
+def safe_segment(seg):
+    """One folder name inside the save folder (a project name, 'Scene files', a date): no path tricks."""
+    seg = re.sub(r"[^A-Za-z0-9._ ()&+-]+", "_", str(seg or "")).strip(" .")
+    if not seg or seg in (".", ".."):
+        raise ValueError("Invalid folder name")
+    return seg[:80]
+
+
+def sub_dir(sub):
+    """save folder / project / type / ... built from safe segments only."""
+    d = save_dir()
+    for seg in (sub or []):
+        d = os.path.join(d, safe_segment(seg))
+    return d
 
 
 def save_file(name, data, folder=None):
@@ -473,6 +512,9 @@ def api_call(path, req):
         return (api_scan(req))
     if path == "/api/save":
         data = base64.b64decode(req.get("dataB64") or "", validate=True)
+        if req.get("sub"):
+            d = sub_dir(req["sub"])
+            return ({"ok": True, "path": save_file(req.get("name"), data, d), "dir": d})
         return ({"ok": True, "path": save_file(req.get("name"), data, req.get("dir")), "dir": req.get("dir") or save_dir()})
     if path == "/api/rename":
         data = base64.b64decode(req["dataB64"], validate=True) if req.get("dataB64") else None
@@ -512,7 +554,11 @@ def api_call(path, req):
             return ({"ok": False, "error": "unavailable"})
         return ({"ok": True, "paths": res})
     if path == "/api/list_files":
+        if req.get("sub"):
+            return ({"ok": True, **list_files(sub_dir(req["sub"]), True, save_dir() if req.get("withRoot") else None)})
         return ({"ok": True, **list_files(req.get("folder") or save_dir())})
+    if path == "/api/rename_project_dir":
+        return ({"ok": True, **rename_project_dir(str(req.get("old", "")), str(req.get("new", "")))})
     if path == "/api/read_file":
         return ({"ok": True, **read_file(req.get("path"))})
     if path == "/api/open_url":

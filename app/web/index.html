@@ -143,7 +143,7 @@
   <div class="card">
     <div class="row between"><h2>1. Open files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ghost small" id="browseFolderBtn">Show files in folder</button></div></div>
     <div class="drop" id="dropZone">
-      <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,application/json,application/zip" multiple hidden></label></p>
+      <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,.ptproject,application/json,application/zip" multiple hidden></label></p>
       <p class="muted small">Files you exported in this session are already listed below.</p>
     </div>
     <div id="folderList"></div>
@@ -437,15 +437,15 @@
     <h3>Settings</h3>
     <section class="setsec">
       <h4>Project</h4>
-      <p class="hint">Each project has its own cameras, zones, shows, RP150 rows, scripts and file names.</p>
-      <div class="row"><select id="setProject" class="grow" aria-label="Project"></select><button type="button" class="ghost small" id="projNew">New…</button><button type="button" class="ghost small" id="projRename">Rename…</button><button type="button" class="ghost small danger-text" id="projDel">Delete…</button></div>
-      <div class="row wrap"><button type="button" class="ghost small" id="cfgDownload">Download config file</button><button type="button" class="ghost small" id="cfgImport">Import config file…</button><input type="file" id="cfgFile" accept=".json,application/json" hidden></div>
-      <p class="hint">A config file holds every project and these settings, including saved camera logins if you chose to remember them.</p>
+      <p class="hint">Each project has its own cameras, zones, shows, RP150 rows, scripts, file names, timing and web page paths, and its own folder in the save folder.</p>
+      <div class="row"><select id="setProject" class="grow" aria-label="Project"></select><button type="button" class="ghost small" id="projNew">New…</button><button type="button" class="ghost small" id="projRename">Rename…</button></div>
+      <div class="row wrap"><button type="button" class="ghost small" id="projSave">Save project file</button><button type="button" class="ghost small" id="projOpen">Open project file…</button><button type="button" class="ghost small danger-text" id="projClose">Close project…</button><input type="file" id="projFile" accept=".ptproject,.json,application/json" hidden></div>
+      <p class="hint">A project file (.ptproject) holds this one project, to open it on another computer.</p>
     </section>
     <section class="setsec">
       <h4>Saving files</h4>
       <label>Save folder <span class="row"><input id="setSaveDir" class="mono grow"><button type="button" class="ghost small" data-changedir>Choose…</button></span></label>
-      <p class="hint">Exports, backups, shows and config files are saved here.</p>
+      <p class="hint">Every project gets a folder here, with Scene files, Operator files, Shows, Backups, Scripts, RP150 and Parameter lists inside. This folder is for this computer, not part of a project.</p>
     </section>
     <section class="setsec">
       <h4>Camera communication</h4>
@@ -453,7 +453,7 @@
         <label class="w180">Pause between commands <span class="row nowrap"><input id="setDelay" type="number" min="0" max="500" value="20"><span class="muted small">ms</span></span></label>
         <label class="w180">Wait after a scene change <span class="row nowrap"><input id="setSceneWait" type="number" min="500" max="8000" value="2000"><span class="muted small">ms</span></span></label>
       </div>
-      <p class="hint">Raise these when a camera misses settings during an import or export.</p>
+      <p class="hint">Raise these when a camera misses settings during an import or export. Saved with the project.</p>
     </section>
     <section class="setsec">
       <h4>Camera web pages</h4>
@@ -461,7 +461,7 @@
         <label class="grow">Live page <input id="setLivePath" value="/live/index.html" class="mono"></label>
         <label class="grow">Settings page <input id="setSetupPath" value="/admin/index.html" class="mono"></label>
       </div>
-      <p class="hint">The pages that open with Live view and Settings on the Cameras page.</p>
+      <p class="hint">The pages that open with Live view and Settings on the Cameras page. Saved with the project.</p>
     </section>
     <section class="setsec">
       <h4>Updates</h4>

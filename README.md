@@ -16,9 +16,9 @@ Website: **https://seppeva.github.io/panasonic-toolbox/**
 | **Shows** | A complete setup (which scene and operator file goes to which camera and scene) recalled with one click. Made from the cameras, or in a grid from saved files, and editable afterwards (`.pshow`). |
 | **Parameters** | Every REST command of the cameras and controllers with a ready-made link, scripts that run on many cameras at once, and what is in a scene file and an operator file per model. |
 | **RP150 assignment** | Assign cameras to the CAM buttons of an AW-RP150 through its `Network.s15` file (experimental). |
-| **Settings** | Projects (each with its own cameras, zones, shows and scripts), a config file with everything to move to another computer, the save folder, timing and the camera web page paths. |
+| **Settings** | Projects (each with its own cameras, zones, shows, scripts, timing and web page paths), project files to open a project on another computer, closing a project, and the save folder. |
 
-Exports, imports, saving an edited show and importing a config file ask for confirmation first and show exactly what will happen. Changes in the app and on the cameras can be undone.
+Exports, imports, saving an edited show, opening a project file and closing a project ask for confirmation first and show exactly what will happen. Changes in the app and on the cameras can be undone.
 
 ## Repository layout
 
@@ -44,7 +44,22 @@ Panasonic Toolbox (app on your computer)
                                     http://<camera-ip>/cgi-bin/aw_ptz?cmd=…&res=1
 ```
 
-Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in the save folder from Settings (by default *Downloads › Panasonic Toolbox*) and are never overwritten. Camera names come from `QSJ:5C`, on older models from `/cgi-bin/get_basic`, otherwise from Easy IP (UDP 10669/10670), which is also used by Network setup.
+Everything runs locally; no internet connection is needed except for the optional update check. Files are saved in the save folder from Settings (by default *Downloads › Panasonic Toolbox*), in a folder per project, and are never overwritten:
+
+```
+Panasonic Toolbox\
+└── <Project>\
+    ├── <Project>_2026-11-04.ptproject   project file
+    ├── Scene files\                     .pscene.json and ZIPs
+    ├── Operator files\                  .poper and ZIPs
+    ├── Shows\                           .pshow
+    ├── Backups\2026-11-04\              automatic backups made by an import
+    ├── Scripts\                         .ps1 / .sh
+    ├── RP150\                           Network.s15 and the original as a backup
+    └── Parameter lists\                 CSV exports
+```
+
+Renaming a project renames its folder too. Camera names come from `QSJ:5C`, on older models from `/cgi-bin/get_basic`, otherwise from Easy IP (UDP 10669/10670), which is also used by Network setup.
 
 ## Releasing a new version
 
@@ -95,7 +110,7 @@ python3 app/panasonic_scene.py   # or --browser / --headless
 
 `raw` is exactly what the camera answered; on import it is sent back as a command, in three passes (in order with modes first, retry what failed, simplify multi-field commands). Every value is then read back and compared. On an AW-UE160 the scene is also stored with `OSL:90` (SCENE FILE STORE).
 
-Other files the app writes: operator files (`.poper`, format `panasonic-ptz-operator`), shows (`.pshow`, format `panasonic-toolbox-show`, with the scene and operator files embedded) and config files (`PanasonicToolbox_config_*.json`, format `panasonic-toolbox-config`, every project plus the app settings).
+Other files the app writes: operator files (`.poper`, format `panasonic-ptz-operator`), shows (`.pshow`, format `panasonic-toolbox-show`, with the scene and operator files embedded) and project files (`.ptproject`, format `panasonic-toolbox-project`: one project with its cameras, zones, descriptions, shows, RP150 rows, scripts, file names, timing and web page paths). Config files from 2.11 to 2.13 (`panasonic-toolbox-config`) can still be opened.
 
 ## Which settings?
 
