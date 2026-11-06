@@ -1078,7 +1078,7 @@ $('#exportBtn').onclick = async () => {
     title: `Export ${kind === 'operator' ? 'operator files' : 'scene files'} of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
     wide: true, danger: jumps, ok: jumps ? 'Switch scenes and export' : 'Export',
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${p.html ? p.what : esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
-      <p>${zip ? `The files go into one ZIP: <span class="mono">${esc(zipName(kind, cams.length))}</span>, ` : 'The files are saved '}in <span class="mono">${esc(state.saveDir || 'Downloads › Panasonic Toolbox')}</span>. Existing files are never overwritten.</p>
+      <p>${zip ? `The files go into one ZIP: <span class="mono">${esc(zipName(kind, cams.length))}</span>, ` : 'The files are saved '}in <span class="mono">${esc([state.saveDir || 'Downloads › Panasonic Toolbox', ...subFor(kind)].join(' › '))}</span>. Existing files are never overwritten.</p>
       ${jumps ? '<p><b>The picture will change:</b> to read these scenes each camera switches to them and then returns to the scene that was live. Do not do this while a camera is on air.</p>' : '<p>Reading changes nothing on the cameras.</p>'}`,
   });
   if (!ok) return;

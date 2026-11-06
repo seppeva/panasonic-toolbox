@@ -1,2 +1,5 @@
 *.pyc
 __pycache__/
+tools/test-output/
+node_modules/
+package-lock.json
