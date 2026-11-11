@@ -427,6 +427,20 @@ function ask({ title, body, ok = 'OK', cancel = 'Cancel', danger = false, wide =
     (first || (danger && cancel ? $('#askCancel') : $('#askOk'))).focus();
   });
 }
+// Text that is cut off (…) shows in full when you hover over it. Works everywhere, also for rows drawn later.
+document.addEventListener('mouseover', e => {
+  for (let n = e.target, i = 0; n && n.nodeType === 1 && n !== document.body && i < 3; n = n.parentElement, i++) {
+    const tag = n.tagName;
+    if (tag === 'SELECT') { const t = n.selectedOptions?.[0]?.textContent?.trim(); if (t && (n.title === '' || n.dataset.autotitle)) { n.title = t; n.dataset.autotitle = '1'; } return; }
+    if ((tag === 'INPUT' || tag === 'TEXTAREA') && n.scrollWidth > n.clientWidth + 1) { if (n.title === '' || n.dataset.autotitle) { n.title = n.value; n.dataset.autotitle = '1'; } return; }
+    if (n.scrollWidth > n.clientWidth + 1 && n.clientWidth > 0) {
+      const t = n.innerText.trim();
+      if (t && (n.title === '' || n.dataset.autotitle)) { n.title = t; n.dataset.autotitle = '1'; }
+      return;
+    }
+    if (n.dataset.autotitle && n.scrollWidth <= n.clientWidth + 1) { n.removeAttribute('title'); delete n.dataset.autotitle; }
+  }
+}, true);
 // Enter in a dialog presses its blue (primary) button, not Cancel; Enter in a text area still makes a new line.
 $('#askDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); $('#askOk').click(); } });
 $('#settingsDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') { e.preventDefault(); $('#saveSettings').click(); } });
