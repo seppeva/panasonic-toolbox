@@ -83,6 +83,8 @@
     <div class="zonebar" id="camZoneBar"></div>
     <div class="selbar hidden" id="camSelBar"><span class="seln"><b id="camSelN">0</b> selected</span>
       <button class="ghost small" id="camEditSel">Edit…</button>
+      <button class="ghost small" id="camInitSel" title="Put the default scene of each camera's model into its live scene">Initialize…</button>
+      <button class="ghost small" id="camDefSel" title="Save the live scene of the selected camera as the default for its model">Save as default…</button>
       <span class="grow"></span>
       <button class="ghost small danger-text" id="camDelSel">Remove</button>
     </div>
@@ -251,6 +253,7 @@
         <div class="live-block t-scenes">
         <h3>Scene files</h3>
         <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
+        <div class="hold-row live-init"><button id="liveInit" title="Put the default scene of this model into the live scene">Initialize</button><button class="ghost" id="liveDefSave" title="Save the live scene as the default for this model">Save as default</button></div>
       </div>
       </div>
     </div>
@@ -454,6 +457,11 @@
       <div class="row"><select id="setProject" class="grow" aria-label="Project"></select><button type="button" class="ghost small" id="projNew">New…</button><button type="button" class="ghost small" id="projRename">Rename…</button></div>
       <div class="row wrap"><button type="button" class="ghost small" id="projSave">Save project file</button><button type="button" class="ghost small" id="projOpen">Open project file…</button><button type="button" class="ghost small danger-text" id="projClose">Close project…</button><input type="file" id="projFile" accept=".ptproject,.json,application/json" hidden></div>
       <p class="hint">A project file (.ptproject) holds this one project, to open it on another computer.</p>
+    </section>
+    <section class="setsec">
+      <h4>Default scenes</h4>
+      <p class="hint">Initialize puts the default scene of a camera's model into its live scene. Make one per model with Save as default (Cameras or Live), from a camera whose scene was reset to its factory settings in the camera menu. Default scenes are for this computer, not part of a project.</p>
+      <div id="defList"></div>
     </section>
     <section class="setsec">
       <h4>Saving files</h4>

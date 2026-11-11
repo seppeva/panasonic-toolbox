@@ -386,3 +386,5 @@ button.copied{color:#8fd19e}
 #scriptList li input,#scriptList li select{height:28px;font-size:12.5px}
 #scriptList .sbtns{display:flex;gap:2px}
 #savedScriptTable tr.editing td{background:var(--accent-soft)}
+.live-init{margin-top:6px}
+#defList table{margin:0}

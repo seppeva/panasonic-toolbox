@@ -465,7 +465,7 @@ $$('.subtabs button').forEach(b => b.addEventListener('click', () => {
 state.livePath = store.get('livePath', '/live/index.html');
 state.setupPath = store.get('setupPath', '/admin/index.html');
 $('#bridgeSettingsBtn').onclick = () => {
-  renderProjects();
+  renderProjects(); renderDefaults();
   $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
   $('#setUpdates').checked = store.get('updateCheck', true);
   $('#setLivePath').value = state.livePath; $('#setSetupPath').value = state.setupPath;
@@ -1965,6 +1965,57 @@ function gridItems() {
   return items;
 }
 function gridCount() { const n = gridItems().length; $('#gridCount').textContent = n ? `${n} cell${n === 1 ? '' : 's'} filled` : ''; $('#gridSave').disabled = !n; }
+/* ---- default scenes: one per camera model, put into the live scene by Initialize ---- */
+const defaults = () => store.get('defaultScenes', {});
+const saveDefaults = d => store.set('defaultScenes', d);
+async function saveAsDefault(cam) {
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  try { if (!cam.model) await identify(cam); } catch (e) { return info('Camera not reachable', esc(e.message)); }
+  const n = await getScene(cam).catch(() => null);
+  if (n == null) return info('Camera not reachable', `${esc(camName(cam))} does not answer.`);
+  const old = defaults()[cam.model];
+  if (!await ask({ title: `Save scene ${n} of ${esc(camName(cam))} as the default for ${esc(cam.model)}?`, ok: old ? 'Replace default' : 'Save as default', danger: !!old, body: `
+    <p>Initialize puts this scene into the live scene of every ${esc(cam.model)}.</p>
+    <ul class="tight"><li>Use a camera whose scene was reset to its factory settings in the camera menu, or a scene you want as your own starting point.</li>
+    ${old ? `<li><span class="warn-text">Replaces the default</span> saved ${new Date(old.savedAt).toLocaleString('en-GB')} from ${esc(old.fromName || old.fromIp)}.</li>` : ''}
+    <li>Reading changes nothing on the camera.</li></ul>` })) return;
+  try {
+    const sc = await readSceneFile(cam, n);
+    const d = defaults(); d[cam.model] = { file: makeFile(cam, [sc]), savedAt: new Date().toISOString(), fromIp: cam.ip, fromName: camName(cam), scene: n };
+    saveDefaults(d); renderDefaults(); toast(`Default scene for ${cam.model} saved (${sc.params.length} settings)`);
+  } catch (e) { info('Could not read the scene', esc(e.message)); }
+}
+async function initializeCams(cams) {
+  if (!cams.length) return;
+  for (const c of cams) if (!c.model) { try { await identify(c); } catch { } }
+  const d = defaults();
+  const have = cams.filter(c => c.model && d[c.model]), missing = cams.filter(c => !(c.model && d[c.model]));
+  if (!have.length) return info('No default scene yet', `There is no default scene for ${[...new Set(missing.map(c => c.model || 'unknown model'))].map(esc).join(', ')}. Save one first with <b>Save as default</b>, from a camera whose scene was reset in the camera menu.`);
+  if (missing.length && !await ask({ title: 'Some cameras have no default scene', ok: 'Initialize the others', body: `<p>No default scene for: ${missing.map(c => `${esc(camName(c))} (${esc(c.model || 'unknown model')})`).join(', ')}. These are skipped.</p>` })) return;
+  const jobs = have.map(c => {
+    const def = d[c.model];
+    const src = { id: ++srcId, fileName: `Default ${c.model} (from ${def.fromName || def.fromIp}, ${new Date(def.savedAt).toLocaleDateString('en-GB')})`, file: def.file, sceneIdx: 0, kind: 'scene' };
+    state.sources.push(src);
+    return { id: ++jobId, srcId: src.id, target: c.ip, targetScene: 'active', include: true };
+  });
+  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Initialize ${have.length} camera${have.length > 1 ? 's' : ''} with the default scene?`);
+  state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id));
+  renderImports();
+}
+function renderDefaults() {
+  const box = $('#defList'); if (!box) return;
+  const d = defaults(), keys = Object.keys(d).sort();
+  box.innerHTML = keys.length ? `<table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th><th></th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span>, scene ${esc(String(d[m].scene ?? ''))}</td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td><td class="end"><button type="button" class="icon" data-defdel="${esc(m)}" aria-label="Delete default for ${esc(m)}">×</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No default scenes yet.</p>';
+  $$('[data-defdel]', box).forEach(b => b.onclick = () => { const x = defaults(); delete x[b.dataset.defdel]; saveDefaults(x); renderDefaults(); toast(`Default for ${b.dataset.defdel} deleted`); });
+}
+$('#camInitSel').onclick = () => initializeCams(state.cameras.filter(c => c.selected));
+$('#camDefSel').onclick = () => {
+  const sel = state.cameras.filter(c => c.selected);
+  if (sel.length !== 1) return info('Select one camera', 'Save as default reads the live scene of one camera. Select only that camera.');
+  saveAsDefault(sel[0]);
+};
+$('#liveInit').onclick = () => live.cam && initializeCams([live.cam]);
+$('#liveDefSave').onclick = () => live.cam && saveAsDefault(live.cam);
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 $('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
 // Edit a saved show: its scenes go back into the grid (as opened files), its cameras are ticked.

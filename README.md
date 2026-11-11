@@ -12,7 +12,7 @@ Website: **https://seppeva.github.io/panasonic-toolbox/**
 | **Cameras** | Your camera list: IP address, name on the camera, your own description, model, zone, live scene and status. Zones let you work on groups of cameras; a camera's IP address can be changed in the app when it got a new one. |
 | **Live** | Live picture with control buttons: pan/tilt, zoom, focus, iris, presets, scene files, power, tally, day/night, white and black balance. |
 | **Export** | Save the shading settings of any scene (scene files, `.pscene.json`) or an operator's own preferences (operator files, `.poper`), from one or many cameras. |
-| **Import** | Put saved settings back on any camera and scene, with a comparison first, a backup and a check afterwards. |
+| **Import** | Put saved settings back on any camera and scene, with a comparison first, a backup and a check afterwards. **Initialize** (Cameras and Live) puts a default scene, saved once per model, into the live scene of all selected cameras the same way. |
 | **Shows** | A complete setup (which scene and operator file goes to which camera and scene) recalled with one click. Made from the cameras, or in a grid from saved files, and editable afterwards (`.pshow`). |
 | **Parameters** | Every REST command of the cameras and controllers with a ready-made link; scripts (PowerShell or shell) that run an action on many cameras at once, kept in the project and editable, also after reopening a saved script file; and what is in a scene file and an operator file per model. |
 | **RP150 assignment** | Assign cameras to the CAM buttons of an AW-RP150 through its `Network.s15` file (experimental). |
