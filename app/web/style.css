@@ -364,6 +364,7 @@ table.grid td{vertical-align:middle}
 .selall-row{font-weight:600;border-bottom:1px solid var(--rule-soft);padding-bottom:4px;margin-bottom:2px!important;flex-basis:100%}
 .live-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .live-tiles .t-white{grid-column:span 2}
+.live-tiles .t-shoot{grid-column:span 2}
 .live-tiles .t-scenes{grid-column:1/-1}
 .live-tiles .live-block{margin:0}
 @media (max-width:1250px){.live-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.live-tiles .t-white{grid-column:1/-1}}

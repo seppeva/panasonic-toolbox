@@ -1548,11 +1548,29 @@ const COMMON = [
 ].map(([n, t, c, p]) => ({ n, t, c, q: queryFor(t, c), d: p ? ['1', '-', '100'] : ['-'], v: p ? ['Preset 1', '-', 'Preset 100'] : [''], m: ['Most models'], common: 1, preset: !!p }));
 ['#httpCam', '#httpIp', '#httpPort'].forEach(s => $(s).addEventListener('input', () => { $('#httpIpWrap').classList.toggle('hidden', !!$('#httpCam').value); $$('#cmdTable tr').forEach(r => r.update && r.update()); }));
 
+// Value lists can have a part per model, e.g. d = [0, 1, 'UE160', 0, 1], v = [Normal, High Sens., 'UE160', Normal, Low Light].
+const MODEL_MARK = /^(U[EBR]|H[ER])\d{1,3}[A-Z]?(,(U[EBR]|H[ER])\d{1,3}[A-Z]?)*$/i;
 function enumOpts(c) {
   const d = c.d, v = c.v;
-  if (d.length !== v.length || d.length < 2 || d.length > 60) return null;
-  if (d.some(x => x === '-' || !/^[0-9A-F]{1,5}h?$/i.test(x))) return null;
-  return d.map((x, i) => ({ val: x.replace(/h$/i, ''), label: `${x.replace(/h$/i, '')}: ${v[i]}` }));
+  if (!d || d.length !== v.length || d.length < 2 || d.length > 80) return null;
+  // split into the general part and the per-model parts
+  const parts = [{ model: '', d: [], v: [] }];
+  d.forEach((x, i) => {
+    if (MODEL_MARK.test(x) && v[i] === x) parts.push({ model: x.toUpperCase(), d: [], v: [] });
+    else { parts[parts.length - 1].d.push(x); parts[parts.length - 1].v.push(v[i]); }
+  });
+  const okPart = pt => pt.d.length && pt.d.every(x => x !== '-' && /^[0-9A-F]{1,5}h?$/i.test(x));
+  if (!parts.every(pt => okPart(pt) || (!pt.d.length && pt.model === ''))) return null;
+  const opts = new Map(); // value -> { general label, model labels }
+  for (const pt of parts) pt.d.forEach((x, i) => {
+    const val = x.replace(/h$/i, '');
+    if (!opts.has(val)) opts.set(val, { base: '', alt: [] });
+    const o = opts.get(val);
+    if (!pt.model) o.base = pt.v[i];
+    else if (pt.v[i].toLowerCase() !== o.base.toLowerCase()) o.alt.push(`${pt.model.replace(/,/g, '/')}: ${pt.v[i]}`);
+  });
+  if (opts.size < 2) return null;
+  return [...opts].map(([val, o]) => ({ val, label: `${val}: ${o.base || o.alt.shift()?.replace(/^[^:]+: /, '') || ''}${o.alt.length ? ` (${o.alt.join(', ')})` : ''}` }));
 }
 function valueHint(c) {
   if (!c.d || (c.d.length === 1 && (c.d[0] === '-' || c.d[0] === '※'))) return '';
@@ -2552,7 +2570,7 @@ async function liveRead() {
 }
 async function liveReadNow(cam) {
   let res;
-  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }], { delayMs: 0 }); }
+  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }], { delayMs: 0 }); }
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
@@ -2567,6 +2585,12 @@ async function liveReadNow(cam) {
     if (r) setToggle('#liveTallyR', r[1] === '1');
     if (g) setToggle('#liveTallyG', g[1] === '1');
   }
+  // installation (desktop/hanging) and shooting mode: only when the camera answers them
+  { const ins = /^ins([01])$/i.exec(b(10)); setToggle('#liveDesk', ins?.[1] === '0'); setToggle('#liveHang', ins?.[1] === '1');
+    for (const id of ['#liveDesk', '#liveHang']) $(id).disabled = !ins;
+    const sm = /^OSI:30:([01])$/i.exec(b(11)); setToggle('#liveShoot0', sm?.[1] === '0'); setToggle('#liveShoot1', sm?.[1] === '1');
+    for (const id of ['#liveShoot0', '#liveShoot1']) $(id).disabled = !sm;
+    $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.'; }
   const wb = /^OAW:(\d)$/i.exec(b(9));
   if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
   else if (!wb && /UE160/i.test(cam.model || '') && Date.now() - (live.wbAt || 0) > 3000) {
@@ -2625,6 +2649,26 @@ async function liveDayNight(night) {
   if (r?.ok && !isErr(r.body)) { setToggle('#liveNight', night); setToggle('#liveDay', !night); $('#liveStatus').textContent = night ? 'Night mode' : 'Day mode'; }
   else toast('Day/night is not available on this camera right now');
 }
+// Install position (#INS0 desktop / #INS1 hanging): turns the picture and the pan/tilt directions, so ask first
+async function liveInstall(hanging) {
+  if (!live.cam || $(hanging ? '#liveHang' : '#liveDesk').classList.contains('on')) return;
+  if (!await ask({ title: `Set ${esc(camName(live.cam))} to ${hanging ? 'hanging' : 'desktop'}?`, ok: hanging ? 'Hanging' : 'Desktop',
+    body: `<p>The picture is turned upside down and pan/tilt reverse, to match a camera that is ${hanging ? 'mounted upside down (hanging)' : 'standing on a table (desktop)'}.</p>` })) return;
+  const r = await liveSend('ptz', hanging ? '#INS1' : '#INS0');
+  if (r?.ok && !isErr(r.body)) { setToggle('#liveHang', hanging); setToggle('#liveDesk', !hanging); $('#liveStatus').textContent = hanging ? 'Installation: hanging' : 'Installation: desktop'; }
+  else toast(`Installation could not be changed${r?.body ? ' (' + r.body + ')' : ''}`);
+}
+$('#liveDesk').onclick = () => liveInstall(false);
+$('#liveHang').onclick = () => liveInstall(true);
+// Shooting mode (OSI:30): 0 = Normal, 1 = High Sens. (Low Light on the AW-UE160)
+async function liveShoot(v) {
+  if (!live.cam) return;
+  const r = await liveSend('cam', 'OSI:30:' + v);
+  if (r?.ok && !isErr(r.body)) { setToggle('#liveShoot0', v === 0); setToggle('#liveShoot1', v === 1); $('#liveStatus').textContent = 'Shooting mode: ' + $(v ? '#liveShoot1' : '#liveShoot0').textContent; }
+  else toast(`Shooting mode is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
+}
+$('#liveShoot0').onclick = () => liveShoot(0);
+$('#liveShoot1').onclick = () => liveShoot(1);
 $('#liveDay').onclick = () => liveDayNight(false);
 $('#liveNight').onclick = () => liveDayNight(true);
 // Tally: the button flips at once; red falls back to the pan/tilt command (#DA) on models without TLR.

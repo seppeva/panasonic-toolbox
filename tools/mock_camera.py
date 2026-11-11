@@ -70,6 +70,9 @@ class H(BaseHTTPRequestHandler):
                 m = re.match(r"#O([01])$", c)
                 if m: cur["power"] = m.group(1); return "p" + m.group(1)
                 if c == "#DA": return "dA" + cur.get("tallyR", "0")
+                if c == "#INS": return "iNS" + cur.get("ins", "0")
+                m = re.match(r"#INS([01])$", c)
+                if m: cur["ins"] = m.group(1); return "iNS" + m.group(1)
                 m = re.match(r"#DA([01])$", c)
                 if m: cur["tallyR"] = m.group(1); return "dA" + m.group(1)
                 m = re.match(r"#(PTS)(\d{4})$|#([ZFI])(\d{2})$|#([RM])(\d{2})$|#O([01])$|#D([13])([01])$", c)
@@ -97,6 +100,9 @@ class H(BaseHTTPRequestHandler):
             m = re.match(r"QL([RG])$", c)
             if m: return f"OL{m.group(1)}:" + cur.get("tally" + m.group(1), "0")
             if c == "QAW": return "OAW:" + cur.get("wb", "1")
+            if c == "QSI:30": return "OSI:30:" + cur.get("shoot", "0")
+            m = re.match(r"OSI:30:([01])$", c)
+            if m: cur["shoot"] = m.group(1); return c
             m = re.match(r"OAW:([0129])$", c)
             if m: cur["wb"] = m.group(1); return c
             if c in ("OWS", "OAS"): return c
