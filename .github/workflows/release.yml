@@ -109,7 +109,7 @@ jobs:
           done
           if [ "$ok" != 1 ]; then echo "::error title=Smoke test::app did not start: $(tail -c 1500 smoke.log | tr '\n' ' ')"; exit 1; fi
           curl -sf http://127.0.0.1:8799/api/ping | grep -q panasonic-scene
-          curl -sf http://127.0.0.1:8799/ | grep -q "<title>Panasonic Toolbox</title>" || { echo "::error title=Smoke test::index page wrong"; exit 1; }
+          curl -sf http://127.0.0.1:8799/ -o smoke-index.html && grep -q "<title>Panasonic Toolbox</title>" smoke-index.html || { echo "::error title=Smoke test::index page wrong"; exit 1; }
           curl -sf -X POST http://127.0.0.1:8799/api/quit || true
 
       - name: macOS — notariseren (enkel met Apple Developer-account)
