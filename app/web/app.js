@@ -2002,6 +2002,30 @@ async function initializeCams(cams) {
   state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id));
   renderImports();
 }
+/* ---- preset scope: Mode C makes presets recall only pan/tilt/zoom/focus (OSE:71, 0 = A, 1 = B, 2 = C) ---- */
+const SCOPE_NAME = { 0: 'Mode A', 1: 'Mode B', 2: 'Mode C' };
+async function presetScopeC(cams) {
+  if (!cams.length) return;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  if (!await ask({ title: `Set the preset scope of ${cams.length} camera${cams.length > 1 ? 's' : ''} to Mode C?`, ok: 'Set Mode C', body: `
+    <p>With Mode C, a preset only recalls pan, tilt, zoom and focus. Iris, white balance, gain, shutter and the scene stay as they are.</p>
+    <ul class="tight"><li>Cameras: ${cams.map(c => esc(camName(c))).join(', ')}</li>
+    <li>Changes only the preset scope, not the presets themselves. The result shows each camera's previous mode.</li></ul>` })) return;
+  const rows = await Promise.all(cams.map(async c => {
+    try {
+      const r = await batch(c, [{ cmd: 'QSE:71' }, { cmd: 'OSE:71:2' }, { cmd: 'QSE:71' }]);
+      const was = /^OSE:71:(\d)/i.exec(r[0]?.body || '')?.[1];
+      if (r[0]?.unreachable || !r[0]?.ok) return { c, res: r[0]?.status === 401 ? 'Login required' : 'Not reachable', bad: true };
+      if (isErr(r[1]?.body)) return { c, res: `Not supported (${esc(r[1].body)})`, bad: true };
+      const now = /^OSE:71:(\d)/i.exec(r[2]?.body || '')?.[1];
+      if (now !== '2') return { c, res: `Not confirmed (camera answers ${esc(r[2]?.body || 'nothing')})`, bad: true };
+      return { c, res: was === '2' ? 'Was already Mode C' : `Mode C (was ${SCOPE_NAME[was] || 'unknown'})` };
+    } catch (e) { return { c, res: esc(e.message), bad: true }; }
+  }));
+  const ok = rows.filter(x => !x.bad).length;
+  ask({ title: `Preset scope: ${ok} of ${rows.length} on Mode C`, ok: 'OK', cancel: null, wide: true, body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>IP</th><th>Result</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(camName(x.c))}</td><td class="mono small">${esc(x.c.ip)}</td><td class="${x.bad ? 'warn-text' : ''}">${x.res}</td></tr>`).join('')}</tbody></table>` });
+  if (live.cam && cams.includes(live.cam)) $('#liveStatus').textContent = 'Preset scope: Mode C';
+}
 function renderDefaults() {
   const box = $('#defList'); if (!box) return;
   const d = defaults(), keys = Object.keys(d).sort();
@@ -2015,6 +2039,8 @@ $('#camDefSel').onclick = () => {
   saveAsDefault(sel[0]);
 };
 $('#liveInit').onclick = () => live.cam && initializeCams([live.cam]);
+$('#liveScopeC').onclick = () => live.cam && presetScopeC([live.cam]);
+$('#camScopeSel').onclick = () => presetScopeC(state.cameras.filter(c => c.selected));
 $('#liveDefSave').onclick = () => live.cam && saveAsDefault(live.cam);
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 $('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
