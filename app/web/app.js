@@ -837,6 +837,28 @@ function upsertCam(ip, port, data = {}) {
 const ipNum = ip => ip.split('.').reduce((s, x) => s * 256 + (+x || 0), 0);
 const validIp = ip => /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(ip) && ip.split('.').every(x => +x <= 255);
 
+// Is this IP address in the same IP range as one of this computer's addresses (with the camera's subnet mask)?
+function sameRange(ip, mask = '255.255.255.0') {
+  if (!validIp(ip)) return false;
+  const m = validIp(mask) ? ipNum(mask) : ipNum('255.255.255.0');
+  return state.localIps.some(l => validIp(l) && ((ipNum(l) & m) >>> 0) === ((ipNum(ip) & m) >>> 0));
+}
+// After a range scan: an Easy IP search shows the Panasonic cameras the scan could not reach (another IP range)
+async function scanOthers(foundIps) {
+  const box = $('#scanOther'); box.classList.add('hidden');
+  let j; try { j = await bridgeFetch('/api/eip/discover', { timeout: 2 }); } catch { return; }
+  eipTake(j.cameras || []);
+  const other = state.eip.filter(r => !foundIps.includes(r.orig.ip) && !state.cameras.some(c => c.ip === r.orig.ip));
+  if (!other.length) return;
+  box.innerHTML = `<b>${other.length} more Panasonic camera${other.length > 1 ? 's' : ''} on the cable</b> that this scan could not reach: ${other.slice(0, 6).map(r => `${esc(r.orig.name || r.model)} <span class="mono">${esc(r.orig.ip)}</span>`).join(', ')}${other.length > 6 ? ', …' : ''}. ${other.some(r => !sameRange(r.orig.ip, r.orig.mask)) ? 'They are in another IP range.' : ''} <a href="#" id="scanOtherGo">Open Network setup</a> to give them an address in your range.`;
+  box.classList.remove('hidden');
+  $('#scanOtherGo').onclick = e => { e.preventDefault(); other.forEach(r => r.sel = true); gotoNetsetup(); };
+}
+function gotoNetsetup() {
+  $('[role=tab][data-tab=netsetup]').click(); renderEip();
+  if (!state.eip.length) eipDiscover();
+}
+$('#toNetsetup').onclick = e => { e.preventDefault(); gotoNetsetup(); };
 $('#scanBtn').onclick = async () => {
   if (!state.bridgeOk && !(await checkBridge())) return;
   const range = $('#scanRange').value.trim();
@@ -853,6 +875,7 @@ $('#scanBtn').onclick = async () => {
     log(`Scan ${range}: ${j.cameras.map(c => c.ip + ' ' + c.model).join(', ') || 'nothing found'}`);
     saveCams(); renderCams();
     await refreshAll(state.cameras.filter(c => j.cameras.some(f => f.ip === c.ip)));
+    scanOthers(j.cameras.map(f => f.ip));
   } catch (e) { $('#scanStatus').textContent = 'Scan failed: ' + e.message; log('Scan failed: ' + e.message, 'ERROR'); }
   finally { $('#scanBtn').disabled = false; }
 };
@@ -2039,7 +2062,6 @@ $('#camDefSel').onclick = () => {
   saveAsDefault(sel[0]);
 };
 $('#liveInit').onclick = () => live.cam && initializeCams([live.cam]);
-$('#liveScopeC').onclick = () => live.cam && presetScopeC([live.cam]);
 $('#camScopeSel').onclick = () => presetScopeC(state.cameras.filter(c => c.selected));
 $('#liveDefSave').onclick = () => live.cam && saveAsDefault(live.cam);
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
@@ -2238,6 +2260,7 @@ function renderEip() {
       <td><input data-k="mask" class="mono${changed('mask')}" value="${esc(r.edit.mask)}" aria-label="Subnet mask"></td>
       <td><input data-k="gateway" class="mono${changed('gateway')}" value="${esc(r.edit.gateway)}" aria-label="Gateway"></td>
       <td><input data-k="port" type="number" class="num${changed('port')}" value="${r.edit.port}" aria-label="Port"></td>
+      <td class="small">${sameRange(r.orig.ip, r.orig.mask) ? (state.cameras.some(c => c.ip === r.orig.ip) ? '<span class="ok-text nowrap" title="In this computer\'s IP range and already in the Cameras list">In Cameras</span>' : '<span class="ok-text" title="In this computer\'s IP range">Yes</span>') : '<span class="warn-text nowrap" title="Another IP range than this computer: give the camera an address in your range, or change this computer\'s IP address">Other range</span>'}</td>
       <td class="small muted">${JSON.stringify(r.edit) !== JSON.stringify(r.orig) ? 'Changed' : ''}</td>`;
     $('input[type=checkbox]', tr).onchange = e => { r.sel = e.target.checked; updEipSel(); };
     $$('input[data-k]', tr).forEach(i => i.onchange = () => { r.edit[i.dataset.k] = i.dataset.k === 'port' ? (+i.value || 80) : i.value.trim(); renderEip(); });
@@ -2255,13 +2278,22 @@ function updEipSel() {
   $('#eipSelN').textContent = n; selBar($('#eipSelBar'), n);
   selAllState($('#eipSelAll'), state.eip, r => r.sel);
 }
+// Take Easy IP search results; keeps the selection and any edits that were not applied yet
+function eipTake(found) {
+  const old = new Map(state.eip.map(r => [r.mac, r]));
+  state.eip = found.map(c => {
+    const v = { name: c.name, ip: c.ip, mask: c.mask, gateway: c.gateway, port: c.port }, o = old.get(c.mac);
+    const pending = o && JSON.stringify(o.edit) !== JSON.stringify(o.orig) && JSON.stringify(o.orig) === JSON.stringify(v);
+    return { ...c, sel: o?.sel || false, orig: { ...v }, edit: pending ? o.edit : { ...v } };
+  });
+  renderEip();
+}
 async function eipDiscover() {
   if (!state.bridgeOk && !(await checkBridge())) return;
   $('#eipSearch').disabled = true; $('#eipStatus').textContent = 'Searching (3 seconds)…';
   try {
     const j = await bridgeFetch('/api/eip/discover', { timeout: 3 });
-    const keep = new Map(state.eip.map(r => [r.mac, r.sel]));
-    state.eip = j.cameras.map(c => { const v = { name: c.name, ip: c.ip, mask: c.mask, gateway: c.gateway, port: c.port }; return { ...c, sel: keep.get(c.mac) || false, orig: { ...v }, edit: { ...v } }; });
+    eipTake(j.cameras);
     $('#eipStatus').textContent = `${state.eip.length} camera${state.eip.length === 1 ? '' : 's'} found.`;
     log(`Easy IP: ${state.eip.length} camera(s) found`);
   } catch (e) { $('#eipStatus').textContent = 'Search failed: ' + e.message; }
@@ -2310,9 +2342,12 @@ async function eipSend(list, field) {
     if (net) {
       try { await bridgeFetch('/api/eip/set', { mac: r.mac, ip: v.ip, mask: v.mask, gateway: v.gateway, dns1: r.dns1, dns2: r.dns2, port: v.port }); log(`Easy IP: ${r.mac} → ${v.ip}`); }
       catch (e) { fails.push(`${r.mac}: ${e.message}`); continue; }
+      // the camera keeps its place, description and zones in the Cameras list under its new address
+      const c = state.cameras.find(x => x.ip === other.ip);
+      if (c && !state.cameras.some(x => x !== c && x.ip === v.ip)) { c.ip = v.ip; c.port = v.port || 80; c.status = ''; saveCams(); renderCams(); }
     }
     if (v.name !== other.name) {
-      try { await setCamName(r, v, net); } catch (e) { fails.push(`${r.model || r.mac}: ${e.message}`); }
+      try { await setCamName(r, v, net); const c = state.cameras.find(x => x.ip === v.ip); if (c) { c.title = v.name; saveCams(); renderCams(); } } catch (e) { fails.push(`${r.model || r.mac}: ${e.message}`); }
     }
   }
   if (fails.length) throw new Error(fails.join('; '));
@@ -2351,7 +2386,10 @@ $('#eipToList').onclick = () => {
   if (!list.length) return info('No cameras found yet', 'Search the network first.');
   track('Add cameras from network setup', () => list.forEach(r => upsertCam(r.orig.ip, r.orig.port, { model: r.model, title: r.orig.name })));
   renderCams(); refreshAll(state.cameras.filter(c => list.some(r => r.orig.ip === c.ip)));
-  toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to Cameras`);
+  const far = list.filter(r => !sameRange(r.orig.ip, r.orig.mask));
+  if (far.length) info(`${list.length} camera${list.length > 1 ? 's' : ''} added to Cameras`, `${far.length} of them ${far.length > 1 ? 'are' : 'is'} in another IP range than this computer (${far.map(r => `<span class="mono">${esc(r.orig.ip)}</span>`).join(', ')}) and cannot be reached yet. Give ${far.length > 1 ? 'them' : 'it'} an address in your range here (select, Fill in, Apply changes), or change this computer's IP address.`);
+  else toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to Cameras`);
+  renderEip();
 };
 
 /* ------------------------------------------------------------------ RP150: assignment */
@@ -2661,7 +2699,7 @@ async function liveRead() {
 }
 async function liveReadNow(cam) {
   let res;
-  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }], { delayMs: 0 }); }
+  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }, { type: 'cam', cmd: 'QSE:71' }], { delayMs: 0 }); }
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
@@ -2681,7 +2719,8 @@ async function liveReadNow(cam) {
     for (const id of ['#liveDesk', '#liveHang']) $(id).disabled = !ins;
     const sm = /^OSI:30:([01])$/i.exec(b(11)); setToggle('#liveShoot0', sm?.[1] === '0'); setToggle('#liveShoot1', sm?.[1] === '1');
     for (const id of ['#liveShoot0', '#liveShoot1']) $(id).disabled = !sm;
-    $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.'; }
+    $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.';
+    const ps = /^OSE:71:([012])$/i.exec(b(12)); $$('#liveScope [data-scope]').forEach(x => { setToggle(x, ps?.[1] === x.dataset.scope); x.disabled = !ps; }); }
   const wb = /^OAW:(\d)$/i.exec(b(9));
   if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
   else if (!wb && /UE160/i.test(cam.model || '') && Date.now() - (live.wbAt || 0) > 3000) {
@@ -2758,6 +2797,14 @@ async function liveShoot(v) {
   if (r?.ok && !isErr(r.body)) { setToggle('#liveShoot0', v === 0); setToggle('#liveShoot1', v === 1); $('#liveStatus').textContent = 'Shooting mode: ' + $(v ? '#liveShoot1' : '#liveShoot0').textContent; }
   else toast(`Shooting mode is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
 }
+// Preset scope (OSE:71): A = position and picture, B = position and iris, C = only pan/tilt/zoom/focus
+$$('#liveScope [data-scope]').forEach(btn => btn.onclick = async () => {
+  if (!live.cam || btn.classList.contains('on')) return;
+  const v = btn.dataset.scope;
+  const r = await liveSend('cam', 'OSE:71:' + v);
+  if (r?.ok && !isErr(r.body)) { $$('#liveScope [data-scope]').forEach(x => setToggle(x, x === btn)); $('#liveStatus').textContent = 'Preset scope: Mode ' + 'ABC'[v]; }
+  else toast(`Preset scope is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
+});
 $('#liveShoot0').onclick = () => liveShoot(0);
 $('#liveShoot1').onclick = () => liveShoot(1);
 $('#liveDay').onclick = () => liveDayNight(false);

@@ -8,11 +8,11 @@ Website: **https://seppeva.github.io/panasonic-toolbox/**
 
 | Tab | What it is for |
 |---|---|
-| **Network setup** | Find every Panasonic camera on the network, in any IP range, and set its name and IP address, like Easy IP Setup. |
+| **Network setup** | Find every Panasonic camera on the network, in any IP range, and set its name and IP address, like Easy IP Setup. Shows per camera whether it is in this computer's IP range and already in Cameras; an IP change moves the camera in the Cameras list along with it. A range scan on the Cameras page also points out cameras it could not reach. |
 | **Cameras** | Your camera list: IP address, name on the camera, your own description, model, zone, live scene and status. Zones let you work on groups of cameras; a camera's IP address can be changed in the app when it got a new one. |
-| **Live** | Live picture with control buttons: pan/tilt, zoom, focus, iris, presets, scene files, power, tally, day/night, white and black balance. |
+| **Live** | Live picture with control buttons: pan/tilt, zoom, focus, iris, presets, scene files, power, tally, day/night, white and black balance, installation, shooting mode and preset scope (A/B/C). |
 | **Export** | Save the shading settings of any scene (scene files, `.pscene.json`) or an operator's own preferences (operator files, `.poper`), from one or many cameras. |
-| **Import** | Put saved settings back on any camera and scene, with a comparison first, a backup and a check afterwards. **Initialize** (Cameras and Live) puts a default scene, saved once per model, into the live scene of all selected cameras the same way. **Preset scope C** (Cameras and Live) sets the preset scope (`OSE:71:2`) of the selected cameras to Mode C, so presets only recall pan, tilt, zoom and focus. |
+| **Import** | Put saved settings back on any camera and scene, with a comparison first, a backup and a check afterwards. **Initialize** (Cameras and Live) puts a default scene, saved once per model, into the live scene of all selected cameras the same way. **Preset scope C** (Cameras) sets the preset scope (`OSE:71:2`) of the selected cameras to Mode C, so presets only recall pan, tilt, zoom and focus. |
 | **Shows** | A complete setup (which scene and operator file goes to which camera and scene) recalled with one click. Made from the cameras, or in a grid from saved files, and editable afterwards (`.pshow`). |
 | **Parameters** | Every REST command of the cameras and controllers with a ready-made link; scripts (PowerShell or shell) that run an action on many cameras at once, kept in the project and editable, also after reopening a saved script file; and what is in a scene file and an operator file per model. |
 | **RP150 assignment** | Assign cameras to the CAM buttons of an AW-RP150 through its `Network.s15` file (experimental). |

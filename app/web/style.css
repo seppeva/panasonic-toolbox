@@ -364,13 +364,13 @@ table.grid td{vertical-align:middle}
 .selall-row{font-weight:600;border-bottom:1px solid var(--rule-soft);padding-bottom:4px;margin-bottom:2px!important;flex-basis:100%}
 .live-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .live-tiles .t-white{grid-column:span 2}
-.live-tiles .t-shoot{grid-column:span 2}
 .live-tiles .t-scenes{grid-column:1/-1}
 .live-tiles .live-block{margin:0}
 @media (max-width:1250px){.live-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.live-tiles .t-white{grid-column:1/-1}}
 #tab-live.nocam .live-tiles{opacity:.5;pointer-events:none}
 ul.tight{margin:6px 0 0;padding-left:18px}ul.tight li{margin:2px 0}
 .warn-text{color:#e3b04b}
+.ok-text{color:#5cc98a}
 .dlg.settings{gap:0;max-height:88vh;overflow:auto;padding-bottom:0}
 .dlg.settings>h3{margin-bottom:6px}
 .setsec{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-top:1px solid var(--rule-soft)}

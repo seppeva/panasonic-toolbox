@@ -50,7 +50,8 @@
   <header class="page-head"><h1>Cameras</h1><p>Put this computer in the same IP range as the cameras, then search the network. The cameras you select here are used for export and import.</p></header>
   <div class="grid2">
     <div class="card">
-      <h2>Find cameras</h2>
+      <h2>Scan an IP range</h2>
+      <p class="hint">Finds the cameras this computer can reach and reads their model, name and scene. Only works for cameras in the same IP range as this computer.</p>
       <div class="row wrap">
         <label class="grow">IP range <input id="scanRange" placeholder="192.168.0.0/24 or 192.168.0.10-60"></label>
         <label class="w90" title="The cameras' web port. Leave at 80 unless you changed it in the camera's network settings.">HTTP port <input id="scanPort" type="number" value="80"></label>
@@ -60,6 +61,8 @@
         <button id="scanBtn">Scan network</button>
         <span id="scanStatus" class="muted"></span>
       </div>
+      <div class="note hidden" id="scanOther"></div>
+      <p class="hint">Cameras in another IP range, or a new camera with a factory IP address? <a href="#" id="toNetsetup">Network setup</a> finds every Panasonic camera on the cable and lets you change its IP address first.</p>
     </div>
     <div class="card">
       <h2>Camera login</h2>
@@ -181,7 +184,7 @@
 
 <!-- ================= NETWORK SETUP (Easy IP) ================= -->
 <section id="tab-netsetup" class="tab">
-  <header class="page-head"><h1>Network setup</h1><p>Find Panasonic cameras on this network in any IP range and change their name and IP address, the way Panasonic's Easy IP Setup tool does.</p></header>
+  <header class="page-head"><h1>Network setup</h1><p>Finds every Panasonic camera on the cable, also in another IP range, and changes its name and IP address, the way Panasonic's Easy IP Setup tool does. Cameras in your IP range can be added to Cameras straight away; give the others an address in your range first.</p></header>
   <div class="card">
     <div class="row between">
       <h2>Cameras on the network <span class="count" id="eipCount">0</span></h2>
@@ -195,7 +198,7 @@
       <button class="ghost small danger-text" id="eipDelSel">Remove from list</button>
     </div>
     <table class="tbl" id="eipTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="eipSelAll" aria-label="Select all"></th><th>MAC address</th><th>Model</th><th>Name</th><th>IP address</th><th>Subnet mask</th><th>Gateway</th><th>Port</th><th></th></tr></thead>
+      <thead><tr><th class="w30"><input type="checkbox" id="eipSelAll" aria-label="Select all"></th><th>MAC address</th><th>Model</th><th>Name</th><th>IP address</th><th>Subnet mask</th><th>Gateway</th><th>Port</th><th>Reachable</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="empty muted" id="eipEmpty">Choose Search the network. Cameras are found even if they are in another IP range than this computer.</p>
@@ -251,10 +254,14 @@
           <h3>Shooting mode</h3>
           <div class="hold-row"><button class="toggle" id="liveShoot0" title="Shooting mode: normal">Normal</button><button class="toggle" id="liveShoot1" title="Shooting mode: high sensitivity (Low Light on the AW-UE160)">High Sens.</button></div>
         </div>
+        <div class="live-block t-scope">
+          <h3>Preset scope</h3>
+          <div class="hold-row" id="liveScope"><button class="toggle" data-scope="0" title="Mode A: presets recall position and picture settings">A</button><button class="toggle" data-scope="1" title="Mode B: presets recall position and iris">B</button><button class="toggle" data-scope="2" title="Mode C: presets only recall pan, tilt, zoom and focus">C</button></div>
+        </div>
         <div class="live-block t-scenes">
         <h3>Scene files</h3>
         <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
-        <div class="hold-row live-init"><button id="liveInit" title="Put the default scene of this model into the live scene">Initialize</button><button class="ghost" id="liveScopeC" title="Set the preset scope to Mode C: presets only recall pan, tilt, zoom and focus">Preset scope C</button><button class="ghost" id="liveDefSave" title="Save the live scene as the default for this model">Save as default</button></div>
+        <div class="hold-row live-init"><button id="liveInit" title="Put the default scene of this model into the live scene">Initialize</button><button class="ghost" id="liveDefSave" title="Save the live scene as the default for this model">Save as default</button></div>
       </div>
       </div>
     </div>
