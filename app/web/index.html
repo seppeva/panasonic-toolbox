@@ -82,7 +82,7 @@
       <div class="row">
         <button class="ghost small" id="addCamsBtn">Add cameras…</button>
         <button class="ghost small" id="zonesBtn" title="Rename or remove zones">Zones…</button>
-        <button class="ghost small" id="refreshBtn">Refresh status</button>
+        <button class="ico" id="refreshBtn" title="Refresh status: read every camera in the list again" aria-label="Refresh status"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10a6 6 0 1 1-1.8-4.3"/><path d="M16 3.5v3.5h-3.5"/></svg></button>
       </div>
     </div>
     <div class="zonebar" id="camZoneBar"></div>
@@ -148,7 +148,7 @@
 <section id="tab-import" class="tab">
   <header class="page-head"><h1>Import</h1><p>Put a saved scene back on a camera. Choose for each file which camera and which scene it goes to.</p></header>
   <div class="card">
-    <div class="row between"><h2>1. Open files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ghost small" id="browseFolderBtn">Show files in folder</button></div></div>
+    <div class="row between"><h2>1. Open files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ico" id="browseFolderBtn" title="Show the files in the save folder of this project" aria-label="Show files in folder"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 6V15a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.2 4.5H4A1.5 1.5 0 0 0 2.5 6z"/></svg></button></div></div>
     <div class="drop" id="dropZone">
       <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,.ptproject,.ps1,.sh,application/json,application/zip" multiple hidden></label></p>
       <p class="muted small">Files you exported in this session are already listed below.</p>
@@ -157,7 +157,7 @@
     <div id="srcList"></div>
   </div>
   <div class="card">
-    <div class="row between"><h2>2. Choose where each file goes <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ghost small" id="clearFilesBtn">Clear all</button></span></div>
+    <div class="row between"><h2>2. Choose where each file goes <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ico" id="clearFilesBtn" title="Clear all: empty the list of files and destinations" aria-label="Clear all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/></svg></button></span></div>
     <div class="selbar hidden" id="impSelBar"><span class="seln"><b id="impSelN">0</b> ticked</span>
       <span class="selgroup"><select id="impSelCam" aria-label="Camera"></select><select id="impSelScene" aria-label="Into scene"><option value="">Scene: keep</option><option value="active">Live scene</option><option value="1">Scene 1</option><option value="2">Scene 2</option><option value="3">Scene 3</option><option value="4">Scene 4</option><option value="5">Scene 5</option><option value="6">Scene 6</option><option value="7">Scene 7</option><option value="8">Scene 8</option></select><button class="ghost small" id="impSelApply">Apply</button></span>
       <span class="grow"></span>
@@ -313,7 +313,7 @@
 <section id="tab-shows" class="tab">
   <header class="page-head"><h1>Shows</h1><p>A show puts the right scene and operator files on the right cameras in the right scenes with one click. Make one here from the cameras, or on the Import page with <b>Save as show</b>.</p></header>
   <div class="card">
-    <div class="row between wrap"><h2>Saved shows <span class="count" id="showCount">0</span></h2><span class="row"><button class="small" id="showNew">New show from cameras…</button><button class="ghost small" id="showOpen">Open show file…</button></span></div>
+    <div class="row between wrap"><h2>Saved shows <span class="count" id="showCount">0</span></h2><span class="row"><button class="ghost small" id="showNew">New show from cameras…</button><button class="ghost small" id="showOpen">Open show file…</button></span></div>
     <div class="hidden" id="showProgress"></div>
     <div class="selbar hidden" id="showSelBar"><span class="seln"><b id="showSelN">0</b> selected</span><span class="grow"></span><button class="ghost small danger-text" id="showDelSel">Delete</button></div>
     <table class="tbl" id="showTable">
@@ -323,7 +323,7 @@
     <p class="empty muted" id="showEmpty">No shows yet.</p>
   </div>
   <div class="card" id="gridCard">
-    <div class="row between wrap"><h2>Build a show from files</h2><span class="row"><button class="ghost small" id="gridOpen">Open files…</button><button class="ghost small" id="gridAuto" title="Put every opened scene on the camera it came from, in the same scene number">Fill from the same cameras</button><button class="ghost small" id="gridClear">Clear grid</button></span></div>
+    <div class="row between wrap"><h2>Build a show from files</h2><span class="row"><button class="ghost small" id="gridOpen">Open files…</button><details class="menu"><summary>More</summary><div class="menu-pop"><button type="button" id="gridAuto" title="Put every opened scene on the camera it came from, in the same scene number">Fill from the same cameras</button><button type="button" id="gridClear" class="danger-text">Clear grid</button></div></details></span></div>
     <p class="hint">Rows are cameras, columns are scenes. In each cell choose which opened scene goes into that scene of that camera. Files opened here or on the Import page can be used.</p>
     <div class="note hidden" id="gridEditing"></div>
     <p class="muted small" id="gridFiles"></p>
@@ -365,13 +365,12 @@
   <div class="card">
     <div class="row between">
       <h2>Assignment <span class="count" id="rpCount">0</span></h2>
-      <div class="row"><button class="ghost small" id="rpFromCams">Take found cameras…</button><button class="ghost small" id="rpAddRow">Add row</button><button class="ghost small" id="rpAddRows">Add rows…</button></div>
+      <div class="row"><button class="ghost small" id="rpFromCams">Take found cameras…</button><details class="menu"><summary>Add</summary><div class="menu-pop"><button type="button" id="rpAddRow">One row</button><button type="button" id="rpAddRows">Several rows…</button><button type="button" id="rpBulkPaste">Paste a list of IP addresses…</button></div></details></div>
     </div>
     <div class="toolrow" id="rpIpTools">
       <span class="toollabel">IP addresses of <b id="rpBulkScope">all rows</b></span>
       <span class="selgroup"><input id="rpBulkIp" class="mono" placeholder="First IP, e.g. 192.168.0.11" aria-label="First IP"><input id="rpBulkStep" type="number" min="1" max="50" value="1" class="num" title="Step" aria-label="Step"><button class="ghost small" id="rpBulkFill">Number in CAM order</button></span>
       <span class="selgroup"><input id="rpBulkNet" class="mono" placeholder="New network, e.g. 10.0.1" aria-label="New network"><button class="ghost small" id="rpBulkNetBtn" title="Keeps the last number of every address and replaces the first three">Move to network</button></span>
-      <button class="ghost small" id="rpBulkPaste">Paste a list…</button>
     </div>
     <div class="selbar hidden" id="rpSelBar"><span class="seln"><b id="rpSelN">0</b> selected</span>
       <span class="selgroup"><span class="muted small">Connection</span><button class="ghost small" data-conn="lan">LAN</button><button class="ghost small" data-conn="none">None</button></span>
@@ -410,7 +409,7 @@
       <div class="row between wrap"><span class="muted small">Run on these cameras</span><span class="row"><span class="zonebar inline" id="scriptZones"></span><button class="ghost small" id="scriptAll">Select all</button><button class="ghost small" id="scriptNone">None</button></span></div>
       <div class="row wrap" id="scriptCams"></div>
       <label class="check"><input type="checkbox" id="scriptLogin"><span><b>Put the camera login in the script.</b> <span class="muted">Only needed when User Auth is on in the cameras. Leave it off to keep the password out of the file: the script then uses the environment variables <span class="mono">PANASONIC_USER</span> and <span class="mono">PANASONIC_PASS</span> if they are set on the Companion computer.</span></span></label>
-      <div class="row wrap"><label class="grow">Script name <input id="scriptName" value="panasonic-action"></label><button class="secondary" id="scriptSave">Save in list</button><button id="scriptPs1">Save PowerShell file</button><button class="secondary" id="scriptSh">Save Mac/Linux file</button></div>
+      <div class="row wrap"><label class="grow">Script name <input id="scriptName" value="panasonic-action"></label><button class="secondary" id="scriptSave">Save in list</button><details class="menu primary"><summary>Save script file</summary><div class="menu-pop"><button type="button" id="scriptPs1">PowerShell file (Windows)</button><button type="button" id="scriptSh">Shell file (Mac / Linux)</button></div></details></div>
     </div>
     <div class="card hidden" id="savedScripts">
       <div class="row between wrap"><h2>Saved scripts <span class="count" id="savedScriptCount">0</span></h2><button class="ghost small" id="scriptOpenFile">Open script file…</button></div>

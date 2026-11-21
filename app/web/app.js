@@ -8,6 +8,19 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const FORMAT_ID = 'panasonic-ptz-scene';
+// Small icon buttons for actions in table rows (the text is in the tooltip)
+const SVG = d => `<svg viewBox="0 0 20 20" aria-hidden="true">${d}</svg>`;
+const ICON = {
+  live: SVG('<rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/>'),
+  setup: SVG('<circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>'),
+  folder: SVG('<path d="M2.5 6V15a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.2 4.5H4A1.5 1.5 0 0 0 2.5 6z"/>'),
+  trash: SVG('<path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/>'),
+  compare: SVG('<rect x="2.5" y="3.5" width="6" height="13" rx="1"/><rect x="11.5" y="3.5" width="6" height="13" rx="1"/><path d="M4.5 7h2M4.5 10h2M13.5 7h2M13.5 10h2"/>'),
+  edit: SVG('<path d="M13.5 3.5l3 3L7 16H4v-3z"/>'),
+  save: SVG('<path d="M10 3v9M6.5 8.5L10 12l3.5-3.5"/><path d="M3.5 13v3.5h13V13"/>'),
+  refresh: SVG('<path d="M16 10a6 6 0 1 1-1.8-4.3"/><path d="M16 3.5v3.5h-3.5"/>'),
+};
+const icoBtn = (act, icon, title, extra = '') => `<button type="button" class="ico" data-act="${act}" title="${esc(title)}" aria-label="${esc(title)}">${ICON[icon] || ''}${extra}</button>`;
 
 /* ------------------------------------------------------------------ storage */
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
@@ -741,7 +754,7 @@ function renderCams() {
       <td>${c.model ? `<span class="pill">${esc(c.model)}</span>` : '<span class="muted">–</span>'}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
       <td>${c.scene == null ? '–' : c.scene === 0 ? 'Off' : 'Scene ' + c.scene}</td>
       <td>${c.busy ? '<span class="pill busy">Busy</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : ''}</td>
-      <td class="nowrap"><button class="ghost small" data-act="live">Live view</button> <button class="ghost small" data-act="setup">Settings</button></td>
+      <td class="nowrap">${icoBtn('live', 'live', 'Open the live page of ' + c.ip)}${icoBtn('setup', 'setup', 'Open the settings page of ' + c.ip + ', signed in')}</td>
       <td class="end"><button class="icon" data-act="del" title="Remove from list" aria-label="Remove ${esc(c.ip)}">×</button></td>`;
     $('input', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
     $('.descin', tr).onchange = e => { const d = e.target.value.trim(); if (d === (c.desc || '')) return; track(`Description of ${c.ip}`, () => { c.desc = d; }); saveCams(); };
@@ -818,7 +831,8 @@ function renderZones() {
 }
 // The bar with actions for the selected rows always keeps its place (no jumping rows); without a selection its controls are off.
 function selBar(bar, n) {
-  bar.classList.remove('hidden'); bar.classList.toggle('idle', !n);
+  // the bar with actions for the ticked rows only shows when something is ticked
+  bar.classList.toggle('hidden', !n); bar.classList.toggle('idle', !n);
   $$('button, input, select', bar).forEach(x => { x.disabled = !n; });
 }
 // Select-all checkbox: shows a dash when some rows are selected; a click then clears the selection, the next click selects all.
@@ -1354,7 +1368,7 @@ function renderImports() {
       <td><select data-k="target"><option value="">Choose a camera</option>${state.cameras.map(c => `<option value="${esc(c.ip)}" ${j.target === c.ip ? 'selected' : ''}>${esc(c.ip)} ${esc(c.title || c.model || '')}</option>`).join('')}</select></td>
       <td>${src.kind === 'operator' ? '<span class="muted">Not scene-related</span>' : `<select data-k="targetScene"><option value="active" ${j.targetScene === 'active' ? 'selected' : ''}>Live scene${tcam?.scene ? ' (' + tcam.scene + ')' : ''}</option>${Array.from({ length: nsc }, (_, i) => `<option value="${i + 1}" ${j.targetScene === String(i + 1) ? 'selected' : ''}>Scene ${i + 1}</option>`).join('')}</select>`}</td>
       <td>${srcParams(src)}</td>
-      <td class="end nowrap"><button class="ghost small" data-act="cmp" title="Compare with what is on the camera now">Compare</button> <button class="icon" data-act="del" aria-label="Remove">×</button></td>`;
+      <td class="end nowrap">${icoBtn('cmp', 'compare', 'Compare with what is on the camera now')} <button class="icon" data-act="del" aria-label="Remove">×</button></td>`;
     $('input', tr).onchange = e => { j.include = e.target.checked; updImpSel(); };
     $$('select', tr).forEach(se => se.onchange = () => { track('Change destination', () => { j[se.dataset.k] = se.dataset.k === 'srcId' ? +se.value : se.value; }); renderImports(); });
     $('[data-act=del]', tr).onclick = () => { track('Remove destination', () => { state.jobs = state.jobs.filter(x => x !== j); }); renderImports(); };
@@ -1918,7 +1932,7 @@ function renderSavedScripts() {
   box.classList.toggle('hidden', !state.scripts.length);
   $('#savedScriptCount').textContent = state.scripts.length;
   $('#savedScriptTable tbody').innerHTML = state.scripts.map(sc => `<tr data-id="${esc(sc.id)}" class="${sc.id === state.scriptEdit ? 'editing' : ''}"><td><b>${esc(sc.name)}</b>${sc.id === state.scriptEdit ? ' <span class="pill info">editing</span>' : ''}</td><td class="small">${sc.items.map(x => esc(x.name)).join('<br>')}</td><td class="small">${(sc.cams || []).map(ip => { const c = state.cameras.find(x => x.ip === ip); return esc(c ? camName(c) : ip); }).join(', ') || '<span class="muted">no cameras</span>'}</td><td class="muted small">${new Date(sc.modified || sc.created).toLocaleString('en-GB')}</td>
-    <td class="end nowrap"><button class="ghost small" data-act="edit">Edit</button> <button class="ghost small" data-act="ps1">PowerShell</button> <button class="ghost small" data-act="sh">Mac/Linux</button> <button class="icon" data-act="del" aria-label="Delete script">×</button></td></tr>`).join('');
+    <td class="end nowrap"><button class="ghost small" data-act="edit">Edit</button> ${icoBtn('ps1', 'save', 'Save as PowerShell file (Windows)', '<span class="mono">PS1</span>')}${icoBtn('sh', 'save', 'Save as Mac/Linux file', '<span class="mono">SH</span>')} <button class="icon" data-act="del" aria-label="Delete script">×</button></td></tr>`).join('');
   $$('#savedScriptTable tbody tr').forEach(tr => {
     const sc = state.scripts.find(x => x.id === tr.dataset.id);
     $('[data-act=edit]', tr).onclick = () => editScript(sc);
@@ -2042,7 +2056,7 @@ function renderShows() {
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
-      <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> <button class="ghost small" data-act="edit">Edit</button> <button class="ghost small" data-act="file">Save file</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
+      <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> ${icoBtn('edit', 'edit', 'Edit this show')}${icoBtn('file', 'save', 'Save the show file')} <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
     $('input[type=checkbox]', tr).onchange = e => { sh.sel = e.target.checked; updShowSel(); };
     $('[data-act=recall]', tr).onclick = () => recallShow(sh);
     $('[data-act=edit]', tr).onclick = () => editShow(sh);
@@ -3265,3 +3279,44 @@ document.addEventListener('keyup', e => {
 /* ------------------------------------------------------------------ init */
 renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo();
 checkBridge().then(() => loadSaveDir());
+
+
+/* ---- More menus (details.menu) and foldable blocks on Live and Engineering ---- */
+// A menu opens below its button, also inside cards that scroll sideways, and closes after a choice or a click elsewhere.
+function placeMenu(d) {
+  const pop = $('.menu-pop', d); if (!pop) return;
+  const r = $('summary', d).getBoundingClientRect();
+  pop.style.top = Math.min(window.innerHeight - pop.offsetHeight - 8, r.bottom + 4) + 'px';
+  pop.style.left = Math.max(8, Math.min(window.innerWidth - pop.offsetWidth - 8, r.right - pop.offsetWidth)) + 'px';
+}
+document.addEventListener('toggle', e => {
+  const d = e.target; if (!(d instanceof HTMLDetailsElement) || !d.classList.contains('menu') || !d.open) return;
+  $$('details.menu[open]').forEach(x => { if (x !== d) x.open = false; });
+  placeMenu(d);
+}, true);
+document.addEventListener('click', e => {
+  $$('details.menu[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.menu-pop button')) d.open = false; });
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $$('details.menu[open]').forEach(d => d.open = false); });
+window.addEventListener('scroll', () => $$('details.menu[open]').forEach(d => d.open = false), true);
+window.addEventListener('resize', () => $$('details.menu[open]').forEach(d => d.open = false));
+
+// Click a block title (White, Zoom, Tally…) to fold it away; the app remembers it.
+(function foldBlocks() {
+  const folded = new Set(ls.get('pscene.folded', []));
+  for (const sec of ['tab-live', 'tab-eng']) $$(`#${sec} .live-block`).forEach((b, i) => {
+    const h = b.querySelector(':scope > h3') || b.querySelector(':scope > .row:first-child > h3');
+    if (!h) return;
+    const key = sec + ':' + ([...b.classList].find(c => c !== 'live-block' && c !== 'collapsed') || i);
+    h.classList.add('fold'); h.title = 'Click to fold or unfold'; h.setAttribute('role', 'button'); h.tabIndex = 0;
+    if (folded.has(key)) b.classList.add('collapsed');
+    const flip = () => {
+      b.classList.toggle('collapsed');
+      const f = new Set(ls.get('pscene.folded', []));
+      b.classList.contains('collapsed') ? f.add(key) : f.delete(key);
+      ls.set('pscene.folded', [...f]);
+    };
+    h.addEventListener('click', flip);
+    h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+  });
+})();
