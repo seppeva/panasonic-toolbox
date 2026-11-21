@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.20.5"
+VERSION = "2.21.0"
 DEFAULT_PORT = 8765
 
 
@@ -91,8 +91,27 @@ def target_allowed(ip):
     return CONFIG["allow_public"] or addr.is_private or addr.is_link_local
 
 
+class _QuickConnection(http.client.HTTPConnection):
+    """Connects like the normal HTTP connection, but starts a new attempt after 0.2 s without answer instead of
+    waiting for the system's one-second retry (a busy camera sometimes drops the first attempt)."""
+    def connect(self):
+        for i in range(3):
+            try:
+                self.sock = socket.create_connection((self.host, self.port), 0.2 if i < 2 else self.timeout, self.source_address)
+                break
+            except socket.timeout:
+                if i == 2:
+                    raise
+        self.sock.settimeout(self.timeout)
+
+
+class _QuickHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_QuickConnection, req)
+
+
 def build_opener(ip, port, user, password):
-    handlers = []
+    handlers = [_QuickHTTPHandler()]
     if user:
         mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
         mgr.add_password(None, f"http://{ip}:{port}/", user, password or "")
@@ -484,7 +503,7 @@ _HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
 
 def _cam_proxy_handler(ip, port, user, password):
     def opener():
-        handlers = [_NoRedirect(), urllib.request.ProxyHandler({})]
+        handlers = [_NoRedirect(), urllib.request.ProxyHandler({}), _QuickHTTPHandler()]
         if user:
             mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
             mgr.add_password(None, f"http://{ip}:{port}/", user, password or "")
@@ -501,8 +520,14 @@ def _cam_proxy_handler(ip, port, user, password):
             n = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(n) if n else None
             req = urllib.request.Request(f"http://{ip}:{port}{self.path}", data=data, method=self.command)
+            here = f"http://{self.headers.get('Host', '')}"
+            there = f"http://{ip}" + ("" if int(port) == 80 else f":{port}")
             for k, v in self.headers.items():
-                if k.lower() not in _HOP and k.lower() not in ("authorization", "accept-encoding", "origin", "referer"):
+                kl = k.lower()
+                if kl in ("origin", "referer"):
+                    # the camera checks that its own pages ask: point them at the camera instead of 127.0.0.1
+                    req.add_header(k, v.replace(here, there))
+                elif kl not in _HOP and kl not in ("authorization", "accept-encoding"):
                     req.add_header(k, v)
             try:
                 resp = opener().open(req, timeout=15)

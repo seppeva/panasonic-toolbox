@@ -219,7 +219,7 @@
       <div class="live-msg" id="liveMsg">Choose a camera.</div>
     </div>
       <div class="live-block live-presets">
-        <div class="row between"><h3>Camera presets</h3><label class="check small"><input type="checkbox" id="presetStore"> Store the current position</label></div>
+        <div class="row between"><h3>Camera presets</h3><button class="ghost small store-btn" id="presetStore" aria-pressed="false" title="Then click a preset number to store the current position in it">Store</button></div>
         <div class="preset-row"><div class="preset-grid" id="presetGrid"></div><label class="w90">Presets <select id="presetPage"></select></label></div>
       </div>
       <div class="live-tiles">
@@ -231,7 +231,7 @@
         <h3>White</h3>
         <div class="seg-row" id="liveWB" role="group" aria-label="White balance mode"><button class="toggle" data-wb="auto" title="Automatic tracking white (ATW)">Auto</button><button class="toggle" data-wb="var" title="Variable colour temperature">Var</button><button class="toggle" data-wb="a" title="White balance memory A">A</button><button class="toggle" data-wb="b" title="White balance memory B">B</button></div>
         <div class="hold-row"><label class="kfield" title="Colour temperature for VAR, in kelvin"><input type="number" id="liveVarK" min="2000" max="15000" step="10" placeholder="5600"><span>K</span></label><button id="liveVarSet" title="Switch to VAR with this colour temperature">Set VAR</button></div>
-        <div class="hold-row"><button id="liveAWB" title="Auto white balance in the memory that is active (A or B)">AWB</button><button id="liveAWBa" title="Point the camera at something white: switches to memory A and stores an auto white balance in it">Store A</button><button id="liveAWBb" title="Point the camera at something white: switches to memory B and stores an auto white balance in it">Store B</button></div>
+        <div class="hold-row"><button id="liveAWB" title="Auto white balance in the memory that is active (A or B)">AWB</button><button class="store-btn" id="liveWbStore" aria-pressed="false" title="Then click A or B: point the camera at something white, it stores an auto white balance in that memory">Store</button></div>
       </div>
         <div class="live-block t-black">
         <h3>Black</h3>
@@ -298,7 +298,7 @@
     <div class="live-block e-white"><h3>White balance</h3>
       <div class="hold-row"><button data-eng="wb" data-v="auto" title="Automatic tracking white (ATW)">Auto</button><button data-eng="wb" data-v="var" title="Variable colour temperature">Var</button><button data-eng="wb" data-v="a" title="White balance memory A">A</button><button data-eng="wb" data-v="b" title="White balance memory B">B</button></div>
       <div class="hold-row"><label class="kfield" title="Colour temperature for VAR, in kelvin"><input type="number" id="engVarK" min="2000" max="15000" step="10" placeholder="5600"><span>K</span></label><button data-eng="varK" title="Switch to VAR with this colour temperature">Set VAR</button></div>
-      <div class="hold-row"><button data-eng="awb" title="Auto white balance in the memory that is active (A or B)">AWB</button><button data-eng="awbMem" data-v="a" title="Switches to memory A and stores an auto white balance in it">Store A</button><button data-eng="awbMem" data-v="b" title="Switches to memory B and stores an auto white balance in it">Store B</button></div>
+      <div class="hold-row"><button data-eng="awb" title="Auto white balance in the memory that is active (A or B)">AWB</button><button class="store-btn" id="engWbStore" aria-pressed="false" title="Then click A or B: each camera stores an auto white balance in that memory">Store</button></div>
       <div class="hold-row"><button data-eng="abb" title="Auto black balance">ABB</button></div>
     </div>
     <div class="live-block e-install"><h3>Installation</h3><div class="hold-row"><button data-eng="install" data-v="0">Desktop</button><button data-eng="install" data-v="1">Hanging</button></div></div>

@@ -427,3 +427,7 @@ button.copied{color:#8fd19e}
 label.kfield{flex-direction:row}
 .kfield input{height:32px}
 .live-tiles .t-shoot{grid-column:span 2}
+
+/* Store: arm, then click the preset or the white memory (A/B) to store into */
+.store-btn.armed,.hold-row button.store-btn.armed{background:rgba(217,161,59,.18);border-color:#d9a13b;color:#ebc77f}
+.wb-storing [data-wb=a],.wb-storing [data-wb=b],.wb-storing [data-eng=wb][data-v=a],.wb-storing [data-eng=wb][data-v=b]{border-color:#d9a13b!important;color:#ebc77f!important}

@@ -2538,8 +2538,14 @@ const ENG = {
       return now.length ? (good === now.length ? { res: `${good} H.264 stream${good > 1 ? 's' : ''} ${v === '1' ? 'on' : 'off'}` } : { res: `${good} of ${now.length} streams ${v === '1' ? 'on' : 'off'}`, bad: true }) : { res: `${rs.filter(r => r?.ok).length} of ${paths.length} streams ${v === '1' ? 'on' : 'off'}` };
     } },
 };
+$('#engWbStore').onclick = () => armStore($('#engWbStore'), !$('#engWbStore').classList.contains('armed'), $('.e-white'), 'wb-storing');
 async function engClick(btn) {
-  const kind = btn.dataset.eng, v = btn.dataset.v;
+  let kind = btn.dataset.eng; const v = btn.dataset.v;
+  if (kind === 'wb' && $('#engWbStore').classList.contains('armed')) {
+    armStore($('#engWbStore'), false, $('.e-white'), 'wb-storing');
+    if (!['a', 'b'].includes(v)) return toast('Store works for A and B');
+    kind = 'awbMem';
+  }
   const cams = engCams();
   if (kind === 'init') { if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page.'); return initializeCams(cams); }
   if (kind === 'defsave') { if (cams.length !== 1) return info('Choose one camera', 'Save as default reads the live scene of one camera. Tick only that camera.'); return saveAsDefault(cams[0]); }
@@ -2548,7 +2554,7 @@ async function engClick(btn) {
   if (!state.bridgeOk && !(await checkBridge())) return;
   const chk = a.check?.(); if (chk && chk !== true) return info('Check the value', esc(chk));
   const label = a.label(v, btn);
-  const warn = a.confirm?.(v);
+  const warn = a.confirm?.(v) || (kind === 'awbMem' && 'Point the cameras at something white. Each camera switches to that memory and stores an auto white balance in it.');
   if (warn && !await ask({ title: `${label} on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: label, danger: true, body: `<p>${esc(warn)}</p><p class="muted small">${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
   $('#tab-eng').classList.add('busy'); $('#engStatus').textContent = `${label}: ${cams.length} camera${cams.length > 1 ? 's' : ''}…`;
   $('#engResultTitle').textContent = label;
@@ -3018,6 +3024,13 @@ const WB_UE160 = { auto: ['OSL:2A:1'], a: ['OSL:2A:0', 'OSL:2B:0'], b: ['OSL:2A:
 const showWb = m => $$('#liveWB [data-wb]').forEach(x => setToggle(x, x.dataset.wb === m));
 $$('#liveWB [data-wb]').forEach(btn => btn.onclick = async () => {
   if (!live.cam) return;
+  if ($('#liveWbStore').classList.contains('armed')) {
+    if (!['a', 'b'].includes(btn.dataset.wb)) return toast('Store works for A and B');
+    armStore($('#liveWbStore'), false, $('.t-white'), 'wb-storing');
+    const m = btn.dataset.wb.toUpperCase();
+    if (!await ask({ title: `Store white balance in memory ${m}?`, ok: 'Store', body: `<p>Point ${esc(camName(live.cam))} at something white. The camera switches to memory ${m} and stores an auto white balance in it.</p>` })) return;
+    return liveAwbMem(btn.dataset.wb);
+  }
   const m = btn.dataset.wb; live.wbAt = Date.now();
   let r = await liveSend('cam', 'OAW:' + WB_OAW[m]);
   if (!r?.ok || isErr(r.body)) { for (const c of WB_UE160[m]) r = await liveSend('cam', c); }
@@ -3069,8 +3082,7 @@ async function liveAwbMem(m) {
   if (r?.ok && !isErr(r.body)) { $('#liveStatus').textContent = `Auto white balance saved in ${m.toUpperCase()}`; toast(`AWB running: saved in memory ${m.toUpperCase()} in a few seconds`); }
   else toast(`AWB not possible now${r?.body ? ' (' + r.body + ')' : ''}`);
 }
-$('#liveAWBa').onclick = () => liveAwbMem('a');
-$('#liveAWBb').onclick = () => liveAwbMem('b');
+$('#liveWbStore').onclick = () => armStore($('#liveWbStore'), !$('#liveWbStore').classList.contains('armed'), $('.t-white'), 'wb-storing');
 $('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first, or use Store A / Store B.` : 'Auto white balance started (kept in the memory that is active)'); };
 $('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
 function renderLiveScenes() {
@@ -3088,7 +3100,14 @@ const PRESETS_PER_PAGE = 12;
 $('#presetPage').innerHTML = Array.from({ length: Math.ceil(100 / PRESETS_PER_PAGE) }, (_, i) => `<option value="${i}">${i * PRESETS_PER_PAGE + 1}–${Math.min(100, (i + 1) * PRESETS_PER_PAGE)}</option>`).join('');
 $('#presetPage').value = store.get('presetPage', 0);
 $('#presetPage').onchange = () => { store.set('presetPage', +$('#presetPage').value); renderPresets(); };
-$('#presetStore').onchange = () => $('#presetGrid').classList.toggle('storing', $('#presetStore').checked);
+// Store buttons: arm, then click what to store into. A second click, Escape or another tab disarms.
+function armStore(btn, on, target, cls = 'storing') {
+  btn.classList.toggle('armed', on); btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (target) target.classList.toggle(cls, on);
+}
+const presetArmed = () => $('#presetStore').classList.contains('armed');
+$('#presetStore').onclick = () => armStore($('#presetStore'), !presetArmed(), $('#presetGrid'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { armStore($('#presetStore'), false, $('#presetGrid')); armStore($('#liveWbStore'), false, $('.t-white'), 'wb-storing'); armStore($('#engWbStore'), false, $('.e-white'), 'wb-storing'); } });
 function renderPresets() {
   const page = +$('#presetPage').value || 0; const grid = $('#presetGrid');
   grid.innerHTML = Array.from({ length: PRESETS_PER_PAGE }, (_, i) => page * PRESETS_PER_PAGE + i + 1).filter(n => n <= 100).map(n => `<button data-preset="${n}">${n}</button>`).join('');
@@ -3096,11 +3115,11 @@ function renderPresets() {
 }
 async function livePreset(n) {
   if (!live.cam) return;
-  if ($('#presetStore').checked) {
+  if (presetArmed()) {
     if (!await ask({ title: `Store preset ${n}?`, body: `<p>Preset ${n} of ${esc(live.cam.title || live.cam.ip)} is replaced by the current position.</p>`, ok: 'Store' })) return;
     const r = await liveSend('ptz', '#M' + pad2(n - 1));
     if (r?.ok && !isErr(r.body)) toast(`Preset ${n} stored`);
-    $('#presetStore').checked = false; $('#presetGrid').classList.remove('storing');
+    armStore($('#presetStore'), false, $('#presetGrid'));
   } else {
     const r = await liveSend('ptz', '#R' + pad2(n - 1));
     if (r?.ok && !isErr(r.body)) { $$('#presetGrid button').forEach(x => x.classList.toggle('on', +x.dataset.preset === n)); }
