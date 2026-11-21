@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.19.0"
+VERSION = "2.20.0"
 DEFAULT_PORT = 8765
 
 
@@ -140,6 +140,24 @@ def get_basic(ip, port, user=None, password=None, timeout=2.0):
         return {"ok": False, "status": e.code, "error": f"HTTP {e.code}"}
     except Exception as e:
         return {"ok": False, "status": 0, "error": str(getattr(e, "reason", e))}
+
+
+# Web CGIs the app may call (besides aw_cam/aw_ptz): the H.264 stream switches and the settings readout.
+CGI_ALLOWED = re.compile(r"^/cgi-bin/(set_h264(_[234])?|setdata|getinfo|get_basic)$")
+
+
+def get_cgi(ip, port, path, query, user=None, password=None, timeout=4.0):
+    if not CGI_ALLOWED.match(path):
+        return {"ok": False, "status": 0, "error": f"CGI {path!r} not allowed"}
+    q = urllib.parse.urlencode({str(k): str(v) for k, v in dict(query).items()})
+    url = f"http://{ip}:{port}{path}" + (f"?{q}" if q else "")
+    try:
+        with build_opener(ip, port, user, password).open(url, timeout=timeout) as r:
+            return {"ok": True, "status": r.status, "body": r.read(4000).decode("utf-8", "replace").strip()}
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "status": e.code, "error": f"HTTP {e.code}"}
+    except Exception as e:
+        return {"ok": False, "status": 0, "error": str(getattr(e, "reason", e)), "unreachable": True}
 
 
 def title_from_basic(body):
@@ -528,6 +546,11 @@ def api_batch(req):
                 if r.get("ok"):
                     r["body"] = title_from_basic(r["body"])  # only the title goes back to the page
                 r["cmd"] = "get_basic"
+                results.append(r)
+                continue
+            if it.get("type") == "cgi":
+                r = get_cgi(ip, port, str(it.get("path", "")), it.get("query") or {}, user, pw, min(timeout, 5.0))
+                r["cmd"] = it.get("path")
                 results.append(r)
                 continue
             kind = "ptz" if it.get("type") == "ptz" else "cam"

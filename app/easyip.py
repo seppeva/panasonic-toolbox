@@ -10,6 +10,7 @@ a fixed block, then tag-length-value fields, closed by FF FF and a 16-bit checks
 Cameras only accept a reconfiguration during a limited time after power-on (setting
 "Easy IP Setup accommodate period", 20 minutes by default).
 """
+import re
 import socket
 import threading
 import time
@@ -67,6 +68,21 @@ def _cstr(b):
     return bytes(b).split(b"\x00", 1)[0].decode("ascii", "replace").strip()
 
 
+_MODEL_LIKE = re.compile(r"^(AW-|AK-|CAM:)", re.I)
+
+
+def _model_and_name(a7, a8):
+    """Tags A7 and A8 hold the model and the camera name, but not every camera uses the same order:
+    an AW-UE150 was seen with its name in A7 and "CAM:UE150" in A8. Whichever looks like a model is the model;
+    "CAM:UE150" is shown as "AW-UE150"."""
+    model, name = a7, a8
+    if _MODEL_LIKE.match(a8) and not _MODEL_LIKE.match(a7):
+        model, name = a8, a7
+    if model.upper().startswith("CAM:"):
+        model = "AW-" + model[4:]
+    return {"model": model, "name": name}
+
+
 def parse_announcement(data):
     if len(data) < 64 or data[0:2] != b"\x00\x01" or data[4:6] != b"\x00\x0e":
         return None
@@ -84,8 +100,7 @@ def parse_announcement(data):
         "dns1": _ip_str(dns[:4]),
         "dns2": _ip_str(dns[4:8]) if len(dns) >= 8 else "0.0.0.0",
         "port": (port[0] << 8) | port[1] if len(port) >= 2 else 80,
-        "model": _cstr(t.get(0xA7, b"")),
-        "name": _cstr(t.get(0xA8, b"")),
+        **_model_and_name(_cstr(t.get(0xA7, b"")), _cstr(t.get(0xA8, b""))),
         "version": _cstr(t.get(0xA9, b"")),
         "_raw": {k: bytes(v) for k, v in t.items()},
         "_macb": bytes(mac),

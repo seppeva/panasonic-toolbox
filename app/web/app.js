@@ -13,7 +13,7 @@ const FORMAT_ID = 'panasonic-ptz-scene';
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
 // timing, page paths and the update check are for the whole app. The first project ('default') keeps the
 // keys of earlier versions, so nothing is lost when updating.
-const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
 // settings that moved into projects in 2.14: a project without its own value uses the value from before
 const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
 // The app's data lives in state.json, kept by the app itself and handed to this page when it loads (#psState).
@@ -433,7 +433,9 @@ document.addEventListener('mouseover', e => {
     const tag = n.tagName;
     if (tag === 'SELECT') { const t = n.selectedOptions?.[0]?.textContent?.trim(); if (t && (n.title === '' || n.dataset.autotitle)) { n.title = t; n.dataset.autotitle = '1'; } return; }
     if ((tag === 'INPUT' || tag === 'TEXTAREA') && n.scrollWidth > n.clientWidth + 1) { if (n.title === '' || n.dataset.autotitle) { n.title = n.value; n.dataset.autotitle = '1'; } return; }
-    if (n.scrollWidth > n.clientWidth + 1 && n.clientWidth > 0) {
+    // only plain text that is cut off: an element without other elements in it, or one set to end in "…"
+    const textOnly = !n.firstElementChild || getComputedStyle(n).textOverflow === 'ellipsis';
+    if (textOnly && n.scrollWidth > n.clientWidth + 1 && n.clientWidth > 0) {
       const t = n.innerText.trim();
       if (t && (n.title === '' || n.dataset.autotitle)) { n.title = t; n.dataset.autotitle = '1'; }
       return;
@@ -453,6 +455,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
   if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); }
+  if (b.dataset.tab === 'eng') renderEng();
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
   $('.content').scrollTop = 0;
 }));
@@ -671,6 +674,9 @@ function saveLogin() {
 
 function hostPort(c) { return c.ip + (c.port && +c.port !== 80 ? ':' + c.port : ''); }
 async function openCamPage(c, kind) {
+  if (state.localIps.length && !sameRange(c.ip)) {
+    if (!await ask({ title: `${esc(camName(c))} is in another IP range`, ok: 'Open anyway', body: `<p>This computer (${state.localIps.map(i => `<span class="mono">${esc(i)}</span>`).join(', ')}) cannot reach <span class="mono">${esc(c.ip)}</span>, so the browser will say the page is not reachable.</p><p>Give the camera an address in your range on the Network setup page, or give this computer an address in the camera's range.</p>` })) return;
+  }
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
   const path = kind === 'setup' ? state.setupPath : state.livePath;
   const cred = user ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : '';
@@ -2025,44 +2031,13 @@ async function initializeCams(cams) {
   state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id));
   renderImports();
 }
-/* ---- preset scope: Mode C makes presets recall only pan/tilt/zoom/focus (OSE:71, 0 = A, 1 = B, 2 = C) ---- */
-const SCOPE_NAME = { 0: 'Mode A', 1: 'Mode B', 2: 'Mode C' };
-async function presetScopeC(cams) {
-  if (!cams.length) return;
-  if (!state.bridgeOk && !(await checkBridge())) return;
-  if (!await ask({ title: `Set the preset scope of ${cams.length} camera${cams.length > 1 ? 's' : ''} to Mode C?`, ok: 'Set Mode C', body: `
-    <p>With Mode C, a preset only recalls pan, tilt, zoom and focus. Iris, white balance, gain, shutter and the scene stay as they are.</p>
-    <ul class="tight"><li>Cameras: ${cams.map(c => esc(camName(c))).join(', ')}</li>
-    <li>Changes only the preset scope, not the presets themselves. The result shows each camera's previous mode.</li></ul>` })) return;
-  const rows = await Promise.all(cams.map(async c => {
-    try {
-      const r = await batch(c, [{ cmd: 'QSE:71' }, { cmd: 'OSE:71:2' }, { cmd: 'QSE:71' }]);
-      const was = /^OSE:71:(\d)/i.exec(r[0]?.body || '')?.[1];
-      if (r[0]?.unreachable || !r[0]?.ok) return { c, res: r[0]?.status === 401 ? 'Login required' : 'Not reachable', bad: true };
-      if (isErr(r[1]?.body)) return { c, res: `Not supported (${esc(r[1].body)})`, bad: true };
-      const now = /^OSE:71:(\d)/i.exec(r[2]?.body || '')?.[1];
-      if (now !== '2') return { c, res: `Not confirmed (camera answers ${esc(r[2]?.body || 'nothing')})`, bad: true };
-      return { c, res: was === '2' ? 'Was already Mode C' : `Mode C (was ${SCOPE_NAME[was] || 'unknown'})` };
-    } catch (e) { return { c, res: esc(e.message), bad: true }; }
-  }));
-  const ok = rows.filter(x => !x.bad).length;
-  ask({ title: `Preset scope: ${ok} of ${rows.length} on Mode C`, ok: 'OK', cancel: null, wide: true, body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>IP</th><th>Result</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(camName(x.c))}</td><td class="mono small">${esc(x.c.ip)}</td><td class="${x.bad ? 'warn-text' : ''}">${x.res}</td></tr>`).join('')}</tbody></table>` });
-  if (live.cam && cams.includes(live.cam)) $('#liveStatus').textContent = 'Preset scope: Mode C';
-}
 function renderDefaults() {
   const box = $('#defList'); if (!box) return;
   const d = defaults(), keys = Object.keys(d).sort();
   box.innerHTML = keys.length ? `<table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th><th></th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span>, scene ${esc(String(d[m].scene ?? ''))}</td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td><td class="end"><button type="button" class="icon" data-defdel="${esc(m)}" aria-label="Delete default for ${esc(m)}">×</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No default scenes yet.</p>';
   $$('[data-defdel]', box).forEach(b => b.onclick = () => { const x = defaults(); delete x[b.dataset.defdel]; saveDefaults(x); renderDefaults(); toast(`Default for ${b.dataset.defdel} deleted`); });
 }
-$('#camInitSel').onclick = () => initializeCams(state.cameras.filter(c => c.selected));
-$('#camDefSel').onclick = () => {
-  const sel = state.cameras.filter(c => c.selected);
-  if (sel.length !== 1) return info('Select one camera', 'Save as default reads the live scene of one camera. Select only that camera.');
-  saveAsDefault(sel[0]);
-};
 $('#liveInit').onclick = () => live.cam && initializeCams([live.cam]);
-$('#camScopeSel').onclick = () => presetScopeC(state.cameras.filter(c => c.selected));
 $('#liveDefSave').onclick = () => live.cam && saveAsDefault(live.cam);
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 $('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
@@ -2340,17 +2315,54 @@ async function eipSend(list, field) {
     const v = r[field], other = r[field === 'edit' ? 'orig' : 'edit'];
     const net = netChanged(v, other);
     if (net) {
+      eipProgress(`${r.orig?.name || r.model || r.mac}: sending ${v.ip} with Easy IP…`);
       try { await bridgeFetch('/api/eip/set', { mac: r.mac, ip: v.ip, mask: v.mask, gateway: v.gateway, dns1: r.dns1, dns2: r.dns2, port: v.port }); log(`Easy IP: ${r.mac} → ${v.ip}`); }
-      catch (e) { fails.push(`${r.mac}: ${e.message}`); continue; }
-      // the camera keeps its place, description and zones in the Cameras list under its new address
-      const c = state.cameras.find(x => x.ip === other.ip);
-      if (c && !state.cameras.some(x => x !== c && x.ip === v.ip)) { c.ip = v.ip; c.port = v.port || 80; c.status = ''; saveCams(); renderCams(); }
+      catch (e) { fails.push({ r, what: 'ip', msg: e.message }); continue; }
     }
     if (v.name !== other.name) {
-      try { await setCamName(r, v, net); const c = state.cameras.find(x => x.ip === v.ip); if (c) { c.title = v.name; saveCams(); renderCams(); } } catch (e) { fails.push(`${r.model || r.mac}: ${e.message}`); }
+      if (state.localIps.length && !sameRange(v.ip, v.mask)) { fails.push({ r, what: 'name', msg: `Name not sent: the camera's web interface at ${v.ip} is not reachable from this computer (another IP range). Change the name once the camera is in your range.` }); continue; }
+      eipProgress(`${r.orig?.name || r.model || r.mac}: sending the name…`);
+      try { await setCamName(r, v, net); const c = state.cameras.find(x => x.ip === v.ip); if (c) { c.title = v.name; saveCams(); renderCams(); } } catch (e) { fails.push({ r, what: 'name', msg: e.message }); }
     }
   }
-  if (fails.length) throw new Error(fails.join('; '));
+  return fails;
+}
+const eipProgress = t => { $('#eipStatus').textContent = t; };
+// After sending: search again and compare what every camera now announces with what was asked.
+// Changes that did not happen are dropped from the table, so it shows the cameras as they really are.
+async function eipVerify(snap, field, fails) {
+  const nets = snap.filter(r => netChanged(r[field], r[field === 'edit' ? 'orig' : 'edit']));
+  if (nets.length) { for (let t = 5; t > 0; t--) { eipProgress(`Waiting for the camera${nets.length > 1 ? 's' : ''} to restart the network… ${t}`); await sleep(1000); } }
+  eipProgress('Searching again to check…');
+  for (const r of snap) { const row = state.eip.find(x => x.mac === r.mac); if (row) row.edit = { ...row.orig }; }
+  let found = [];
+  try { found = (await bridgeFetch('/api/eip/discover', { timeout: 3 })).cameras || []; } catch (e) { eipProgress('Search failed: ' + e.message); }
+  eipTake(found);
+  const rows = snap.map(r => {
+    const want = r[field], was = r[field === 'edit' ? 'orig' : 'edit'], now = found.find(f => f.mac === r.mac);
+    const out = [];
+    if (netChanged(want, was)) {
+      const f = fails.find(x => x.r === r && x.what === 'ip');
+      if (f) out.push({ bad: true, t: `IP not sent: ${f.msg}` });
+      else if (!now) out.push({ bad: true, t: 'The camera did not answer the new search (still restarting?). Search again in a moment.' });
+      else if (now.ip === want.ip && now.mask === want.mask && now.gateway === want.gateway) {
+        out.push({ t: `IP ${was.ip} → ${want.ip}` });
+        // the camera keeps its place, description and zones in the Cameras list under its new address
+        const c = state.cameras.find(x => x.ip === was.ip);
+        if (c && !state.cameras.some(x => x !== c && x.ip === want.ip)) { c.ip = want.ip; c.port = want.port || 80; c.status = ''; saveCams(); renderCams(); }
+      }
+      else out.push({ bad: true, t: `IP not changed: the camera still announces ${now.ip}. Cameras only accept a new address in the first 20 minutes after power-on (Easy IP Setup accommodate period): switch it off and on and try again.` });
+    }
+    if (want.name !== was.name) {
+      const f = fails.find(x => x.r === r && x.what === 'name');
+      out.push(f ? { bad: true, t: f.msg } : { t: `Name → ${want.name}` });
+    }
+    return { r, out };
+  });
+  const bad = rows.some(x => x.out.some(o => o.bad));
+  eipProgress(bad ? 'Not everything changed. See the result.' : `Done · ${new Date().toLocaleTimeString('en-GB')}`);
+  await ask({ title: bad ? 'Not every change was made' : 'Network settings changed', ok: 'OK', cancel: null, wide: true,
+    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>MAC</th><th>Result</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.r.orig.name || x.r.model || '')}</td><td class="mono small">${esc(x.r.mac)}</td><td>${x.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td></tr>`).join('')}</tbody></table>` });
 }
 $('#eipApply').onclick = async () => {
   const list = state.eip.filter(r => JSON.stringify(r.edit) !== JSON.stringify(r.orig));
@@ -2368,13 +2380,13 @@ $('#eipApply').onclick = async () => {
     ok: 'Apply', danger: true,
   });
   if (!ok) return;
-  $('#eipApply').disabled = true; $('#eipStatus').textContent = 'Sending…';
+  $('#eipApply').disabled = true;
   const snap = list.map(r => ({ mac: r.mac, model: r.model, dns1: r.dns1, dns2: r.dns2, orig: { ...r.orig }, edit: { ...r.edit } }));
-  try { await eipSend(snap, 'edit'); } catch (e) { info('Not every camera accepted the change', esc(e.message)); }
+  const fails = await eipSend(snap, 'edit');
   pushHistory({ label: `Network settings of ${snap.length} camera${snap.length > 1 ? 's' : ''}`, camera: true, many: snap.length > 1,
-    undo: async () => { await eipSend(snap, 'orig'); setTimeout(eipDiscover, 2500); }, redo: async () => { await eipSend(snap, 'edit'); setTimeout(eipDiscover, 2500); } });
-  $('#eipStatus').textContent = 'Sent. Searching again…';
-  setTimeout(eipDiscover, 2500);
+    undo: async () => eipVerify(snap, 'orig', await eipSend(snap, 'orig')), redo: async () => eipVerify(snap, 'edit', await eipSend(snap, 'edit')) });
+  await eipVerify(snap, 'edit', fails);
+  renderEip();
 };
 $('#eipDelSel').onclick = () => {
   const n = state.eip.filter(r => r.sel).length;
@@ -2391,6 +2403,128 @@ $('#eipToList').onclick = () => {
   else toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to Cameras`);
   renderEip();
 };
+
+
+/* ------------------------------------------------------------------ Engineering: one action on many cameras */
+const engSel = () => new Set(store.get('engCams', []));
+const engCams = () => { const on = engSel(); return state.cameras.filter(c => on.has(c.ip)); };
+function renderEng() {
+  const on = engSel();
+  $('#engCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${on.has(c.ip) ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted">${esc(c.ip)}</span>${c.statusKind === 'err' ? ' <span class="warn-text small">offline</span>' : ''}</label>`).join('') : '<span class="muted">Add cameras on the Cameras page first.</span>';
+  const save = () => { store.set('engCams', $$('#engCams label:not(.selall-row) input:checked').map(x => x.value)); };
+  $$('#engCams label:not(.selall-row) input').forEach(i => i.onchange = save);
+  { const set = engSel(); selAllRow($('#engCams'), state.cameras, c => set.has(c.ip), (c, v) => v ? set.add(c.ip) : set.delete(c.ip), () => { store.set('engCams', [...set]); renderEng(); }); }
+  const box = c => $$('#engCams label:not(.selall-row) input').find(i => i.value === c.ip);
+  zoneChips($('#engZones'), { get: c => !!box(c)?.checked, set: (c, v) => { const i = box(c); if (i) i.checked = v; }, done: save }, 'Zone');
+  const n = Math.max(4, ...state.cameras.filter(c => c.model).map(c => profileFor(c.model).scenes || 4));
+  $('#engScenes').innerHTML = Array.from({ length: n }, (_, i) => `<button data-eng="scene" data-v="${i + 1}" title="Load scene file ${i + 1}">${i + 1}</button>`).join('');
+  $$('#engScenes [data-eng]').forEach(b => b.onclick = () => engClick(b));
+}
+
+// One command, with what counts as an answer: ok / not supported (ER…) / login / not reachable
+function engVerdict(r, okText = 'Done') {
+  if (!r) return { res: 'No answer', bad: true };
+  if (r.status === 401) return { res: 'Login required (Camera login in Settings)', bad: true };
+  if (r.unreachable || !r.ok) return { res: 'Not reachable', bad: true };
+  if (isErr(r.body)) return { res: r.body.toUpperCase().startsWith('ER2') ? 'Camera busy (ER2), try again' : r.body.toUpperCase().startsWith('ER3') ? 'Value out of range (ER3)' : 'Not supported by this camera (' + r.body + ')', bad: true };
+  return { res: okText };
+}
+const ENG = {
+  power: { label: v => v === '1' ? 'Power on' : 'Standby', confirm: v => v === '0' && 'The cameras stop sending a picture until you switch them on again.',
+    run: async (send, c, v) => { const r = await send('ptz', '#O' + v); return engVerdict(r, v === '1' ? 'Switching on' : 'In standby'); } },
+  scene: { label: v => `Scene file ${v}`,
+    run: async (send, c, v) => { const r = await send('cam', 'XSF:' + v); const x = engVerdict(r, `Scene ${v}`); if (!x.bad) c.scene = +v; return x; } },
+  tallyEn: { label: v => v === '1' ? 'Tally enable' : 'Tally disable',
+    run: async (send, c, v) => engVerdict(await send('ptz', '#TAE' + v), v === '1' ? 'Tally enabled' : 'Tally disabled') },
+  tally: { label: (v, b) => `${b.dataset.c === 'R' ? 'Red' : 'Green'} tally ${v === '1' ? 'on' : 'off'}`,
+    run: async (send, c, v, b) => {
+      let r = await send('cam', `TL${b.dataset.c}:${v}`);
+      if (b.dataset.c === 'R' && r?.ok && isErr(r.body)) r = await send('ptz', '#DA' + v);
+      return engVerdict(r, v === '1' ? 'On' : 'Off');
+    } },
+  tallyBr: { label: v => `Tally brightness ${['Low', 'Mid', 'High'][v]}`,
+    run: async (send, c, v) => engVerdict(await send('cam', 'OSA:D3:' + v), ['Low', 'Mid', 'High'][v]) },
+  wb: { label: v => `White balance ${{ auto: 'Auto', var: 'Var', a: 'A', b: 'B' }[v]}`,
+    run: async (send, c, v) => engVerdict(await wbModeCmds(send, c.model, v), { auto: 'Auto (ATW)', var: 'VAR', a: 'Memory A', b: 'Memory B' }[v]) },
+  varK: { label: () => `White balance VAR ${$('#engVarK').value} K`,
+    check: () => validK(+$('#engVarK').value) || 'Fill in a colour temperature from 2000 to 15000 K.',
+    run: async (send, c) => {
+      const k = +$('#engVarK').value;
+      const m = engVerdict(await wbModeCmds(send, c.model, 'var')); if (m.bad) return m;
+      const x = engVerdict(await setVarK(send, k), `VAR ${k} K`); if (x.bad) return x;
+      const back = kelvinFrom((await send('cam', 'QSI:20'))?.body);
+      return back && Math.abs(back - k) > 20 ? { res: `VAR, camera reports ${back} K`, bad: true } : x;
+    } },
+  awb: { label: () => 'Auto white balance', run: async (send) => engVerdict(await send('cam', 'OWS'), 'AWB started') },
+  abb: { label: () => 'Auto black balance', run: async (send) => engVerdict(await send('cam', 'OAS'), 'ABB started') },
+  install: { label: v => v === '1' ? 'Installation hanging' : 'Installation desktop', confirm: () => 'The picture and the pan/tilt directions turn around. Some cameras restart.',
+    run: async (send, c, v) => engVerdict(await send('ptz', '#INS' + v), v === '1' ? 'Hanging' : 'Desktop') },
+  scope: { label: v => `Preset scope Mode ${'ABC'[v]}`,
+    run: async (send, c, v) => {
+      const was = /^OSE:71:(\d)/i.exec((await send('cam', 'QSE:71'))?.body || '')?.[1];
+      const x = engVerdict(await send('cam', 'OSE:71:' + v)); if (x.bad) return x;
+      const now = /^OSE:71:(\d)/i.exec((await send('cam', 'QSE:71'))?.body || '')?.[1];
+      if (now !== v) return { res: `Not confirmed (camera reports ${now != null ? 'Mode ' + 'ABC'[now] : 'nothing'})`, bad: true };
+      return { res: was === v ? `Was already Mode ${'ABC'[v]}` : `Mode ${'ABC'[v]}${was != null ? ' (was ' + 'ABC'[was] + ')' : ''}` };
+    } },
+  ipvideo: { label: v => `IP video ${v === '1' ? 'on' : 'off'}`, confirm: v => v === '0' && 'Switches the H.264 streams of the camera off. Anything that watches those streams (a decoder, a recorder, vMix) loses the picture.',
+    run: async (send, c, v, b, cgi) => {
+      const paths = ['/cgi-bin/set_h264', '/cgi-bin/set_h264_2', '/cgi-bin/set_h264_3', '/cgi-bin/set_h264_4'];
+      const rs = []; for (const p of paths) rs.push(await cgi(p, { h264_transmit: v }));
+      if (rs[0]?.status === 401) return { res: 'Login required (Camera login in Settings)', bad: true };
+      if (rs.every(r => !r?.ok)) return { res: rs[0]?.unreachable ? 'Not reachable' : 'Not accepted', bad: true };
+      return { res: `${rs.filter(r => r?.ok).length} of ${paths.length} streams ${v === '1' ? 'on' : 'off'}` };
+    } },
+};
+async function engClick(btn) {
+  const kind = btn.dataset.eng, v = btn.dataset.v;
+  const cams = engCams();
+  if (kind === 'init') { if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page.'); return initializeCams(cams); }
+  if (kind === 'defsave') { if (cams.length !== 1) return info('Choose one camera', 'Save as default reads the live scene of one camera. Tick only that camera.'); return saveAsDefault(cams[0]); }
+  const a = ENG[kind]; if (!a) return;
+  if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  const chk = a.check?.(); if (chk && chk !== true) return info('Check the value', esc(chk));
+  const label = a.label(v, btn);
+  const warn = a.confirm?.(v);
+  if (warn && !await ask({ title: `${label} on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: label, danger: true, body: `<p>${esc(warn)}</p><p class="muted small">${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
+  $('#tab-eng').classList.add('busy'); $('#engStatus').textContent = `${label}: ${cams.length} camera${cams.length > 1 ? 's' : ''}…`;
+  $('#engResultTitle').textContent = label;
+  const rows = await Promise.all(cams.map(async c => {
+    const raw = [];
+    const send = async (type, cmd) => { try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
+    const cgi = async (path, query) => { try { const r = (await batch(c, [{ type: 'cgi', path, query }], { delayMs: 0 }))[0]; raw.push(`${path} → ${r?.ok ? 'HTTP ' + r.status + ' ' + (r.body || '').slice(0, 60) : (r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${path} → ${e.message}`); return { ok: false }; } };
+    try { return { c, raw, ...(await a.run(send, c, v, btn, cgi)) }; } catch (e) { return { c, raw, res: e.message, bad: true }; }
+  }));
+  $('#tab-eng').classList.remove('busy');
+  const ok = rows.filter(r => !r.bad).length;
+  $('#engStatus').textContent = `${ok} of ${rows.length} done · ${new Date().toLocaleTimeString('en-GB')}`;
+  $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td class="${r.bad ? 'warn-text' : 'ok-text'}">${esc(r.res)}</td><td class="mono raw">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
+  log(`Engineering: ${label}: ${ok}/${rows.length} ok`);
+  if (live.cam && cams.includes(live.cam)) liveRead();
+}
+$$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
+$('#engVarK').addEventListener('keydown', e => { if (e.key === 'Enter') $('[data-eng="varK"]').click(); });
+
+/* ------------------------------------------------------------------ refresh: read everything again */
+async function refreshPage() {
+  const btn = $('#refreshAllBtn'); if (btn.classList.contains('spin')) return;
+  btn.classList.add('spin');
+  try {
+    if (!state.bridgeOk) await checkBridge();
+    const tab = $('[role=tab][data-tab].active')?.dataset.tab;
+    const jobs = [state.cameras.length ? refreshAll(state.cameras) : null];
+    if (tab === 'live' && live.cam) jobs.push(liveRead());
+    if (tab === 'netsetup') jobs.push(eipDiscover());
+    await Promise.all(jobs.filter(Boolean));
+    if (tab === 'eng') renderEng();
+    if (tab === 'export') renderExport();
+    if (tab === 'import') renderImports();
+    toast('Refreshed');
+  } finally { btn.classList.remove('spin'); }
+}
+$('#refreshAllBtn').onclick = refreshPage;
+document.addEventListener('keydown', e => { if (e.key === 'F5') { e.preventDefault(); refreshPage(); } });
 
 /* ------------------------------------------------------------------ RP150: assignment */
 const saveRp = () => store.set('rpRows', state.rp);
@@ -2699,28 +2833,20 @@ async function liveRead() {
 }
 async function liveReadNow(cam) {
   let res;
-  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }, { type: 'cam', cmd: 'QSE:71' }], { delayMs: 0 }); }
+  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }, { type: 'cam', cmd: 'QSE:71' }, { type: 'cam', cmd: 'QSI:20' }], { delayMs: 0 }); }
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
   const b = i => (res[i]?.ok ? (res[i].body || '').trim() : '');
   const power = b(0).toLowerCase();
   live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';
-  setToggle('#livePowerOn', live.power === 'on' || live.power === 'starting'); setToggle('#livePowerStby', live.power === 'standby');
-  $('#livePowerOn').textContent = live.power === 'starting' ? 'Starting…' : 'On';
   setToggle('#liveAF', b(1).toLowerCase() === 'd11'); setToggle('#liveAI', b(2).toLowerCase() === 'd31'); { const dn = /^d6([01])$/i.exec(b(3)); if (dn) { setToggle('#liveNight', dn[1] === '1'); setToggle('#liveDay', dn[1] === '0'); } }
-  if (Date.now() - (live.tallyAt || 0) > 3000) { // right after a click the camera may still answer the old state
-    const r = /^OLR:([01])$/i.exec(b(4)) || /^dA([01])$/i.exec(b(8)), g = /^OLG:([01])$/i.exec(b(5));
-    if (r) setToggle('#liveTallyR', r[1] === '1');
-    if (g) setToggle('#liveTallyG', g[1] === '1');
-  }
-  // installation (desktop/hanging) and shooting mode: only when the camera answers them
-  { const ins = /^ins([01])$/i.exec(b(10)); setToggle('#liveDesk', ins?.[1] === '0'); setToggle('#liveHang', ins?.[1] === '1');
-    for (const id of ['#liveDesk', '#liveHang']) $(id).disabled = !ins;
-    const sm = /^OSI:30:([01])$/i.exec(b(11)); setToggle('#liveShoot0', sm?.[1] === '0'); setToggle('#liveShoot1', sm?.[1] === '1');
+  // shooting mode and preset scope: only when the camera answers them
+  { const sm = /^OSI:30:([01])$/i.exec(b(11)); setToggle('#liveShoot0', sm?.[1] === '0'); setToggle('#liveShoot1', sm?.[1] === '1');
     for (const id of ['#liveShoot0', '#liveShoot1']) $(id).disabled = !sm;
     $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.';
     const ps = /^OSE:71:([012])$/i.exec(b(12)); $$('#liveScope [data-scope]').forEach(x => { setToggle(x, ps?.[1] === x.dataset.scope); x.disabled = !ps; }); }
+  { const k = kelvinFrom(b(13)); if (k && document.activeElement !== $('#liveVarK')) $('#liveVarK').value = k; }
   const wb = /^OAW:(\d)$/i.exec(b(9));
   if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
   else if (!wb && /UE160/i.test(cam.model || '') && Date.now() - (live.wbAt || 0) > 3000) {
@@ -2780,16 +2906,7 @@ async function liveDayNight(night) {
   else toast('Day/night is not available on this camera right now');
 }
 // Install position (#INS0 desktop / #INS1 hanging): turns the picture and the pan/tilt directions, so ask first
-async function liveInstall(hanging) {
-  if (!live.cam || $(hanging ? '#liveHang' : '#liveDesk').classList.contains('on')) return;
-  if (!await ask({ title: `Set ${esc(camName(live.cam))} to ${hanging ? 'hanging' : 'desktop'}?`, ok: hanging ? 'Hanging' : 'Desktop',
-    body: `<p>The picture is turned upside down and pan/tilt reverse, to match a camera that is ${hanging ? 'mounted upside down (hanging)' : 'standing on a table (desktop)'}.</p>` })) return;
-  const r = await liveSend('ptz', hanging ? '#INS1' : '#INS0');
-  if (r?.ok && !isErr(r.body)) { setToggle('#liveHang', hanging); setToggle('#liveDesk', !hanging); $('#liveStatus').textContent = hanging ? 'Installation: hanging' : 'Installation: desktop'; }
-  else toast(`Installation could not be changed${r?.body ? ' (' + r.body + ')' : ''}`);
-}
-$('#liveDesk').onclick = () => liveInstall(false);
-$('#liveHang').onclick = () => liveInstall(true);
+
 // Shooting mode (OSI:30): 0 = Normal, 1 = High Sens. (Low Light on the AW-UE160)
 async function liveShoot(v) {
   if (!live.cam) return;
@@ -2809,18 +2926,6 @@ $('#liveShoot0').onclick = () => liveShoot(0);
 $('#liveShoot1').onclick = () => liveShoot(1);
 $('#liveDay').onclick = () => liveDayNight(false);
 $('#liveNight').onclick = () => liveDayNight(true);
-// Tally: the button flips at once; red falls back to the pan/tilt command (#DA) on models without TLR.
-async function liveTally(sel, color) {
-  if (!live.cam) return;
-  const on = !$(sel).classList.contains('on');
-  setToggle(sel, on); live.tallyAt = Date.now();
-  let r = await liveSend('cam', `TL${color}:${on ? 1 : 0}`);
-  if (color === 'R' && (!r?.ok || isErr(r.body))) r = await liveSend('ptz', `#DA${on ? 1 : 0}`);
-  if (!r?.ok || isErr(r.body)) { setToggle(sel, !on); toast(`${color === 'R' ? 'Red' : 'Green'} tally: not accepted by this camera`); }
-  else $('#liveStatus').textContent = `${color === 'R' ? 'Red' : 'Green'} tally ${on ? 'on' : 'off'}`;
-}
-$('#liveTallyR').onclick = () => liveTally('#liveTallyR', 'R');
-$('#liveTallyG').onclick = () => liveTally('#liveTallyG', 'G');
 // White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 9 = VAR.
 // The AW-UE160 uses OSL:2A (ATW on/off) and OSL:2B (0 = A, 1 = B, 4 = VAR) when OAW is refused.
 const WB_OAW = { auto: '0', a: '1', b: '2', var: '9' };
@@ -2836,22 +2941,41 @@ $$('#liveWB [data-wb]').forEach(btn => btn.onclick = async () => {
   else toast('This white balance mode is not available on this camera right now');
 });
 $('#liveOPAF').onclick = () => liveSend('cam', 'OSE:69:1');
+// VAR colour temperature (OSI:20: kelvin as 5 hex digits); switches the camera to VAR first
+const kelvinHex = k => Math.round(k).toString(16).toUpperCase().padStart(5, '0');
+const kelvinFrom = body => { const m = /^OSI:20:([0-9A-F]{5})/i.exec(body || ''); return m ? parseInt(m[1], 16) : null; };
+const validK = k => Number.isFinite(k) && k >= 2000 && k <= 15000;
+async function wbModeCmds(send, model, m) {
+  let r = await send('cam', 'OAW:' + WB_OAW[m]);
+  if ((!r?.ok || isErr(r.body)) && !r?.unreachable) { for (const c of WB_UE160[m]) r = await send('cam', c); }
+  return r;
+}
+async function setVarK(send, k) {
+  let r = await send('cam', `OSI:20:${kelvinHex(k)}:0`);
+  if (r?.ok && isErr(r.body)) r = await send('cam', `OSI:20:${kelvinHex(k)}`);
+  return r;
+}
+$('#liveVarSet').onclick = async () => {
+  if (!live.cam) return;
+  const k = +$('#liveVarK').value;
+  if (!validK(k)) return toast('Fill in a colour temperature from 2000 to 15000 K');
+  live.wbAt = Date.now();
+  const m = await wbModeCmds(liveSend, live.cam.model, 'var');
+  if (!m?.ok || isErr(m.body)) return toast('VAR is not available on this camera right now');
+  showWb('var');
+  const r = await setVarK(liveSend, k);
+  if (r?.ok && !isErr(r.body)) $('#liveStatus').textContent = `White balance: VAR ${k} K`; else toast(`The camera did not accept ${k} K${r?.body ? ' (' + r.body + ')' : ''}`);
+  setTimeout(liveRead, 800);
+};
+$('#liveVarK').addEventListener('keydown', e => { if (e.key === 'Enter') $('#liveVarSet').click(); });
+// pan/tilt and zoom speed: readout, and one click back to the nominal speed (25, the middle)
+for (const id of ['#ptSpeed', '#zSpeed']) {
+  const show = () => { const v = $(id).value; $(id + 'Val').textContent = v; $(id + 'Val').classList.toggle('off', +v !== 25); };
+  $(id).addEventListener('input', show); show();
+}
+$$('[data-nominal]').forEach(b => b.onclick = () => { const r = $(b.dataset.nominal); r.value = 25; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
 $('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first.` : 'Auto white balance started'); };
 $('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
-$('#livePowerOn').onclick = async () => {
-  if (!live.cam) return;
-  const r = await liveSend('ptz', '#O1');
-  if (r?.ok && !isErr(r.body)) { live.power = 'starting'; setToggle('#livePowerOn', true); setToggle('#livePowerStby', false); $('#livePowerOn').textContent = 'Starting…'; toast('Switching the camera on'); }
-  setTimeout(liveRead, 1500); setTimeout(liveRead, 6000);
-};
-$('#livePowerStby').onclick = async () => {
-  if (!live.cam || live.power === 'standby') return;
-  if (!await ask({ title: `Put ${esc(live.cam.title || live.cam.ip)} in standby?`, body: '<p>The camera stops sending a picture until you switch it on again.</p>', ok: 'Standby', danger: true })) return;
-  const r = await liveSend('ptz', '#O0');
-  if (r?.ok && !isErr(r.body)) { live.power = 'standby'; setToggle('#livePowerOn', false); setToggle('#livePowerStby', true); }
-  setTimeout(liveRead, 1500);
-};
-
 function renderLiveScenes() {
   const cam = live.cam; const box = $('#liveScenes');
   if (!cam) { box.innerHTML = ''; return; }

@@ -11,6 +11,9 @@ import easyip  # noqa: E402
 CAMS = [
     {"mac": bytes.fromhex("A81374000001"), "ip": "10.20.30.41", "mask": "255.255.0.0", "gw": "10.20.0.1", "model": "AW-UE150", "name": "CAM-STUDIO-A"},
     {"mac": bytes.fromhex("A81374000002"), "ip": "172.16.5.9", "mask": "255.255.255.0", "gw": "172.16.5.1", "model": "AW-UE160", "name": "CAM-STUDIO-B"},
+    # like a real AW-UE150 seen in the field: name in tag A7, "CAM:<model>" in tag A8, and past its
+    # accommodate period, so it ignores a new address
+    {"mac": bytes.fromhex("BCC342FAE99F"), "ip": "10.0.100.8", "mask": "255.255.255.0", "gw": "10.0.100.254", "model": "CAM8_Spare", "name": "CAM:UE150", "locked": True},
 ]
 
 
@@ -41,5 +44,8 @@ while True:
         t = easyip._tlvs(data)
         for c in CAMS:
             if c["mac"] == data[6:12]:
+                if c.get("locked"):
+                    print("ignored (accommodate period over)", c["model"], flush=True)
+                    continue
                 c["ip"], c["mask"], c["gw"] = easyip._ip_str(t[0x20]), easyip._ip_str(t[0x21]), easyip._ip_str(t[0x22])
                 print("reconfigured", c["name"], "->", c["ip"], flush=True)

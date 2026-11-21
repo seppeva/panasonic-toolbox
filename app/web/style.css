@@ -388,3 +388,41 @@ button.copied{color:#8fd19e}
 #savedScriptTable tr.editing td{background:var(--accent-soft)}
 .live-init{margin-top:6px}
 #defList table{margin:0}
+
+/* 2.20: cards never let a wide table run out of them; the table scrolls inside the card instead */
+.card:has(> table.tbl),.card:has(> .tbl-wrap){overflow-x:auto}
+#eipTable input{min-width:0;width:100%}
+#eipTable td{padding:6px 5px}
+/* refresh button next to the app name */
+.appname span{flex:1}
+.iconbtn{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--rule);border-radius:6px;color:var(--muted)}
+.iconbtn:hover{color:var(--text);border-color:var(--muted)}
+.iconbtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.iconbtn.spin svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* live: speed readout and VAR colour temperature */
+.speed-row{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.speed-row input[type=range]{flex:1;min-width:60px}
+.speed-val{min-width:22px;text-align:right;color:var(--text)}
+.speed-val.off{color:var(--warn)}
+.kfield{display:flex;align-items:center;gap:4px;margin:0!important;flex:1;min-width:90px}
+.kfield input{width:100%;min-width:0}
+.kfield span{color:var(--muted);font-size:12px}
+/* engineering */
+.eng-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.eng-tiles .live-block{margin:0}
+.eng-tiles .e-tally,.eng-tiles .e-white{grid-row:span 2}
+.eng-line{display:grid;grid-template-columns:80px repeat(3,minmax(0,1fr));gap:6px;align-items:center;margin-bottom:6px;font-size:12.5px;color:var(--muted)}
+.eng-tiles .hold-row{flex-wrap:wrap}
+.eng-tiles .hold-row button{flex:1 1 auto}
+.eng-tiles .hint{margin:8px 0 0}
+#tab-eng.busy .eng-tiles{opacity:.6;pointer-events:none}
+.eng-res td{vertical-align:top}
+.eng-res .raw{font-size:11.5px;color:var(--muted);word-break:break-all}
+@media (max-width:1250px){.eng-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles .e-tally,.eng-tiles .e-white{grid-row:auto}}
+.eng-line button{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:32px;padding:0 6px;font-size:13px}
+.eng-line button:hover{background:#353a40}
+.eng-tiles button:active{background:var(--accent);border-color:var(--accent)}
+label.kfield{flex-direction:row}
+.kfield input{height:32px}

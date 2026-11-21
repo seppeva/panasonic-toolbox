@@ -363,6 +363,45 @@ def t_live(cam, restore):
         back = cam.body("#DA")
         R.add(cam.ip, A, f"red tally via pan/tilt command #DA{v} (fallback)", "PASS" if r.get("ok") and not is_err(r.get("body")) and back and back.lower() == f"da{v}" else "WARN",
               f"answer {r.get('body')}, read back {back} (app expects dA{v})", [r.get("body"), back])
+    # tally enable and brightness (Engineering page)
+    te = cam.body("#TAE")
+    if te and re.match(r"^tae[01]$", te, re.I):
+        restore.append(("#TAE" + te[-1], "tally enable"))
+    for v in ("1", "0", "1"):
+        r = cam.cmd("#TAE" + v)
+        back = cam.body("#TAE")
+        R.add(cam.ip, A, f"tally {'enable' if v == '1' else 'disable'} (#TAE{v})", "PASS" if r.get("ok") and not is_err(r.get("body")) and back and back.lower() == f"tae{v}" else "WARN",
+              f"answer {r.get('body')}, read back {back}", [r.get("body"), back])
+    tb = cam.body("QSA:D3")
+    if tb and re.match(r"^OSA:D3:\d$", tb, re.I):
+        restore.append(("OSA:D3:" + tb[-1], "tally brightness"))
+    for v in ("0", "2"):
+        r = cam.cmd("OSA:D3:" + v)
+        back = cam.body("QSA:D3")
+        R.add(cam.ip, A, f"tally brightness {['Low', 'Mid', 'High'][int(v)]} (OSA:D3:{v})", "PASS" if r.get("ok") and not is_err(r.get("body")) and back == f"OSA:D3:{v}" else "WARN",
+              f"answer {r.get('body')}, read back {back}", [r.get("body"), back])
+    # VAR colour temperature in kelvin (OSI:20, 5 hex digits); OAW is put back by the white-mode restore
+    kt = cam.body("QSI:20")
+    if kt and re.match(r"^OSI:20:[0-9A-F]{5}", kt, re.I):
+        restore.append(("OSI:20:" + kt.split(":")[2] + ":0", "VAR kelvin"))
+    cam.cmd("OAW:9")
+    for k in (4300, 5600):
+        r = cam.cmd(f"OSI:20:{k:05X}:0")
+        alt = ""
+        if r.get("ok") and is_err(r.get("body")):
+            r = cam.cmd(f"OSI:20:{k:05X}"); alt = " (short form)"
+        back = cam.body("QSI:20")
+        got = int(back.split(":")[2], 16) if back and re.match(r"^OSI:20:[0-9A-F]{5}", back, re.I) else None
+        R.add(cam.ip, A, f"VAR {k} K (OSI:20:{k:05X}:0){alt}", "PASS" if r.get("ok") and not is_err(r.get("body")) and got and abs(got - k) <= 20 else "WARN",
+              f"answer {r.get('body')}, read back {back} = {got} K", [r.get("body"), back])
+    # H.264 streams on/off (web CGI, Engineering > IP video): read the settings, switch off and on again
+    sd = cam.batch([{"type": "cgi", "path": "/cgi-bin/setdata"}])[0]
+    R.add(cam.ip, A, "settings readout (/cgi-bin/setdata)", "INFO", f"HTTP {sd.get('status')} " + (sd.get("body") or sd.get("error") or "")[:300].replace("\r", " ").replace("\n", " "))
+    for v in ("0", "1"):
+        rs = cam.batch([{"type": "cgi", "path": p, "query": {"h264_transmit": v}} for p in ("/cgi-bin/set_h264", "/cgi-bin/set_h264_2", "/cgi-bin/set_h264_3", "/cgi-bin/set_h264_4")])
+        R.add(cam.ip, A, f"H.264 streams {'off' if v == '0' else 'on'} (set_h264*?h264_transmit={v})", "PASS" if all(x.get("ok") for x in rs) else "WARN",
+              " | ".join(f"{x.get('cmd')}: {x.get('status')} {(x.get('body') or x.get('error') or '')[:60]}" for x in rs), [x.get("body") for x in rs])
+        time.sleep(1)
     # day / night
     d = cam.body("#D6")
     if d and re.match(r"^d6[01]$", d, re.I):

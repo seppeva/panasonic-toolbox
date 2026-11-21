@@ -66,7 +66,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.click('[data-tab=live]'); await p.waitForTimeout(3000);
     const seen = [];
     for (const [sel, label] of [['#liveWB [data-wb=auto]', 'White Auto'], ['#liveWB [data-wb=var]', 'White Var'], ['#liveWB [data-wb=a]', 'White A'], ['#liveAWB', 'AWB'], ['#liveWB [data-wb=b]', 'White B'], ['#liveABB', 'ABB'],
-      ['#liveTallyR', 'Red tally'], ['#liveTallyR', 'Red tally off'], ['#liveTallyG', 'Green tally'], ['#liveTallyG', 'Green tally off'], ['#liveNight', 'Night'], ['#liveDay', 'Day'],
+      ['#liveNight', 'Night'], ['#liveDay', 'Day'], ['[data-nominal="#ptSpeed"]', 'Speed nominal'],
       ['#liveAF', 'Auto focus'], ['#liveOPAF', 'One push AF'], ['#liveAI', 'Auto iris'], ['#liveScenes button[data-scene="2"]', 'Scene 2'], ['#liveScenes button[data-scene="1"]', 'Scene 1'], ['#ptPad [data-home]', 'Home']]) {
       await p.click(sel); await p.waitForTimeout(sel.includes('Scenes') ? 3500 : 1200);
       const st = await p.$eval('#liveStatus', e => e.textContent).catch(() => '');
@@ -78,12 +78,62 @@ fs.mkdirSync(OUT, { recursive: true });
     const pic = await p.$eval('#liveMsg', e => e.textContent).catch(() => '');
     return 'picture: ' + (pic || 'shown') + '\n       ' + seen.join('\n       ');
   });
-  await step('Live: standby and on', async () => {
-    await p.click('#livePowerStby'); await ok(5000);
-    const s1 = await p.$$eval('#livePowerOn,#livePowerStby', x => x.map(e => e.textContent + (e.classList.contains('on') ? '*' : '')).join(' '));
-    await p.click('#livePowerOn'); await p.waitForTimeout(30000);
-    const s2 = await p.$$eval('#livePowerOn,#livePowerStby', x => x.map(e => e.textContent + (e.classList.contains('on') ? '*' : '')).join(' '));
-    return `standby: ${s1}; after On: ${s2}`;
+  await step('Live: VAR colour temperature 4300 K', async () => {
+    await p.fill('#liveVarK', '4300'); await p.click('#liveVarSet'); await p.waitForTimeout(2500);
+    const back = await p.evaluate(async () => (await batch(live.cam, [{ cmd: 'QSI:20' }, { cmd: 'QAW' }])).map(r => r.body).join(' '));
+    return `status: ${await p.$eval('#liveStatus', e => e.textContent)}; camera: ${back}`;
+  });
+  await step('Engineering: every action on all test cameras (state saved first, put back after)', async () => {
+    const READ = [['cam', 'QAW'], ['cam', 'QSI:20'], ['cam', 'QSE:71'], ['ptz', '#INS'], ['cam', 'QSA:D3'], ['ptz', '#TAE'], ['cam', 'QLR'], ['cam', 'QLG'], ['cam', 'QSF']];
+    const before = await p.evaluate(async R => Promise.all(state.cameras.map(async c => ({ ip: c.ip, v: (await batch(c, R.map(([type, cmd]) => ({ type, cmd })))).map(r => r.body) }))), READ);
+    await p.click('[data-tab=eng]'); await p.waitForTimeout(500);
+    await p.evaluate(() => { store.set('engCams', state.cameras.map(c => c.ip)); renderEng(); });
+    const out = [];
+    const run = async (sel, label, confirm, fill) => {
+      if (fill) await p.fill('#engVarK', fill);
+      await p.evaluate(() => { document.querySelector('#engStatus').textContent = ''; });
+      await p.click(sel); if (confirm) { await p.waitForSelector('#askDlg[open]'); await p.click('#askOk'); }
+      await p.waitForFunction(() => /done/.test(document.querySelector('#engStatus').textContent), null, { timeout: 90000 });
+      const rows = await p.$$eval('#engResult tbody tr', r => r.map(x => [...x.children].map(td => td.innerText.trim().replace(/\n/g, ' ; ')).join(' | ')));
+      out.push(`${label}:\n         ` + rows.join('\n         '));
+    };
+    await run('[data-eng=power][data-v="0"]', 'Standby', true); await p.waitForTimeout(5000);
+    await run('[data-eng=power][data-v="1"]', 'Power on'); await p.waitForTimeout(30000);
+    await run('#engScenes [data-v="2"]', 'Scene 2'); await p.waitForTimeout(3000);
+    await run('[data-eng=tallyEn][data-v="1"]', 'Tally enable');
+    await run('[data-eng=tally][data-c=R][data-v="1"]', 'Red on'); await run('[data-eng=tally][data-c=R][data-v="0"]', 'Red off');
+    await run('[data-eng=tally][data-c=G][data-v="1"]', 'Green on'); await run('[data-eng=tally][data-c=G][data-v="0"]', 'Green off');
+    await run('[data-eng=tallyBr][data-v="0"]', 'Tally brightness low'); await run('[data-eng=tallyBr][data-v="2"]', 'Tally brightness high');
+    await run('[data-eng=wb][data-v="a"]', 'WB A'); await run('[data-eng=awb]', 'AWB'); await p.waitForTimeout(4000);
+    await run('[data-eng=varK]', 'VAR 4300 K', false, '4300');
+    await run('[data-eng=abb]', 'ABB'); await p.waitForTimeout(4000);
+    await run('[data-eng=install][data-v="1"]', 'Hanging', true); await p.waitForTimeout(8000);
+    await run('[data-eng=install][data-v="0"]', 'Desktop', true); await p.waitForTimeout(8000);
+    await run('[data-eng=scope][data-v="2"]', 'Preset scope C');
+    await run('[data-eng=ipvideo][data-v="0"]', 'IP video off', true); await p.waitForTimeout(3000);
+    await run('[data-eng=ipvideo][data-v="1"]', 'IP video on');
+    await shot('2b-engineering');
+    // put back what the cameras had before (scene, white balance, scope, installation, tally)
+    const restore = await p.evaluate(async before => {
+      const res = [];
+      for (const b of before) {
+        const c = state.cameras.find(x => x.ip === b.ip); const v = b.v; const items = [];
+        const g = (re, i) => (re.exec(v[i] || '') || [])[1];
+        if (g(/^iNS([01])/i, 3) != null) items.push({ type: 'ptz', cmd: '#INS' + g(/^iNS([01])/i, 3) });
+        if (g(/^OSE:71:(\d)/i, 2) != null) items.push({ cmd: 'OSE:71:' + g(/^OSE:71:(\d)/i, 2) });
+        if (g(/^OSA:D3:(\d)/i, 4) != null) items.push({ cmd: 'OSA:D3:' + g(/^OSA:D3:(\d)/i, 4) });
+        if (g(/^tAE([01])/i, 5) != null) items.push({ type: 'ptz', cmd: '#TAE' + g(/^tAE([01])/i, 5) });
+        if (g(/^OLR:([01])/i, 6) != null) items.push({ cmd: 'TLR:' + g(/^OLR:([01])/i, 6) });
+        if (g(/^OLG:([01])/i, 7) != null) items.push({ cmd: 'TLG:' + g(/^OLG:([01])/i, 7) });
+        if (g(/^OSF:(\d)/i, 8) != null) items.push({ cmd: 'XSF:' + (+g(/^OSF:(\d)/i, 8) + 1) }, { sleepMs: 3000 });
+        if (g(/^OSI:20:([0-9A-F]{5})/i, 1) != null) items.push({ cmd: 'OSI:20:' + g(/^OSI:20:([0-9A-F]{5})/i, 1) + ':0' });
+        if (g(/^OAW:(\d)/i, 0) != null) items.push({ cmd: 'OAW:' + g(/^OAW:(\d)/i, 0) });
+        const r = await batch(c, items);
+        res.push(`${b.ip}: ` + items.filter(x => x.cmd).map((x, i) => x.cmd).join(' ') + ' → ' + r.filter(x => !x.sleep).map(x => x.body || x.error).join(' '));
+      }
+      return res;
+    }, before);
+    return 'before: ' + before.map(b => `${b.ip} ${b.v.join(' ')}`).join(' || ') + '\n       ' + out.join('\n       ') + '\n       restored: ' + restore.join(' || ');
   });
   await step('Export: scenes 1 and 2 of all cameras (ZIP)', async () => {
     await p.click('[data-tab=export]'); await p.evaluate(() => { state.cameras.forEach(c => c.selected = true); saveCams(); renderExport(); });
