@@ -432,3 +432,7 @@ label.kfield{flex-direction:row}
 .store-btn.armed,.hold-row button.store-btn.armed{background:rgba(217,161,59,.18);border-color:#d9a13b;color:#ebc77f}
 .wb-storing [data-wb=a],.wb-storing [data-wb=b],.wb-storing [data-eng=wb][data-v=a],.wb-storing [data-eng=wb][data-v=b]{border-color:#d9a13b!important;color:#ebc77f!important}
 #liveWB{grid-template-columns:repeat(5,minmax(0,1fr))}
+
+.zone-ed-row{display:grid;grid-template-columns:180px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--rule-soft)}
+.zone-ed-row .zone-cams{display:flex;flex-wrap:wrap;gap:4px 14px}
+#askBody #zoneNew{flex:1}

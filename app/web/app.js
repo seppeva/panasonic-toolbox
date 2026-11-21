@@ -775,6 +775,40 @@ function zoneChips(box, sel, label = 'Zone', allNone = false) {
   act($('[data-none]', box), () => { state.cameras.forEach(c => sel.set(c, false)); sel.done(); });
 }
 const inZone = (c, z) => (c.zone || '') === z;
+// Zones…: one place to rename zones, choose which cameras are in each zone, add and remove zones.
+// A camera is in one zone at a time: ticking it in a zone takes it out of the other one.
+$('#zonesBtn').onclick = async () => {
+  if (!state.cameras.length) return info('No cameras yet', 'Add cameras first.');
+  const rows = zoneNames().map(z => ({ orig: z, name: z }));
+  const member = new Map(state.cameras.map(c => [c.ip, (c.zone || '').trim()])); // ip -> zone name (original names)
+  const draw = () => {
+    const box = $('#zoneEd'); if (!box) return;
+    box.innerHTML = (rows.length ? '' : '<p class="muted small">No zones yet. Add one below.</p>') + rows.map((r, i) => `
+      <div class="zone-ed-row">
+        <input class="zone-name" data-i="${i}" value="${esc(r.name)}" aria-label="Zone name">
+        <div class="zone-cams">${state.cameras.map(c => `<label class="check small"><input type="checkbox" data-i="${i}" data-ip="${esc(c.ip)}" ${member.get(c.ip) === r.orig ? 'checked' : ''}> ${esc(camName(c))}</label>`).join('')}</div>
+        <button type="button" class="ghost small danger-text" data-del="${i}" title="Remove this zone (its cameras get no zone)">Remove</button>
+      </div>`).join('');
+    $$('.zone-name', box).forEach(inp => inp.oninput = () => { rows[+inp.dataset.i].name = inp.value; });
+    $$('input[data-ip]', box).forEach(cb => cb.onchange = () => { const r = rows[+cb.dataset.i]; member.set(cb.dataset.ip, cb.checked ? r.orig : ''); draw(); });
+    $$('[data-del]', box).forEach(b => b.onclick = () => { const r = rows[+b.dataset.del]; for (const [ip, z] of member) if (z === r.orig) member.set(ip, ''); rows.splice(+b.dataset.del, 1); draw(); });
+  };
+  const opened = ask({ title: 'Zones', ok: 'Save', wide: true, body: `
+    <p class="muted small">Rename a zone in its field. Tick the cameras that belong to it; a camera is in one zone at a time.</p>
+    <div id="zoneEd"></div>
+    <div class="row"><input id="zoneNew" placeholder="New zone, e.g. Stage" aria-label="New zone name"><button type="button" class="ghost small" id="zoneAdd">Add zone</button></div>` });
+  await sleep(0); draw();
+  const add = () => { const n = $('#zoneNew').value.trim(); if (!n) return; if (rows.some(r => r.name === n)) return toast(`${n} already exists`); rows.push({ orig: '\u0000new' + rows.length + n, name: n }); $('#zoneNew').value = ''; draw(); };
+  $('#zoneAdd').onclick = add;
+  $('#zoneNew').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add(); } });
+  if (!await opened) return;
+  const finalName = orig => { const r = rows.find(x => x.orig === orig); return r ? (r.name.trim() || r.orig.replace(/^\u0000new\d+/, '')) : ''; };
+  const plan = state.cameras.map(c => ({ c, to: member.get(c.ip) ? finalName(member.get(c.ip)) : '' })).filter(x => (x.c.zone || '') !== x.to);
+  if (!plan.length) return;
+  track(`Zones (${plan.length} camera${plan.length > 1 ? 's' : ''})`, () => { for (const x of plan) x.c.zone = x.to; });
+  saveCams(); renderCams();
+  toast(`Zones saved: ${plan.length} camera${plan.length > 1 ? 's' : ''} changed`);
+};
 const camSel = after => ({ get: c => !!c.selected, set: (c, on) => { c.selected = on; }, done: () => { saveCams(); after(); } });
 function renderZones() {
   $('#zoneList').innerHTML = zoneNames().map(z => `<option value="${esc(z)}">`).join('');
