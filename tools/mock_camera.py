@@ -106,11 +106,11 @@ class H(BaseHTTPRequestHandler):
             if m: cur["tally" + m.group(1)] = m.group(2); return c
             m = re.match(r"QL([RG])$", c)
             if m: return f"OL{m.group(1)}:" + cur.get("tally" + m.group(1), "0")
-            if c == "QAW": return "OAW:" + {"1": "2", "2": "3"}.get(st.get("OAW", "1"), st.get("OAW", "1"))  # query numbers like a real UE150
+            if c == "QAW": return "OAW:" + {"1": "2", "2": "3", "3": "4", "4": "5"}.get(st.get("OAW", "1"), st.get("OAW", "1"))  # query numbers like a real UE150
             if c == "QSI:30": return "OSI:30:" + cur.get("shoot", "0")
             m = re.match(r"OSI:30:([01])$", c)
             if m: cur["shoot"] = m.group(1); return c
-            m = re.match(r"OAW:([0129])$", c)
+            m = re.match(r"OAW:([012349])$", c)
             if m: st["OAW"] = m.group(1); return c
             # values that only take a write in a certain mode, like a real AW-UE150 (ER2 otherwise)
             DEPS = {"OSI:20": [("OAW", "9")], "OSD:48": [("ORS", "1")], "OSJ:09": [("OSJ:03", "2")], "OSD:BF": [("OSJ:03", "3")],
@@ -129,7 +129,7 @@ class H(BaseHTTPRequestHandler):
             if m and m.group(1) in params:
                 key, val = m.group(1), m.group(2)
                 # afhankelijkheid testen: R/B gain enkel als WB-mode niet 4 (=ATW in deze mock)
-                if key in ("OSG:39", "OSG:3A") and st.get("OAW") == "4": return "ER3:" + key
+                if key in ("OSG:39", "OSG:3A") and st.get("OAW") == "0": return "ER3:" + key
                 st[key] = val.upper(); return c
             if c.startswith("Q") and c[1:4] in ("SJ:", "SE:", "AF", "AZ", "IS", "SA:"):  # operator settings
                 key = "O" + c[1:]; return f"{key}:{extra.get(key, '0')}"

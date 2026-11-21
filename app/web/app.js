@@ -26,7 +26,7 @@ const icoBtn = (act, icon, title, extra = '') => `<button type="button" class="i
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
 // timing, page paths and the update check are for the whole app. The first project ('default') keeps the
 // keys of earlier versions, so nothing is lost when updating.
-const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath)$/;
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath|sceneSet)$/;
 // settings that moved into projects in 2.14: a project without its own value uses the value from before
 const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
 // The app's data lives in state.json, kept by the app itself and handed to this page when it loads (#psState).
@@ -306,7 +306,7 @@ async function switchScene(cam, n) {
 // White balance mode: the camera answers QAW with other numbers than OAW takes (query 2 = AWB A, 3 = AWB B;
 // set 1 = A, 2 = B). Scene files keep the numbers to send. Files from before 2.21.1 (no wbSet mark) hold the
 // query numbers and are converted when they are imported.
-const wbQueryToSet = raw => raw.replace(/^OAW:([23])$/i, (_, d) => 'OAW:' + (+d - 1));
+const wbQueryToSet = raw => raw.replace(/^OAW:([2-5])$/i, (_, d) => 'OAW:' + (+d - 1));
 function sceneWbFixed(sc) {
   if (sc.wbSet) return sc;
   return { ...sc, wbSet: true, params: sc.params.map(x => x.cmd === 'OAW' && x.raw ? { ...x, raw: wbQueryToSet(x.raw) } : x) };
@@ -499,7 +499,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
   if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); }
-  if (b.dataset.tab === 'eng') renderEng();
+  if (b.dataset.tab === 'eng') { renderEng(); renderSceneSet(); }
   if (b.dataset.tab === 'cams' && Date.now() - (state.eipAt || 0) > 60000 && !$('#eipSearch').disabled) { state.eipAt = Date.now(); eipDiscover(); }
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
   $('.content').scrollTop = 0;
@@ -773,13 +773,19 @@ function renderCams() {
     : `<span class="mono" title="Choose Search to change this address with Easy IP (the search did not find this camera)">${esc(r.orig.ip)}</span>`;
   const nameCell = r => `<input data-k="name" class="namein${r.edit.name !== r.orig.name ? ' changed' : ''}" value="${esc(r.edit.name)}" maxlength="15" placeholder="${esc(r.model || 'Name')}" aria-label="Camera name" title="Name on the camera (menu and web page). Up to 15 letters, digits, spaces, - _ .">`;
   const range = r => !r.local && state.localIps.length && !sameRange(r.orig.ip, r.orig.mask);
+  // at a glance: green = in this computer's range and answering, amber = another IP range, red = not answering,
+  // blue = found on the network, not in your list yet
+  const health = (c, r) => c ? (c.busy ? 'busy' : range(r) ? 'far' : c.statusKind === 'ok' ? 'ok' : c.statusKind === 'err' ? 'off' : 'busy') : (range(r) ? 'far' : 'new');
+  const HEALTH_TXT = { ok: 'In your IP range and reachable', far: 'In another IP range than this computer', off: 'Not reachable', new: 'Found on the network, in your IP range', busy: 'Checking…' };
+  const dot = h => `<span class="sdot s-${h}" title="${HEALTH_TXT[h]}" aria-label="${HEALTH_TXT[h]}"></span>`;
+  const tally = { ok: 0, far: 0, off: 0, new: 0 };
   const bindNet = (tr, r) => $$('input[data-k]', tr).forEach(i => i.onchange = () => { r.edit[i.dataset.k] = i.value.trim(); renderCams(); });
   for (const c of state.cameras) {
     const r = netRow(c);
-    const tr = document.createElement('tr');
+    const tr = document.createElement('tr'); tally[health(c, r)] = (tally[health(c, r)] || 0) + 1;
     const status = c.busy ? '<span class="pill busy">Busy</span>' : range(r) ? '<span class="pill warn" title="Another IP range than this computer: give the camera an address in your range (type it in the IP column), or change this computer\'s IP address">Other range</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : '';
     tr.innerHTML = `<td><input type="checkbox" class="selcb" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
-      <td>${nameCell(r)}</td>
+      <td class="namecell">${dot(health(c, r))}${nameCell(r)}</td>
       <td>${ipCell(r, !r.local)}${(c.port || 80) != 80 ? `<span class="mono muted small">:${c.port}</span>` : ''}</td>
       <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
       <td>${c.model ? `<span class="pill">${esc(c.model)}</span>` : '<span class="muted">–</span>'}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
@@ -798,9 +804,9 @@ function renderCams() {
   }
   // found on the network, not in the list yet
   for (const r of foundRows()) {
-    const tr = document.createElement('tr'); tr.className = 'found';
+    const tr = document.createElement('tr'); tr.className = 'found'; tally[health(null, r)]++;
     tr.innerHTML = `<td><input type="checkbox" class="selcb" ${r.sel ? 'checked' : ''} aria-label="Select ${esc(r.orig.ip)}"></td>
-      <td>${nameCell(r)}</td><td>${ipCell(r, true)}</td><td class="muted small">Found on the network</td>
+      <td class="namecell">${dot(health(null, r))}${nameCell(r)}</td><td>${ipCell(r, true)}</td><td class="muted small">Found on the network</td>
       <td>${r.model ? `<span class="pill">${esc(r.model)}</span>` : '–'}</td><td></td><td></td>
       <td>${range(r) ? '<span class="pill warn" title="Another IP range than this computer: give the camera an address in your range (type it in the IP column) and choose Apply">Other range</span>' : '<span class="pill info">Found</span>'}</td>
       <td colspan="2" class="end"><button type="button" class="ghost small" data-act="add" title="Add this camera to your list">Add</button></td>`;
@@ -810,6 +816,7 @@ function renderCams() {
     tb.appendChild(tr);
   }
   const nf = foundRows().length;
+  $('#camHealth').innerHTML = state.cameras.length + nf ? [['ok', 'reachable'], ['far', 'in another IP range'], ['off', 'not reachable'], ['new', 'found, not in your list']].filter(([k]) => tally[k]).map(([k, t]) => `<span>${dot(k)}<b>${tally[k]}</b>${t}</span>`).join('') : '';
   $('#camCount').textContent = state.cameras.length;
   $('#camFoundN').textContent = nf ? `+ ${nf} found on the network` : '';
   $('#camEmpty').classList.toggle('hidden', state.cameras.length + nf > 0);
@@ -838,27 +845,35 @@ async function camSearch() {
   finally { $('#camSearch').disabled = false; }
 }
 $('#camSearch').onclick = camSearch;
-$('#camNumber').onclick = async () => {
+// Edit IP settings…: name, IP address, subnet mask and gateway of the ticked cameras in one table, sent with Easy IP
+$('#camIpSel').onclick = async () => {
   const rows = [...state.cameras.filter(c => c.selected).map(netRow), ...foundRows().filter(r => r.sel)];
-  if (!rows.length) return info('Select cameras first', 'Tick the cameras you want to give new addresses.');
+  if (!rows.length) return info('Select cameras first', 'Tick the cameras you want to change.');
   const first = rows.find(r => !r.local)?.edit;
-  const ok = await ask({ title: `New IP addresses for ${rows.length} camera${rows.length > 1 ? 's' : ''}`, ok: 'Fill in', body: `<div class="row wrap">
-      <label class="w140">First IP address <input id="nbIp" class="mono" value="${esc(first?.ip || '')}"></label>
-      <label class="w140">Subnet mask <input id="nbMask" class="mono" value="${esc(first?.mask || '255.255.255.0')}"></label>
-      <label class="w140">Gateway <input id="nbGw" class="mono" value="${esc(first?.gateway || '')}" placeholder="optional"></label></div>
-      <p class="hint">The ticked cameras get addresses counting up from the first one, in the order of the list. Nothing is sent yet: check the list and choose Apply.</p>` });
-  if (!ok) return;
-  const ip = $('#nbIp').value.trim(), mask = $('#nbMask').value.trim(), gw = $('#nbGw').value.trim();
-  if (ip && !validIp(ip)) return info('Invalid first IP address', esc(ip));
-  let n = ip ? ipNum(ip) : null; const skipped = [];
-  for (const r of rows) {
-    if (r.local) { skipped.push(r.orig.ip); continue; }
-    if (n != null) { r.edit.ip = ipStr(n); n++; }
-    if (mask) r.edit.mask = mask;
-    if (gw) r.edit.gateway = gw;
-  }
+  const opened = ask({ title: `IP settings of ${rows.length} camera${rows.length > 1 ? 's' : ''}`, ok: 'Send to the cameras', wide: true, danger: true, body: `
+    <div class="row wrap"><label class="w140">First IP address <input id="ipFirst" class="mono" value="${esc(first?.ip || '')}"></label>
+      <label class="w140">Subnet mask <input id="ipMask" class="mono" value="${esc(first?.mask || '255.255.255.0')}"></label>
+      <label class="w140">Gateway <input id="ipGw" class="mono" value="${esc(first?.gateway || '')}"></label>
+      <button type="button" class="ghost small" id="ipFill" title="Number the addresses from the first one, in the order of the list, and give every camera this subnet mask and gateway">Fill in all</button></div>
+    <table class="tbl dense ipdlg"><thead><tr><th>Camera</th><th>Name</th><th>IP address</th><th>Subnet mask</th><th>Gateway</th></tr></thead><tbody>${rows.map((r, i) => `<tr>
+      <td class="small">${esc(r.model || '')}<div class="muted mono">${esc(r.local ? r.orig.ip : r.mac)}</div></td>
+      <td><input data-i="${i}" data-f="name" value="${esc(r.edit.name)}" maxlength="15" aria-label="Name"></td>
+      ${['ip', 'mask', 'gateway'].map(f => `<td><input class="mono" data-i="${i}" data-f="${f}" value="${esc(r.edit[f])}" ${r.local ? 'disabled title="The network search did not find this camera, so only its name can change. Choose Search and try again."' : ''} aria-label="${f}"></td>`).join('')}</tr>`).join('')}</tbody></table>
+    <p class="hint">Only what you change is sent. Cameras only accept a new IP address in the first 20 minutes after they are switched on. A new name needs the camera to be in this computer's IP range (after the change).</p>` });
+  await sleep(0);
+  $('#ipFill').onclick = () => {
+    const ip = $('#ipFirst').value.trim(), mask = $('#ipMask').value.trim(), gw = $('#ipGw').value.trim();
+    if (ip && !validIp(ip)) return toast('The first IP address is not valid');
+    let n = ip ? ipNum(ip) : null;
+    rows.forEach((r, i) => { if (r.local) return; const f = k => $(`[data-i="${i}"][data-f="${k}"]`);
+      if (n != null) { f('ip').value = ipStr(n); n++; } if (mask) f('mask').value = mask; if (gw) f('gateway').value = gw; });
+  };
+  if (!await opened) return;
+  rows.forEach((r, i) => ['name', 'ip', 'mask', 'gateway'].forEach(k => { const el = $(`[data-i="${i}"][data-f="${k}"]`); if (el && !el.disabled) r.edit[k] = el.value.trim(); }));
   renderCams();
-  if (skipped.length) info('Not every camera got a new address', `The network search did not find ${skipped.map(esc).join(', ')}, so its address cannot be changed from here. Choose Search and try again.`);
+  const list = rows.filter(netPending);
+  if (!list.length) return toast('Nothing changed');
+  applyNet(list, { confirmed: true });
 };
 /* ---- zones: group cameras (stage, FOH, ...) and select them per zone ---- */
 const zoneNames = () => [...new Set(state.cameras.map(c => (c.zone || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
@@ -2638,7 +2653,7 @@ async function eipVerify(snap, field, fails) {
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>MAC</th><th>Result</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.r.orig.name || x.r.model || '')}</td><td class="mono small">${esc(x.r.mac)}</td><td>${x.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td></tr>`).join('')}</tbody></table>` });
 }
 $('#eipApply').onclick = () => applyNet(state.eip.filter(netPending));
-async function applyNet(list) {
+async function applyNet(list, opts = {}) {
   if (!list.length) return;
   const bad = list.find(r => !validIp(r.edit.ip, true) || !validIp(r.edit.mask, true) || (r.edit.gateway && r.edit.gateway !== '0.0.0.0' && !validIp(r.edit.gateway, true)));
   if (bad) return info('Check the values', `The settings for ${esc(bad.mac)} are not valid IPv4 addresses.`);
@@ -2646,7 +2661,7 @@ async function applyNet(list) {
   if (badName) return info('Check the name', `“${esc(badName.edit.name)}” is not a valid camera name. Use at most 15 letters, digits, spaces, hyphens, underscores or dots.`);
   const dup = list.find(r => [...state.eip, ...state.netLocal.values()].some(o => o !== r && o.mac !== r.mac && (o.edit.ip === r.edit.ip)));
   if (dup) return info('Duplicate IP address', `${esc(dup.edit.ip)} is used more than once.`);
-  const ok = await ask({
+  const ok = opts.confirmed || await ask({
     title: `Change the network settings of ${list.length} camera${list.length > 1 ? 's' : ''}?`,
     body: `<ul>${list.map(r => `<li><b>${esc(r.model || r.mac)}</b> ${esc(r.orig.name)}: ${[r.edit.name !== r.orig.name ? `name → <b>${esc(r.edit.name)}</b>` : '', netChanged(r.edit, r.orig) ? `<span class="mono">${esc(r.orig.ip)} → ${esc(r.edit.ip)}</span>` : ''].filter(Boolean).join(', ')}</li>`).join('')}</ul>
       ${list.some(r => netChanged(r.edit, r.orig)) ? '<p>The cameras restart their network and are briefly unreachable. Cameras only accept new network settings within about 20 minutes after they were switched on; if a camera does not change, restart it and try again.</p>' : ''}
@@ -2721,8 +2736,8 @@ const ENG = {
     } },
   tallyBr: { label: v => `Tally brightness ${['Low', 'Mid', 'High'][v]}`,
     run: async (send, c, v) => engVerdict(await send('cam', 'OSA:D3:' + v), ['Low', 'Mid', 'High'][v]) },
-  wb: { label: v => `White balance ${{ auto: 'Auto', var: 'Var', a: 'A', b: 'B' }[v]}`,
-    run: async (send, c, v) => engVerdict(await wbModeCmds(send, c.model, v), { auto: 'Auto (ATW)', var: 'VAR', a: 'Memory A', b: 'Memory B' }[v]) },
+  wb: { label: v => `White balance ${WB_NAME[v]}`,
+    run: async (send, c, v) => engVerdict(await wbModeCmds(send, c.model, v), WB_NAME[v]) },
   varK: { label: () => `White balance VAR ${$('#engVarK').value} K`,
     check: () => validK(+$('#engVarK').value) || 'Fill in a colour temperature from 2000 to 15000 K.',
     run: async (send, c) => {
@@ -2796,6 +2811,74 @@ async function engClick(btn) {
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
+/* ---- Engineering: settings per scene (white balance, gain, iris), on many cameras at once ---- */
+// Gain: OGU data 08h = 0 dB, one step per dB; 80h = AGC on
+const GAIN_OPTS = [['', '–'], ['80', 'Auto (AGC)'], ...[-3, 0, 3, 6, 9, 12, 15, 18, 24].map(d => [(8 + d).toString(16).toUpperCase().padStart(2, '0'), `${d > 0 ? '+' : ''}${d} dB`])];
+const SCENE_WB_OPTS = [['', '–'], ['auto', 'Auto (ATW)'], ['k32', '3200K'], ['k56', '5600K'], ['a', 'Memory A'], ['b', 'Memory B'], ['var', 'VAR']];
+const IRIS_OPTS = [['', '–'], ['1', 'Auto'], ['0', 'Manual']];
+const sceneSetRows = () => { const n = Math.max(4, ...state.cameras.filter(c => c.selected && c.model).map(c => profileFor(c.model).scenes || 4)); const t = store.get('sceneSet', {}); return Array.from({ length: n }, (_, i) => ({ n: i + 1, ...(t[i + 1] || {}) })); };
+function renderSceneSet() {
+  const opt = (list, v) => list.map(([k, l]) => `<option value="${k}" ${k === (v || '') ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  $('#sceneSetTable tbody').innerHTML = sceneSetRows().map(r => `<tr data-n="${r.n}"><td><b>Scene ${r.n}</b></td>
+    <td><select data-k="wb" aria-label="White balance of scene ${r.n}">${opt(SCENE_WB_OPTS, r.wb)}</select></td>
+    <td><label class="kfield"><input type="number" data-k="k" min="2000" max="15000" step="10" value="${esc(r.k || '')}" placeholder="5600" ${r.wb === 'var' ? '' : 'disabled'} aria-label="VAR colour temperature of scene ${r.n}"><span>K</span></label></td>
+    <td><select data-k="gain" aria-label="Gain of scene ${r.n}">${opt(GAIN_OPTS, r.gain)}</select></td>
+    <td><select data-k="iris" aria-label="Iris of scene ${r.n}">${opt(IRIS_OPTS, r.iris)}</select></td></tr>`).join('');
+  $$('#sceneSetTable [data-k]').forEach(el => el.onchange = () => {
+    const n = el.closest('tr').dataset.n, t = store.get('sceneSet', {});
+    t[n] = { ...(t[n] || {}), [el.dataset.k]: el.value.trim() }; store.set('sceneSet', t); renderSceneSet();
+  });
+}
+$('#sceneSetClear').onclick = () => { store.set('sceneSet', {}); renderSceneSet(); };
+$('#sceneSetApply').onclick = async () => {
+  const plan = sceneSetRows().filter(r => r.wb || r.gain || r.iris);
+  const cams = engCams();
+  if (!plan.length) return info('Nothing to set yet', 'Choose a white balance, gain or iris for at least one scene.');
+  if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
+  const badK = plan.find(r => r.wb === 'var' && !validK(+r.k));
+  if (badK) return info('Check the colour temperature', `Scene ${badK.n} is set to VAR: fill in a colour temperature from 2000 to 15000 K.`);
+  const what = r => [r.wb && (r.wb === 'var' ? `VAR ${r.k} K` : WB_NAME[r.wb]), r.gain && GAIN_OPTS.find(g => g[0] === r.gain)[1], r.iris && `iris ${IRIS_OPTS.find(g => g[0] === r.iris)[1].toLowerCase()}`].filter(Boolean).join(', ');
+  if (!await ask({ title: `Set ${plan.length} scene${plan.length > 1 ? 's' : ''} on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Apply', danger: true, body: `<ul class="tight">${plan.map(r => `<li><b>Scene ${r.n}</b>: ${esc(what(r))}</li>`).join('')}</ul>
+      <p>Every camera switches to these scenes one by one (the picture changes for a few seconds per scene) and then goes back to the scene that was live.</p><p class="muted small">${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = 'Settings per scene';
+  $('#sceneSetStatus').textContent = $('#engStatus').textContent = `Setting ${plan.length} scene${plan.length > 1 ? 's' : ''} on ${cams.length} camera${cams.length > 1 ? 's' : ''}…`;
+  const rows = await Promise.all(cams.map(async c => {
+    const raw = [], out = [];
+    const send = async (type, cmd) => { try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
+    let orig, cur;
+    try { if (!c.model) await identify(c); orig = cur = await getScene(c); } catch (e) { return { c, raw, res: 'Not reachable', bad: true }; }
+    for (const r of plan) {
+      if (r.n > (profileFor(c.model).scenes || 4)) { out.push({ bad: true, t: `Scene ${r.n}: this camera has no scene ${r.n}` }); continue; }
+      try { if (r.n !== cur) { await switchScene(c, r.n); cur = r.n; } } catch (e) { out.push({ bad: true, t: `Scene ${r.n}: ${e.message}` }); continue; }
+      const res = [];
+      if (r.wb) { const m = engVerdict(await wbModeCmds(send, c.model, r.wb)); res.push(m.bad ? `white balance: ${m.res}` : null);
+        if (!m.bad && r.wb === 'var') { const k = engVerdict(await setVarK(send, +r.k)); res.push(k.bad ? `colour temperature: ${k.res}` : null); } }
+      if (r.gain) { const g = engVerdict(await send('cam', 'OGU:' + r.gain)); res.push(g.bad ? `gain: ${g.res}` : null); }
+      if (r.iris) { const i = engVerdict(await send('cam', 'ORS:' + r.iris)); res.push(i.bad ? `iris: ${i.res}` : null); }
+      if (profileFor(c.model).fam === 'UE160') await send('cam', 'OSL:90:' + r.n); // UE160: store in the scene file
+      // check: read back what was set
+      await sleep(300);
+      const chk = [];
+      if (r.wb) { const q = await send('cam', 'QAW'); const m = /^OAW:(\d)$/i.exec(q?.body || ''); if (m && WB_FROM_OAW[m[1]] && WB_FROM_OAW[m[1]] !== r.wb) chk.push(`white balance reads ${WB_NAME[WB_FROM_OAW[m[1]]]}`); }
+      if (r.wb === 'var') { const q = await send('cam', 'QSI:20'); const k = kelvinFrom(q?.body); if (k && Math.abs(k - r.k) > 10) chk.push(`colour temperature reads ${k} K`); }
+      if (r.gain) { const q = await send('cam', 'QGU'); if (q?.ok && !isErr(q.body) && q.body.toUpperCase() !== 'OGU:' + r.gain) chk.push(`gain reads ${q.body}`); }
+      if (r.iris) { const q = await send('cam', 'QRS'); if (q?.ok && !isErr(q.body) && q.body !== 'ORS:' + r.iris) chk.push(`iris reads ${q.body}`); }
+      const errs = res.filter(Boolean).concat(chk);
+      out.push(errs.length ? { bad: true, t: `Scene ${r.n}: ${errs.join('; ')}` } : { t: `Scene ${r.n}: ${what(r)}` });
+    }
+    try { if (orig && cur !== orig) await switchScene(c, orig); c.scene = orig; } catch (e) { out.push({ bad: true, t: `Back to scene ${orig}: ${e.message}` }); }
+    return { c, raw, out, bad: out.some(o => o.bad) };
+  }));
+  $('#tab-eng').classList.remove('busy');
+  const ok = rows.filter(r => !r.bad).length;
+  $('#sceneSetStatus').textContent = $('#engStatus').textContent = `${ok} of ${rows.length} cameras done · ${new Date().toLocaleTimeString('en-GB')}`;
+  $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td>${(r.out || [{ bad: true, t: r.res }]).map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td><td class="mono small muted">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
+  $('#engResultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  log(`Engineering: settings per scene: ${ok}/${rows.length} ok`);
+  if (live.cam && cams.includes(live.cam)) liveRead();
+};
+
 $('#engVarK').addEventListener('keydown', e => { if (e.key === 'Enter') $('[data-eng="varK"]').click(); });
 
 /* ------------------------------------------------------------------ refresh: read everything again */
@@ -3245,15 +3328,16 @@ $('#liveShoot0').onclick = () => liveShoot(0);
 $('#liveShoot1').onclick = () => liveShoot(1);
 $('#liveDay').onclick = () => liveDayNight(false);
 $('#liveNight').onclick = () => liveDayNight(true);
-// White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 9 = VAR.
+// White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 3 = 3200K, 4 = 5600K, 9 = VAR.
 // The AW-UE160 uses OSL:2A (ATW on/off) and OSL:2B (0 = A, 1 = B, 4 = VAR) when OAW is refused.
-const WB_OAW = { auto: '0', a: '1', b: '2', var: '9' };
+const WB_OAW = { auto: '0', a: '1', b: '2', k32: '3', k56: '4', var: '9' };
 // QAW answers with other numbers than OAW takes: 0 ATW, 2 AWB A, 3 AWB B, 4 3200K, 5 5600K, 9 VAR
 // ("Data of control and question is different", Panasonic protocol table; checked on an AW-UE150 V3.20)
-const WB_FROM_OAW = { 0: 'auto', 2: 'a', 3: 'b', 9: 'var' };
-const WB_UE160 = { auto: ['OSL:2A:1'], a: ['OSL:2A:0', 'OSL:2B:0'], b: ['OSL:2A:0', 'OSL:2B:1'], var: ['OSL:2A:0', 'OSL:2B:4'] };
-const showWb = m => $$('#liveWB [data-wb]').forEach(x => setToggle(x, x.dataset.wb === m));
-$$('#liveWB [data-wb]').forEach(btn => btn.onclick = async () => {
+const WB_NAME = { auto: 'Auto (ATW)', var: 'VAR', a: 'Memory A', b: 'Memory B', k32: '3200K', k56: '5600K' };
+const WB_FROM_OAW = { 0: 'auto', 2: 'a', 3: 'b', 4: 'k32', 5: 'k56', 9: 'var' };
+const WB_UE160 = { auto: ['OSL:2A:1'], a: ['OSL:2A:0', 'OSL:2B:0'], b: ['OSL:2A:0', 'OSL:2B:1'], k32: ['OSL:2A:0', 'OSL:2B:2'], k56: ['OSL:2A:0', 'OSL:2B:3'], var: ['OSL:2A:0', 'OSL:2B:4'] };
+const showWb = m => $$('.t-white [data-wb]').forEach(x => setToggle(x, x.dataset.wb === m));
+$$('.t-white [data-wb]').forEach(btn => btn.onclick = async () => {
   if (!live.cam) return;
   if ($('#liveWbStore').classList.contains('armed')) {
     if (!['a', 'b'].includes(btn.dataset.wb)) return toast('Store works for A and B');

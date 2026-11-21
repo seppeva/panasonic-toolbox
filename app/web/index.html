@@ -53,15 +53,16 @@
       <h2>Cameras <span class="count" id="camCount">0</span> <span class="muted small" id="camFoundN"></span></h2>
       <div class="row"><span class="muted small" id="camSearchStatus"></span><button class="small" id="camSearch" title="Search the network for Panasonic cameras (also in another IP range) and read every camera in the list again">Search</button><button class="ghost small" id="addCamsBtn" title="Add cameras by IP address, or scan an IP range">Add…</button><button class="ghost small" id="zonesBtn" title="Rename zones and choose which cameras are in them">Zones…</button></div>
     </div>
+    <div class="cam-health" id="camHealth"></div>
     <div class="zonebar" id="camZoneBar"></div>
     <div class="note hidden" id="scanOther"></div>
     <div class="selbar hidden" id="camSelBar"><span class="seln"><b id="camSelN">0</b> selected</span>
       <button class="ghost small" id="camLiveSel" title="Open the live page of every selected camera, each in its own browser tab">Live view</button>
       <button class="ghost small" id="camSetupSel" title="Open the settings page of every selected camera, each in its own browser tab, signed in">Settings</button>
-      <button class="ghost small" id="camEditSel" title="Description, zone, port and login of the selected cameras">Edit…</button>
+      <button class="ghost small" id="camIpSel" title="Name, IP address, subnet mask and gateway of the selected cameras, sent to the cameras with Easy IP">Edit IP settings…</button>
+      <button class="ghost small" id="camEditSel" title="Description, zone, port and login of the selected cameras (in this app only)">Edit…</button>
       <details class="menu"><summary>More</summary><div class="menu-pop">
-        <button type="button" id="camNumber">Number the IP addresses…</button>
-        <button type="button" id="camAddFound">Add the found ones to the list</button>
+        <button type="button" id="camAddFound" title="Puts the ticked cameras that were found on the network (not in your list yet) into your camera list">Add found cameras to my list</button>
         <button type="button" id="camDelSel" class="danger-text">Remove from the list</button>
       </div></details>
     </div>
@@ -220,6 +221,7 @@
         <div class="live-block t-white">
         <h3>White</h3>
         <div class="seg-row" id="liveWB" role="group" aria-label="White balance mode"><button class="toggle" data-wb="auto" title="Automatic tracking white (ATW)">Auto</button><button class="toggle" data-wb="var" title="Variable colour temperature">Var</button><button class="toggle" data-wb="a" title="White balance memory A">A</button><button class="toggle" data-wb="b" title="White balance memory B">B</button><button id="liveAWB" title="Auto white balance in the memory that is active (A or B)">AWB</button></div>
+        <div class="hold-row wb-fixed" role="group" aria-label="Fixed colour temperature"><button class="toggle" data-wb="k32" title="Fixed 3200 K (tungsten)">3200K</button><button class="toggle" data-wb="k56" title="Fixed 5600 K (daylight)">5600K</button></div>
         <div class="hold-row"><label class="kfield" title="Colour temperature for VAR, in kelvin"><input type="number" id="liveVarK" min="2000" max="15000" step="10" placeholder="5600"><span>K</span></label><button id="liveVarSet" title="Switch to VAR with this colour temperature">Set VAR</button><button class="store-btn" id="liveWbStore" aria-pressed="false" title="Then click A or B: point the camera at something white, it stores an auto white balance in that memory">Store</button></div>
       </div>
         <div class="live-block t-black">
@@ -285,6 +287,7 @@
     </div>
     <div class="live-block e-white"><h3>White balance</h3>
       <div class="hold-row"><button data-eng="wb" data-v="auto" title="Automatic tracking white (ATW)">Auto</button><button data-eng="wb" data-v="var" title="Variable colour temperature">Var</button><button data-eng="wb" data-v="a" title="White balance memory A">A</button><button data-eng="wb" data-v="b" title="White balance memory B">B</button><button data-eng="awb" title="Auto white balance in the memory that is active (A or B)">AWB</button></div>
+      <div class="hold-row"><button data-eng="wb" data-v="k32" title="Fixed 3200 K (tungsten)">3200K</button><button data-eng="wb" data-v="k56" title="Fixed 5600 K (daylight)">5600K</button></div>
       <div class="hold-row"><label class="kfield" title="Colour temperature for VAR, in kelvin"><input type="number" id="engVarK" min="2000" max="15000" step="10" placeholder="5600"><span>K</span></label><button data-eng="varK" title="Switch to VAR with this colour temperature">Set VAR</button><button class="store-btn" id="engWbStore" aria-pressed="false" title="Then click A or B: each camera stores an auto white balance in that memory">Store</button></div>
       <div class="hold-row"><button data-eng="abb" title="Auto black balance">ABB</button></div>
     </div>
@@ -292,6 +295,12 @@
     <div class="live-block e-scope"><h3>Preset scope</h3><div class="hold-row"><button data-eng="scope" data-v="0" title="Mode A: presets recall position and picture settings">A</button><button data-eng="scope" data-v="1" title="Mode B: presets recall position and iris">B</button><button data-eng="scope" data-v="2" title="Mode C: presets only recall pan, tilt, zoom and focus">C</button></div></div>
     <div class="live-block e-ip"><h3>IP video <span class="tag">Experimental</span></h3><div class="hold-row"><button data-eng="ipvideo" data-v="1" title="Switch the H.264 streams on">On</button><button data-eng="ipvideo" data-v="0" title="Switch the H.264 streams off, so the network carries less video">Off</button></div><p class="hint small">The H.264 streams of the camera (needs the camera login). The picture in this app only flows while the Live page shows a camera.</p></div>
     <div class="live-block e-init"><h3>Default scene</h3><p class="hint small">Your standard picture settings per model. <b>Save as default</b> stores the live scene of one camera (for example right after a scene reset in the camera menu) as the standard for its model. <b>Initialize</b> puts that standard back into the live scene of every chosen camera, with a backup first.</p><div class="hold-row"><button data-eng="init" title="Put the default scene of each camera's model into its live scene">Initialize…</button><button class="ghost" data-eng="defsave" title="Save the live scene of one camera as the default for its model">Save as default…</button></div></div>
+  </div>
+  <div class="card" id="sceneSetCard">
+    <div class="row between wrap"><h2>Settings per scene</h2><span class="muted small">For the cameras ticked at the top</span></div>
+    <p class="hint">Choose what each scene should get, for example 3200K in scene 1 and 5600K in scene 2. A dash leaves that setting as it is. Apply switches every camera to these scenes one by one, sets the values, checks them and goes back to the scene that was live.</p>
+    <table class="tbl dense" id="sceneSetTable"><thead><tr><th>Scene</th><th>White balance</th><th>VAR colour temperature</th><th>Gain</th><th>Iris</th></tr></thead><tbody></tbody></table>
+    <div class="card-foot"><button id="sceneSetApply">Apply to the ticked cameras</button><button class="ghost small" id="sceneSetClear">Clear the table</button><span class="muted small" id="sceneSetStatus"></span></div>
   </div>
   <div class="card" id="engResultCard"><div class="row between"><h2 id="engResultTitle">Result</h2><span class="muted small" id="engStatus"></span></div><div id="engResult"><p class="muted small">Choose cameras and an action. The result per camera shows up here.</p></div></div>
 </section>

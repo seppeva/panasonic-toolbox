@@ -485,3 +485,12 @@ details.foldcard[open]>summary{margin-bottom:12px}
 #camTable input.namein{font-weight:500}
 #camTable .pill{white-space:nowrap}
 #camTable input.changed,#camTable input.changed:hover{border-color:#d9a13b;background:rgba(217,161,59,.12)}
+/* at a glance: is a camera in this computer's IP range and does it answer */
+.sdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle;flex:none;background:var(--muted)}
+.sdot.s-ok{background:#47b26c}.sdot.s-far{background:#d9a13b}.sdot.s-off{background:#e0574d}.sdot.s-new{background:var(--accent)}.sdot.s-busy{background:var(--muted)}
+#camTable td.namecell{display:flex;align-items:center}
+.cam-health{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 8px}
+.cam-health span{display:inline-flex;align-items:center}
+.cam-health b{color:var(--text);margin-right:4px;font-weight:600}
+.ipdlg td{padding:3px 4px}.ipdlg input{height:28px}
+#sceneSetTable .kfield input{width:90px}
