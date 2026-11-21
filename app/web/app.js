@@ -1466,6 +1466,7 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
 }
 
 // Which mode makes a setting writable (found on an AW-UE150 V3.20 by trying every mode value).
+const WRITE_FIRST = ['OSJ:4D'];
 const COLOR_CORR = ['80', '81', '82', '83', '84', '85', '9A', '9B', '86', '87', '9C', '9D', '88', '89', '9E', '9F', '8A', '8B', '8C', '8D', '8E', '8F', '90', '91', '92', '93', '94', '95', '96', '97'].map(x => 'OSD:' + x);
 const MODE_ENABLERS = [
   { ctl: 'ORS', on: '1', label: 'auto iris', deps: ['OSD:48'] },
@@ -1511,7 +1512,10 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
   // shutter is in Step mode, Matrix values while the matrix type is Normal).
   const now = new Map((before?.params || []).map(b => [b.cmd, (b.raw || '').toUpperCase()]));
   const unchanged = before ? list.filter(x => now.get(x.cmd) === x.raw.toUpperCase()) : [];
-  const toSend = before ? list.filter(x => now.get(x.cmd) !== x.raw.toUpperCase()) : list;
+  const toSend0 = before ? list.filter(x => now.get(x.cmd) !== x.raw.toUpperCase()) : list;
+  // Some settings make the camera recalculate others: writing G Axis (OSJ:4D) recalculates the AWB colour temperature and
+  // R/B gain (OSJ:4A/4B/4C) on an AW-UE150, so those must come after it. (Found on a real AW-UE150 V3.20.)
+  const toSend = [...toSend0.filter(x => WRITE_FIRST.includes(x.cmd)), ...toSend0.filter(x => !WRITE_FIRST.includes(x.cmd))];
   // Pass 1: everything that differs, in order (modes come first in the list)
   let pending = toSend.map(x => ({ ...x, send: x.raw }));
   let r = await send(pending, `setting ${pending.length} values…`);
@@ -1558,7 +1562,15 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     progress('checking…');
     const okList = toSend.filter(x => !failed.some(f => f.cmd === x.cmd));
     const back = await readParams(cam, okList.map(x => x.p));
-    mismatch = back.map((b, i) => ({ b, x: okList[i] })).filter(({ b, x }) => b.raw && b.raw.toUpperCase() !== x.raw.toUpperCase()).map(({ x }) => ({ cmd: x.cmd, name: x.name }));
+    let off = back.map((b, i) => ({ b, x: okList[i] })).filter(({ b, x }) => b.raw && b.raw.toUpperCase() !== x.raw.toUpperCase()).map(({ x }) => x);
+    if (off.length) { // the camera recalculated some values after a related write: write those once more and check again
+      progress(`writing ${off.length} value${off.length > 1 ? 's' : ''} again…`);
+      await send(off.map(x => ({ ...x, send: x.raw })), `writing ${off.length} again…`);
+      await batch(cam, [{ sleepMs: 300 }]);
+      const again = await readParams(cam, off.map(x => x.p));
+      off = again.map((b, i) => ({ b, x: off[i] })).filter(({ b, x }) => b.raw && b.raw.toUpperCase() !== x.raw.toUpperCase()).map(({ x }) => x);
+    }
+    mismatch = off.map(x => ({ cmd: x.cmd, name: x.name }));
   }
   if (opts.restore && target !== orig && orig) { progress(`returning to scene ${orig}…`); await switchScene(cam, orig); }
   return { scene: target, applied: toSend.length - failed.length, unchanged: unchanged.length, skipped, failed, mismatch, stored, backup, before };
@@ -1589,9 +1601,10 @@ async function runJob(cam, src, targetScene, opts, progress) {
     const r = await importOperator(cam, src.file, opts, progress);
     return { r, undo: () => importOperator(cam, r.before, { backup: false }, () => { }), redo: () => importOperator(cam, src.file, { backup: false }, () => { }) };
   }
+  // Undo and redo also read the camera first, so only the settings that differ are sent (a few seconds instead of minutes).
   const sceneData = src.file.scenes[src.sceneIdx];
   const r = await importScene(cam, sceneData, targetScene, opts, progress);
-  const o2 = { ...opts, backup: false, verify: false, noBackupRead: true };
+  const o2 = { ...opts, backup: false, verify: false, };
   return { r, undo: () => importScene(cam, r.before, String(r.scene), o2, () => { }), redo: () => importScene(cam, sceneData, String(r.scene), o2, () => { }) };
 }
 
@@ -2556,12 +2569,13 @@ $('#eipToList').onclick = () => {
 const engSel = () => new Set(state.cameras.filter(c => c.selected).map(c => c.ip));
 const setSelection = ips => { const on = new Set(ips); state.cameras.forEach(c => { c.selected = on.has(c.ip); }); saveCams(); renderCams(); };
 const engCams = () => { const on = engSel(); return state.cameras.filter(c => on.has(c.ip)); };
+$('#engAll').onclick = () => { setSelection(state.cameras.map(c => c.ip)); renderEng(); };
+$('#engNone').onclick = () => { setSelection([]); renderEng(); };
 function renderEng() {
   const on = engSel();
   $('#engCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${on.has(c.ip) ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted">${esc(c.ip)}</span>${c.statusKind === 'err' ? ' <span class="warn-text small">offline</span>' : ''}</label>`).join('') : '<span class="muted">Add cameras on the Cameras page first.</span>';
   const save = () => { setSelection($$('#engCams label:not(.selall-row) input:checked').map(x => x.value)); renderEng(); };
   $$('#engCams label:not(.selall-row) input').forEach(i => i.onchange = save);
-  { const set = engSel(); selAllRow($('#engCams'), state.cameras, c => set.has(c.ip), (c, v) => v ? set.add(c.ip) : set.delete(c.ip), () => { setSelection([...set]); renderEng(); }); }
   const box = c => $$('#engCams label:not(.selall-row) input').find(i => i.value === c.ip);
   zoneChips($('#engZones'), { get: c => !!box(c)?.checked, set: (c, v) => { const i = box(c); if (i) i.checked = v; }, done: save }, 'Zone');
   const n = Math.max(4, ...state.cameras.filter(c => c.model).map(c => profileFor(c.model).scenes || 4));
