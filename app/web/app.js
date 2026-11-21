@@ -1812,7 +1812,9 @@ function renderCmds() {
 // One row: name, value field(s), the link for the selected camera (always visible), and actions.
 function cmdRow(c) {
   const tr = document.createElement('tr'); tr.className = 'cmdrow';
-  const holders = c.c.match(/\[Data\d*\]/g) || [];
+  // Read-only values (Model Number, Software Version): the button sends the query, the camera has nothing to set
+  const ro = !!(c.q && c.d?.length === 1 && c.d[0] === '');
+  const holders = ro ? [] : c.c.match(/\[Data\d*\]/g) || [];
   const opts = holders.length === 1 && !c.preset ? enumOpts(c) : null;
   const inputs = holders.map((h, i) => c.preset
     ? `<input data-i="${i}" type="number" min="1" max="100" value="1" class="num" aria-label="Preset number" title="Preset number 1-100">`
@@ -1824,11 +1826,11 @@ function cmdRow(c) {
     <td class="linkcell"><code class="url"></code>${c.q ? '<div class="small muted qline">Query: <code class="qurl"></code></div>' : ''}</td>
     <td class="end nowrap acts"><button class="ghost small" data-act="copy">Copy</button><button class="ghost small" data-act="send">Send</button><button class="ghost small" data-act="script" title="Add to a script for Companion">+ Script</button><div class="small muted out"></div></td>`;
   const val = el => c.preset ? pad2(Math.max(1, Math.min(100, +el.value || 1)) - 1) : (el?.value || '').trim();
-  const build = () => { let i = 0; return c.c.replace(/\[Data\d*\]/g, () => val($(`[data-i="${i++}"]`, tr))); };
+  const build = () => { if (ro) return c.q; let i = 0; return c.c.replace(/\[Data\d*\]/g, () => val($(`[data-i="${i++}"]`, tr))); };
   tr.update = () => { $('code.url', tr).textContent = cmdUrl(c.t, build()); if (c.q) $('code.qurl', tr).textContent = cmdUrl(c.t, c.q); };
   $$('[data-i]', tr).forEach(el => el.addEventListener('input', tr.update));
   $('[data-act=copy]', tr).onclick = e => copyText(cmdUrl(c.t, build()), e.target);
-  $('[data-act=send]', tr).onclick = () => sendCmd(c.t, build(), $('.out', tr), c);
+  $('[data-act=send]', tr).onclick = () => sendCmd(c.t, build(), $('.out', tr), ro ? null : c);
   $('[data-act=script]', tr).onclick = () => addToScript(c.preset ? `${c.n} ${$('[data-i="0"]', tr).value}` : c.n, c.t, build());
   tr.update();
   return tr;
