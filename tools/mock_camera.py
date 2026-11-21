@@ -106,11 +106,11 @@ class H(BaseHTTPRequestHandler):
             if m: cur["tally" + m.group(1)] = m.group(2); return c
             m = re.match(r"QL([RG])$", c)
             if m: return f"OL{m.group(1)}:" + cur.get("tally" + m.group(1), "0")
-            if c == "QAW": return "OAW:" + {"1": "2", "2": "3", "3": "4", "4": "5"}.get(st.get("OAW", "1"), st.get("OAW", "1"))  # query numbers like a real UE150
+            if c == "QAW": return "OAW:" + {"1": "2", "2": "3", "3": "0"}.get(st.get("OAW", "1"), st.get("OAW", "1"))  # query numbers like a real UE150
             if c == "QSI:30": return "OSI:30:" + cur.get("shoot", "0")
             m = re.match(r"OSI:30:([01])$", c)
             if m: cur["shoot"] = m.group(1); return c
-            m = re.match(r"OAW:([012349])$", c)
+            m = re.match(r"OAW:([0123459])$", c)
             if m: st["OAW"] = m.group(1); return c
             # values that only take a write in a certain mode, like a real AW-UE150 (ER2 otherwise)
             DEPS = {"OSI:20": [("OAW", "9")], "OSD:48": [("ORS", "1")], "OSJ:09": [("OSJ:03", "2")], "OSD:BF": [("OSJ:03", "3")],

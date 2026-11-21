@@ -494,3 +494,22 @@ details.foldcard[open]>summary{margin-bottom:12px}
 .cam-health b{color:var(--text);margin-right:4px;font-weight:600}
 .ipdlg td{padding:3px 4px}.ipdlg input{height:28px}
 #sceneSetTable .kfield input{width:90px}
+/* wide dialogs really are wide (the id rule above made every dialog 520px) */
+dialog#askDlg.wide{width:min(900px,94vw)}
+.ipdlg{table-layout:fixed;width:100%}
+.ipdlg th:first-child,.ipdlg td:first-child{width:130px}
+.ipdlg input{width:100%;min-width:0}
+.ipdlg .mono{font-size:12px}
+/* Engineering: setup for many cameras */
+.setup-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin:10px 0}
+.setup-group{background:var(--panel);border:1px solid var(--rule-soft);border-radius:8px;padding:10px 12px}
+.setup-group h3{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+label.setup-row{display:flex;flex-direction:row;align-items:center;gap:8px;margin:0 0 6px;font-size:13px}
+label.setup-row>span:first-child{flex:1;color:var(--muted)}
+label.setup-row.set>span:first-child{color:var(--text)}
+label.setup-row select{width:150px;height:28px}
+label.setup-row.set select{border-color:var(--accent)}
+label.setup-row .kfield input{width:72px}
+.setup-sum div{margin:2px 0}
+dialog.wide .ask-body{max-width:none}
+label.setup-row select{height:30px;padding-top:0;padding-bottom:0}

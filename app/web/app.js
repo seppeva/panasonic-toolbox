@@ -26,7 +26,7 @@ const icoBtn = (act, icon, title, extra = '') => `<button type="button" class="i
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
 // timing, page paths and the update check are for the whole app. The first project ('default') keeps the
 // keys of earlier versions, so nothing is lost when updating.
-const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath|sceneSet)$/;
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath|sceneSet|engSetup)$/;
 // settings that moved into projects in 2.14: a project without its own value uses the value from before
 const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
 // The app's data lives in state.json, kept by the app itself and handed to this page when it loads (#psState).
@@ -306,7 +306,7 @@ async function switchScene(cam, n) {
 // White balance mode: the camera answers QAW with other numbers than OAW takes (query 2 = AWB A, 3 = AWB B;
 // set 1 = A, 2 = B). Scene files keep the numbers to send. Files from before 2.21.1 (no wbSet mark) hold the
 // query numbers and are converted when they are imported.
-const wbQueryToSet = raw => raw.replace(/^OAW:([2-5])$/i, (_, d) => 'OAW:' + (+d - 1));
+const wbQueryToSet = raw => raw.replace(/^OAW:([23])$/i, (_, d) => 'OAW:' + (+d - 1));
 function sceneWbFixed(sc) {
   if (sc.wbSet) return sc;
   return { ...sc, wbSet: true, params: sc.params.map(x => x.cmd === 'OAW' && x.raw ? { ...x, raw: wbQueryToSet(x.raw) } : x) };
@@ -499,7 +499,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
   if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); }
-  if (b.dataset.tab === 'eng') { renderEng(); renderSceneSet(); }
+  if (b.dataset.tab === 'eng') { renderEng(); renderSetup(); }
   if (b.dataset.tab === 'cams' && Date.now() - (state.eipAt || 0) > 60000 && !$('#eipSearch').disabled) { state.eipAt = Date.now(); eipDiscover(); }
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
   $('.content').scrollTop = 0;
@@ -2811,75 +2811,196 @@ async function engClick(btn) {
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
-/* ---- Engineering: settings per scene (white balance, gain, iris), on many cameras at once ---- */
-// Gain: OGU data 08h = 0 dB, one step per dB; 80h = AGC on
-const GAIN_OPTS = [['', '–'], ['80', 'Auto (AGC)'], ...[-3, 0, 3, 6, 9, 12, 15, 18, 24].map(d => [(8 + d).toString(16).toUpperCase().padStart(2, '0'), `${d > 0 ? '+' : ''}${d} dB`])];
+/* ---- Engineering: setup for many cameras (system settings, OSD mix, tally, pan/tilt, white balance per scene) ---- */
+// Commands as the camera's own web page uses them (System page of an AW-UE150 V3.20). cam: set prefix + value, the
+// query answers with the same prefix; ptz: '#XXX' + value, the query answers e.g. 'tAE1'.
+const FREQS = [['0', '59.94Hz', [['19', '2160/59.94p'], ['17', '2160/29.97p'], ['10', '1080/59.94p'], ['04', '1080/59.94i'], ['14', '1080/29.97p'], ['07', '1080/29.97PsF'], ['16', '1080/23.98p (over 59.94i)'], ['01', '720/59.94p']]],
+  ['1', '50Hz', [['1A', '2160/50p'], ['18', '2160/25p'], ['11', '1080/50p'], ['05', '1080/50i'], ['15', '1080/25p'], ['08', '1080/25PsF'], ['02', '720/50p']]],
+  ['2', '24Hz', [['21', '2160/24p'], ['22', '1080/24p']]],
+  ['3', '23.98Hz', [['1B', '2160/23.98p'], ['23', '1080/23.98p'], ['0A', '1080/23.98PsF']]]];
 const SCENE_WB_OPTS = [['', '–'], ['auto', 'Auto (ATW)'], ['k32', '3200K'], ['k56', '5600K'], ['a', 'Memory A'], ['b', 'Memory B'], ['var', 'VAR']];
-const IRIS_OPTS = [['', '–'], ['1', 'Auto'], ['0', 'Manual']];
-const sceneSetRows = () => { const n = Math.max(4, ...state.cameras.filter(c => c.selected && c.model).map(c => profileFor(c.model).scenes || 4)); const t = store.get('sceneSet', {}); return Array.from({ length: n }, (_, i) => ({ n: i + 1, ...(t[i + 1] || {}) })); };
-function renderSceneSet() {
-  const opt = (list, v) => list.map(([k, l]) => `<option value="${k}" ${k === (v || '') ? 'selected' : ''}>${esc(l)}</option>`).join('');
-  $('#sceneSetTable tbody').innerHTML = sceneSetRows().map(r => `<tr data-n="${r.n}"><td><b>Scene ${r.n}</b></td>
-    <td><select data-k="wb" aria-label="White balance of scene ${r.n}">${opt(SCENE_WB_OPTS, r.wb)}</select></td>
-    <td><label class="kfield"><input type="number" data-k="k" min="2000" max="15000" step="10" value="${esc(r.k || '')}" placeholder="5600" ${r.wb === 'var' ? '' : 'disabled'} aria-label="VAR colour temperature of scene ${r.n}"><span>K</span></label></td>
-    <td><select data-k="gain" aria-label="Gain of scene ${r.n}">${opt(GAIN_OPTS, r.gain)}</select></td>
-    <td><select data-k="iris" aria-label="Iris of scene ${r.n}">${opt(IRIS_OPTS, r.iris)}</select></td></tr>`).join('');
-  $$('#sceneSetTable [data-k]').forEach(el => el.onchange = () => {
-    const n = el.closest('tr').dataset.n, t = store.get('sceneSet', {});
-    t[n] = { ...(t[n] || {}), [el.dataset.k]: el.value.trim() }; store.set('sceneSet', t); renderSceneSet();
-  });
+const OFFON = [['0', 'Off'], ['1', 'On']], DISEN = [['1', 'Enable'], ['0', 'Disable']], FAN = [['0', 'Auto'], ['1', 'High'], ['2', 'Mid'], ['3', 'Low']];
+const SETUP = [
+  { g: 'Video', k: 'format', l: 'Frequency and format', format: true },
+  { g: 'Video', k: 'shoot', l: 'Shooting mode', set: 'OSI:30:', q: 'QSI:30', o: [['0', 'Normal'], ['1', 'High Sens.']] },
+  { g: 'Video', k: 'color', l: 'Color setting', set: 'OSJ:56:', q: 'QSJ:56', o: [['0', 'Normal'], ['1', 'V-Log']] },
+  { g: 'OSD mix', k: 'osd12g', l: '12G SDI / optical', bit: 0x20, o: OFFON },
+  { g: 'OSD mix', k: 'osd3g', l: '3G SDI', bit: 0x01, o: OFFON },
+  { g: 'OSD mix', k: 'osdmoni', l: 'MONI', bit: 0x40, o: OFFON },
+  { g: 'OSD mix', k: 'osdhdmi', l: 'HDMI', bit: 0x02, o: OFFON },
+  { g: 'OSD mix', k: 'osdip', l: 'IP', bit: 0x10, o: OFFON },
+  { g: 'OSD mix', k: 'osdrt', l: 'OSD off with R-tally', set: 'OSE:75:', q: 'QSE:75', o: OFFON },
+  { g: 'Tally', k: 'tally', l: 'Tally', ptz: '#TAE', o: DISEN },
+  { g: 'Tally', k: 'tallybr', l: 'Tally brightness', set: 'OSA:D3:', q: 'QSA:D3', o: [['0', 'Low'], ['1', 'Mid'], ['2', 'High']] },
+  { g: 'Tally', k: 'lamp', l: 'Status lamp', ptz: '#LMP', o: DISEN },
+  { g: 'Pan / tilt', k: 'install', l: 'Install position', ptz: '#INS', o: [['0', 'Desktop'], ['1', 'Hanging']] },
+  { g: 'Pan / tilt', k: 'spf', l: 'Smart picture flip', ptz: '#SPF', o: [['0', 'Off'], ['1', 'Auto']] },
+  { g: 'Pan / tilt', k: 'ptspeed', l: 'P/T speed mode', set: 'OSJ:2D:', q: 'QSJ:2D', o: [['0', 'Normal (60°/s)'], ['1', 'Fast (180°/s)'], ['2', 'Quick (60°/s)']] },
+  { g: 'Pan / tilt', k: 'swz', l: 'Speed with zoom position', ptz: '#SWZ', o: OFFON },
+  { g: 'Pan / tilt', k: 'faz', l: 'Focus adjust with PTZ', set: 'OAZ:', q: 'QAZ', o: OFFON },
+  { g: 'Presets', k: 'scope', l: 'Preset scope', set: 'OSE:71:', q: 'QSE:71', o: [['0', 'Mode A'], ['1', 'Mode B'], ['2', 'Mode C']] },
+  { g: 'Presets', k: 'pst', l: 'Preset speed table', ptz: '#PST', o: [['0', 'Slow'], ['1', 'Mid'], ['2', 'Fast']] },
+  { g: 'Presets', k: 'prf', l: 'Freeze during preset', ptz: '#PRF', o: OFFON },
+  { g: 'Presets', k: 'pwron', l: 'Power-on position', set: 'OSJ:45:', q: 'QSJ:45', o: [['0', 'None'], ['1', 'Standby'], ['2', 'Home'], ['3', 'Preset']] },
+  { g: 'System', k: 'wlc', l: 'Wireless control', ptz: '#WLC', o: DISEN },
+  { g: 'System', k: 'fan1', l: 'Fan 1', ptz: '#FAN', o: FAN },
+  { g: 'System', k: 'fan2', l: 'Fan 2', ptz: '#FA2', o: FAN },
+  ...[1, 2, 3, 4].map(n => ({ g: 'White balance per scene', k: 'wb' + n, l: `Scene ${n}`, wb: n, o: SCENE_WB_OPTS.slice(1) })),
+];
+const setupVal = () => store.get('engSetup', {});
+const setupLabel = (f, v) => f.format ? (() => { const [fr, fm] = v.split('|'); const F = FREQS.find(x => x[0] === fr); return `${F?.[1]} ${F?.[2].find(x => x[0] === fm)?.[1] || ''}`; })() : f.wb && v === 'var' ? `VAR ${setupVal()['k' + f.wb] || ''} K` : (f.o.find(x => x[0] === v)?.[1] || v);
+function renderSetup() {
+  const v = setupVal();
+  const groups = [...new Set(SETUP.map(f => f.g))];
+  const sel = f => f.format
+    ? `<select data-k="${f.k}" aria-label="${esc(f.l)}"><option value="">–</option>${FREQS.map(([fr, fl, list]) => `<optgroup label="${fl}">${list.map(([fm, l]) => `<option value="${fr}|${fm}" ${v[f.k] === fr + '|' + fm ? 'selected' : ''}>${fl} · ${l}</option>`).join('')}</optgroup>`).join('')}</select>`
+    : `<select data-k="${f.k}" aria-label="${esc(f.l)}"><option value="">–</option>${f.o.map(([k, l]) => `<option value="${k}" ${v[f.k] === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  $('#setupForm').innerHTML = groups.map(g => `<div class="setup-group"><h3>${esc(g)}</h3>${SETUP.filter(f => f.g === g).map(f => `<label class="setup-row${v[f.k] ? ' set' : ''}"><span>${esc(f.l)}</span>${sel(f)}${f.wb ? `<span class="kfield${v[f.k] === 'var' ? '' : ' hidden'}"><input type="number" data-k="k${f.wb}" min="2000" max="15000" step="10" value="${esc(v['k' + f.wb] || '')}" placeholder="5600" aria-label="VAR colour temperature of scene ${f.wb}"><span>K</span></span>` : ''}</label>`).join('')}</div>`).join('');
+  $$('#setupForm [data-k]').forEach(el => el.onchange = () => { const t = setupVal(); if (el.value.trim()) t[el.dataset.k] = el.value.trim(); else delete t[el.dataset.k]; store.set('engSetup', t); renderSetup(); });
+  const n = SETUP.filter(f => v[f.k]).length;
+  $('#setupStatus').textContent = n ? `${n} setting${n > 1 ? 's' : ''} chosen` : 'Nothing chosen yet';
 }
-$('#sceneSetClear').onclick = () => { store.set('sceneSet', {}); renderSceneSet(); };
-$('#sceneSetApply').onclick = async () => {
-  const plan = sceneSetRows().filter(r => r.wb || r.gain || r.iris);
-  const cams = engCams();
-  if (!plan.length) return info('Nothing to set yet', 'Choose a white balance, gain or iris for at least one scene.');
-  if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
-  const badK = plan.find(r => r.wb === 'var' && !validK(+r.k));
-  if (badK) return info('Check the colour temperature', `Scene ${badK.n} is set to VAR: fill in a colour temperature from 2000 to 15000 K.`);
-  const what = r => [r.wb && (r.wb === 'var' ? `VAR ${r.k} K` : WB_NAME[r.wb]), r.gain && GAIN_OPTS.find(g => g[0] === r.gain)[1], r.iris && `iris ${IRIS_OPTS.find(g => g[0] === r.iris)[1].toLowerCase()}`].filter(Boolean).join(', ');
-  if (!await ask({ title: `Set ${plan.length} scene${plan.length > 1 ? 's' : ''} on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Apply', danger: true, body: `<ul class="tight">${plan.map(r => `<li><b>Scene ${r.n}</b>: ${esc(what(r))}</li>`).join('')}</ul>
-      <p>Every camera switches to these scenes one by one (the picture changes for a few seconds per scene) and then goes back to the scene that was live.</p><p class="muted small">${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
-  if (!state.bridgeOk && !(await checkBridge())) return;
-  $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = 'Settings per scene';
-  $('#sceneSetStatus').textContent = $('#engStatus').textContent = `Setting ${plan.length} scene${plan.length > 1 ? 's' : ''} on ${cams.length} camera${cams.length > 1 ? 's' : ''}…`;
-  const rows = await Promise.all(cams.map(async c => {
-    const raw = [], out = [];
-    const send = async (type, cmd) => { try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
-    let orig, cur;
-    try { if (!c.model) await identify(c); orig = cur = await getScene(c); } catch (e) { return { c, raw, res: 'Not reachable', bad: true }; }
-    for (const r of plan) {
-      if (r.n > (profileFor(c.model).scenes || 4)) { out.push({ bad: true, t: `Scene ${r.n}: this camera has no scene ${r.n}` }); continue; }
-      try { if (r.n !== cur) { await switchScene(c, r.n); cur = r.n; } } catch (e) { out.push({ bad: true, t: `Scene ${r.n}: ${e.message}` }); continue; }
-      const res = [];
-      if (r.wb) { const m = engVerdict(await wbModeCmds(send, c.model, r.wb)); res.push(m.bad ? `white balance: ${m.res}` : null);
-        if (!m.bad && r.wb === 'var') { const k = engVerdict(await setVarK(send, +r.k)); res.push(k.bad ? `colour temperature: ${k.res}` : null); } }
-      if (r.gain) { const g = engVerdict(await send('cam', 'OGU:' + r.gain)); res.push(g.bad ? `gain: ${g.res}` : null); }
-      if (r.iris) { const i = engVerdict(await send('cam', 'ORS:' + r.iris)); res.push(i.bad ? `iris: ${i.res}` : null); }
-      if (profileFor(c.model).fam === 'UE160') await send('cam', 'OSL:90:' + r.n); // UE160: store in the scene file
-      // check: read back what was set
-      await sleep(300);
-      const chk = [];
-      if (r.wb) { const q = await send('cam', 'QAW'); const m = /^OAW:(\d)$/i.exec(q?.body || ''); if (m && WB_FROM_OAW[m[1]] && WB_FROM_OAW[m[1]] !== r.wb) chk.push(`white balance reads ${WB_NAME[WB_FROM_OAW[m[1]]]}`); }
-      if (r.wb === 'var') { const q = await send('cam', 'QSI:20'); const k = kelvinFrom(q?.body); if (k && Math.abs(k - r.k) > 10) chk.push(`colour temperature reads ${k} K`); }
-      if (r.gain) { const q = await send('cam', 'QGU'); if (q?.ok && !isErr(q.body) && q.body.toUpperCase() !== 'OGU:' + r.gain) chk.push(`gain reads ${q.body}`); }
-      if (r.iris) { const q = await send('cam', 'QRS'); if (q?.ok && !isErr(q.body) && q.body !== 'ORS:' + r.iris) chk.push(`iris reads ${q.body}`); }
-      const errs = res.filter(Boolean).concat(chk);
-      out.push(errs.length ? { bad: true, t: `Scene ${r.n}: ${errs.join('; ')}` } : { t: `Scene ${r.n}: ${what(r)}` });
+$('#setupClear').onclick = () => { store.set('engSetup', {}); renderSetup(); };
+// one camera: read every setting (and, if asked, the white balance of scenes 1 to 4: the camera switches scenes)
+async function readSetup(c, withScenes) {
+  const send = async (type, cmd) => (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0];
+  const got = {};
+  for (const f of SETUP) {
+    if (f.wb || f.bit) continue;
+    if (f.format) { const a = await send('cam', 'QSE:77'), b = await send('cam', 'QSA:87'); const fr = /OSE:77:(\d)/.exec(a?.body || '')?.[1], fm = /OSA:87:([0-9A-F]{2})/i.exec(b?.body || '')?.[1]?.toUpperCase(); if (fr && fm) got.format = fr + '|' + fm; continue; }
+    const r = f.ptz ? await send('ptz', f.ptz) : await send('cam', f.q);
+    if (!r?.ok || isErr(r.body)) continue;
+    const val = f.ptz ? r.body.slice(f.ptz.length - 1) : r.body.startsWith(f.set) ? r.body.slice(f.set.length) : null;
+    if (val != null && f.o.some(o => o[0] === val)) got[f.k] = val;
+  }
+  const m = await send('cam', 'QSE:7B'); const mask = parseInt(/OSE:7B:([0-9A-F]+)/i.exec(m?.body || '')?.[1], 16);
+  if (Number.isFinite(mask)) SETUP.filter(f => f.bit).forEach(f => { got[f.k] = mask & f.bit ? '1' : '0'; });
+  if (withScenes) {
+    const orig = await getScene(c);
+    for (let n = 1; n <= 4; n++) {
+      await switchScene(c, n);
+      const q = await send('cam', 'QAW'); const w = WB_FROM_OAW[/^OAW:(\d)$/i.exec(q?.body || '')?.[1]];
+      if (w) { got['wb' + n] = w; if (w === 'var') { const k = kelvinFrom((await send('cam', 'QSI:20'))?.body); if (k) got['k' + n] = String(k); } }
     }
-    try { if (orig && cur !== orig) await switchScene(c, orig); c.scene = orig; } catch (e) { out.push({ bad: true, t: `Back to scene ${orig}: ${e.message}` }); }
-    return { c, raw, out, bad: out.some(o => o.bad) };
-  }));
+    await switchScene(c, orig);
+  }
+  return got;
+}
+$('#setupRead').onclick = async () => {
+  if (!state.cameras.length) return info('No cameras yet', 'Add cameras on the Cameras page first.');
+  const first = engCams()[0] || state.cameras[0];
+  const ok = await ask({ title: 'Read the setup of a camera', ok: 'Read', body: `<label>Camera <select id="srCam">${state.cameras.map(c => `<option value="${esc(c.ip)}" ${c === first ? 'selected' : ''}>${esc(camName(c))} – ${esc(c.ip)}</option>`).join('')}</select></label>
+    <label class="check"><input type="checkbox" id="srScenes" checked> Also read the white balance of scenes 1 to 4 <span class="muted">(the camera switches to each scene for a moment, then back)</span></label>
+    <p class="hint">The form gets the camera's current values; nothing changes on the camera${''}. Then tick the cameras that should get the same and choose Apply.</p>` });
+  if (!ok) return;
+  const c = state.cameras.find(x => x.ip === $('#srCam').value), withScenes = $('#srScenes').checked;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  $('#setupStatus').textContent = `Reading ${camName(c)}…`;
+  try { const got = await readSetup(c, withScenes); store.set('engSetup', got); renderSetup(); toast(`Setup of ${camName(c)} read: ${Object.keys(got).filter(k => !/^k\d$/.test(k)).length} settings`); }
+  catch (e) { info('Could not read the camera', esc(e.message)); renderSetup(); }
+};
+// Frequency changes make the camera restart: wait until it is gone and back with the new frequency
+async function waitRestart(c, check, progress) {
+  let gone = false;
+  for (let i = 0; i < 100; i++) {
+    await sleep(2000);
+    let r; try { r = (await batch(c, [{ cmd: 'QSE:77' }, { type: 'ptz', cmd: '#O' }], { delayMs: 0 }))[0]; } catch { r = null; }
+    if (!r?.ok) { gone = true; progress(`${camName(c)}: restarting…`); continue; }
+    if ((gone || i > 20) && check(r.body)) return true;
+  }
+  return false;
+}
+$('#setupApply').onclick = async () => {
+  const v = setupVal(), cams = engCams();
+  const plan = SETUP.filter(f => v[f.k]);
+  if (!plan.length) return info('Nothing chosen yet', 'Choose at least one setting, or read the setup of a camera first.');
+  if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
+  const badK = plan.find(f => f.wb && v[f.k] === 'var' && !validK(+v['k' + f.wb]));
+  if (badK) return info('Check the colour temperature', `${esc(badK.l)} is set to VAR: fill in a colour temperature from 2000 to 15000 K.`);
+  const freq = v.format?.split('|')[0];
+  const scenes = plan.filter(f => f.wb);
+  if (!await ask({ title: `Apply ${plan.length} setting${plan.length > 1 ? 's' : ''} to ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Apply', danger: true, wide: true, body: `
+      <div class="setup-sum">${[...new Set(plan.map(f => f.g))].map(g => `<div><b>${esc(g)}</b>: ${plan.filter(f => f.g === g).map(f => `${esc(f.l)} ${esc(setupLabel(f, v[f.k]))}`).join(', ')}</div>`).join('')}</div>
+      ${freq ? '<p class="warn-text">A camera that gets another frequency restarts (about a minute without picture).</p>' : ''}
+      ${scenes.length ? '<p>For the white balance every camera switches to those scenes one by one and then goes back to the scene that was live.</p>' : ''}
+      <p class="muted small">Only settings that differ are sent; every value is read back afterwards. ${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = 'Setup';
+  const progress = t => { $('#setupStatus').textContent = $('#engStatus').textContent = t; };
+  progress(`Setting up ${cams.length} camera${cams.length > 1 ? 's' : ''}…`);
+  const rows = await applySetup(cams, v, progress);
   $('#tab-eng').classList.remove('busy');
   const ok = rows.filter(r => !r.bad).length;
-  $('#sceneSetStatus').textContent = $('#engStatus').textContent = `${ok} of ${rows.length} cameras done · ${new Date().toLocaleTimeString('en-GB')}`;
-  $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td>${(r.out || [{ bad: true, t: r.res }]).map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td><td class="mono small muted">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
+  progress(`${ok} of ${rows.length} camera${rows.length > 1 ? 's' : ''} done · ${new Date().toLocaleTimeString('en-GB')}`);
+  $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td>${r.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td><td class="mono small muted"><details><summary>${r.raw.length} commands</summary>${r.raw.map(esc).join('<br>')}</details></td></tr>`).join('')}</tbody></table>`;
   $('#engResultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  log(`Engineering: settings per scene: ${ok}/${rows.length} ok`);
+  log(`Engineering: setup: ${ok}/${rows.length} ok`);
   if (live.cam && cams.includes(live.cam)) liveRead();
 };
-
-$('#engVarK').addEventListener('keydown', e => { if (e.key === 'Enter') $('[data-eng="varK"]').click(); });
+// Put the setup v on every camera; returns per camera what was done ({ c, out: [{ t, bad }], raw })
+async function applySetup(cams, v, progress = () => {}) {
+  const plan = SETUP.filter(f => v[f.k]), scenes = plan.filter(f => f.wb);
+  return Promise.all(cams.map(async c => {
+    const raw = [], out = [];
+    const send = async (type, cmd) => { try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
+    const okBody = r => r?.ok && !isErr(r.body);
+    try { if (!c.model) await identify(c); } catch { return { c, raw, out: [{ bad: true, t: 'Not reachable' }], bad: true }; }
+    // 1. frequency and format first (a frequency change restarts the camera)
+    if (v.format) {
+      const [fr, fm] = v.format.split('|'), f = SETUP[0];
+      const nowF = /OSE:77:(\d)/.exec((await send('cam', 'QSE:77'))?.body || '')?.[1];
+      if (nowF !== fr) {
+        const r = await send('cam', 'OSE:77:' + fr);
+        if (!okBody(r)) out.push({ bad: true, t: `Frequency: ${engVerdict(r).res}` });
+        else { progress(`${camName(c)}: restarting for ${FREQS.find(x => x[0] === fr)[1]}…`); if (!await waitRestart(c, b => b === 'OSE:77:' + fr, progress)) out.push({ bad: true, t: 'Frequency: the camera did not come back within 3 minutes' }); }
+      }
+      const nowM = /OSA:87:([0-9A-F]{2})/i.exec((await send('cam', 'QSA:87'))?.body || '')?.[1]?.toUpperCase();
+      if (nowM !== fm) { const r = await send('cam', 'OSA:87:' + fm); if (!okBody(r)) out.push({ bad: true, t: `Format: ${engVerdict(r).res}` }); await sleep(1500); }
+      const chkF = (await send('cam', 'QSE:77'))?.body, chkM = (await send('cam', 'QSA:87'))?.body?.toUpperCase();
+      out.push(chkF === 'OSE:77:' + fr && chkM === 'OSA:87:' + fm ? { t: `Format: ${setupLabel(f, v.format)}` } : { bad: true, t: `Format: reads ${chkF || '?'} ${chkM || '?'}` });
+    }
+    // 2. single settings: send only what differs, then read back
+    for (const f of plan.filter(f => !f.format && !f.wb && !f.bit)) {
+      const want = v[f.k];
+      const read = async () => { const r = f.ptz ? await send('ptz', f.ptz) : await send('cam', f.q); return !okBody(r) ? null : f.ptz ? r.body.slice(f.ptz.length - 1) : r.body.startsWith(f.set) ? r.body.slice(f.set.length) : null; };
+      let now = await read();
+      if (now !== want) { const r = f.ptz ? await send('ptz', f.ptz + want) : await send('cam', f.set + want); if (!okBody(r)) { out.push({ bad: true, t: `${f.l}: ${engVerdict(r).res}` }); continue; } await sleep(150); now = await read(); }
+      out.push(now === want ? { t: `${f.l}: ${setupLabel(f, want)}` } : { bad: true, t: `${f.l}: reads ${now ?? '?'}` });
+    }
+    // 3. OSD mix: one byte, a bit per output
+    const bits = plan.filter(f => f.bit);
+    if (bits.length) {
+      const cur = parseInt(/OSE:7B:([0-9A-F]+)/i.exec((await send('cam', 'QSE:7B'))?.body || '')?.[1], 16);
+      if (!Number.isFinite(cur)) out.push({ bad: true, t: 'OSD mix: not supported by this camera' });
+      else {
+        let m = cur; bits.forEach(f => { m = v[f.k] === '1' ? (m | f.bit) : (m & ~f.bit); });
+        if (m !== cur) await send('cam', 'OSE:7B:' + m.toString(16).toUpperCase().padStart(2, '0'));
+        const back = parseInt(/OSE:7B:([0-9A-F]+)/i.exec((await send('cam', 'QSE:7B'))?.body || '')?.[1], 16);
+        bits.forEach(f => { const on = !!(back & f.bit); out.push(on === (v[f.k] === '1') ? { t: `OSD mix ${f.l}: ${on ? 'On' : 'Off'}` } : { bad: true, t: `OSD mix ${f.l}: reads ${on ? 'On' : 'Off'}` }); });
+      }
+    }
+    // 4. white balance per scene
+    if (scenes.length) {
+      let orig, cur;
+      try { orig = cur = await getScene(c); } catch { orig = null; }
+      for (const f of scenes) {
+        const n = f.wb, want = v[f.k];
+        if (n > (profileFor(c.model).scenes || 4)) { out.push({ bad: true, t: `Scene ${n}: this camera has no scene ${n}` }); continue; }
+        try { if (n !== cur) { await switchScene(c, n); cur = n; } } catch (e) { out.push({ bad: true, t: `Scene ${n}: ${e.message}` }); continue; }
+        const m = engVerdict(await wbModeCmds(send, c.model, want));
+        if (!m.bad && want === 'var') { const k = engVerdict(await setVarK(send, +v['k' + n])); if (k.bad) { out.push({ bad: true, t: `Scene ${n} colour temperature: ${k.res}` }); continue; } }
+        if (profileFor(c.model).fam === 'UE160') await send('cam', 'OSL:90:' + n);
+        if (m.bad) { out.push({ bad: true, t: `Scene ${n} white balance: ${m.res}` }); continue; }
+        await sleep(300);
+        const q = /^OAW:(\d)$/i.exec((await send('cam', 'QAW'))?.body || ''), now = q && WB_FROM_OAW[q[1]];
+        let okK = true; if (want === 'var') { const k = kelvinFrom((await send('cam', 'QSI:20'))?.body); okK = !!k && Math.abs(k - v['k' + n]) <= 10; }
+        out.push(now === want && okK ? { t: `Scene ${n}: ${setupLabel(f, want)}` } : { bad: true, t: `Scene ${n}: white balance reads ${now ? WB_NAME[now] : '?'}` });
+      }
+      try { if (orig && cur !== orig) await switchScene(c, orig); c.scene = orig; } catch (e) { out.push({ bad: true, t: `Back to scene ${orig}: ${e.message}` }); }
+    }
+    return { c, raw, out, bad: out.some(o => o.bad) };
+  }));
+}
 
 /* ------------------------------------------------------------------ refresh: read everything again */
 async function refreshPage() {
@@ -3328,9 +3449,10 @@ $('#liveShoot0').onclick = () => liveShoot(0);
 $('#liveShoot1').onclick = () => liveShoot(1);
 $('#liveDay').onclick = () => liveDayNight(false);
 $('#liveNight').onclick = () => liveDayNight(true);
-// White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 3 = 3200K, 4 = 5600K, 9 = VAR.
+// White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 4 = 3200K, 5 = 5600K, 9 = VAR (OAW:3 gives ATW).
+// Checked on an AW-UE150 V3.20: the query answers 2 for A and 3 for B, but 4 and 5 for 3200K and 5600K.
 // The AW-UE160 uses OSL:2A (ATW on/off) and OSL:2B (0 = A, 1 = B, 4 = VAR) when OAW is refused.
-const WB_OAW = { auto: '0', a: '1', b: '2', k32: '3', k56: '4', var: '9' };
+const WB_OAW = { auto: '0', a: '1', b: '2', k32: '4', k56: '5', var: '9' };
 // QAW answers with other numbers than OAW takes: 0 ATW, 2 AWB A, 3 AWB B, 4 3200K, 5 5600K, 9 VAR
 // ("Data of control and question is different", Panasonic protocol table; checked on an AW-UE150 V3.20)
 const WB_NAME = { auto: 'Auto (ATW)', var: 'VAR', a: 'Memory A', b: 'Memory B', k32: '3200K', k56: '5600K' };
