@@ -516,6 +516,7 @@ $('#bridgeSettingsBtn').onclick = () => {
   renderProjects(); renderDefaults();
   $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
   $('#setUpdates').checked = store.get('updateCheck', true);
+  $('#setExpert').checked = !!ls.get('pscene.expert', false);
   $('#setLivePath').value = state.livePath; $('#setSetupPath').value = state.setupPath;
   $('#aboutText').textContent = `Panasonic Toolbox ${state.version || ''}. Running locally at ${location.host}. This computer's IP addresses: ${state.localIps.join(', ') || '–'}`;
   $('#settingsDlg').showModal();
@@ -526,6 +527,7 @@ $('#saveSettings').onclick = () => {
   store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
   store.set('livePath', state.livePath); store.set('setupPath', state.setupPath);
   store.set('updateCheck', $('#setUpdates').checked);
+  ls.set('pscene.expert', $('#setExpert').checked); applyExpert();
   const d = $('#setSaveDir').value.trim();
   if (d && d !== state.saveDir) setSaveDir(d).catch(e => info('Cannot use this folder', esc(e.message)));
 };
@@ -820,6 +822,7 @@ function renderCams() {
   $('#camCount').textContent = state.cameras.length;
   $('#camFoundN').textContent = nf ? `+ ${nf} found on the network` : '';
   $('#camEmpty').classList.toggle('hidden', state.cameras.length + nf > 0);
+  $('#camWelcome').classList.toggle('hidden', state.cameras.length + nf > 0);
   const pend = allNetRows().filter(netPending).length;
   $('#camPending').classList.toggle('hidden', !pend);
   $('#camPendingN').textContent = `${pend} camera${pend > 1 ? 's' : ''} changed, not sent yet`;
@@ -980,7 +983,7 @@ $('#camEditSel').onclick = async () => {
         <td><input data-ed-desc="${i}" value="${esc(c.desc || '')}" placeholder="e.g. balcony left" aria-label="Description"></td></tr>`).join('')}</tbody></table>
       ${sel.length > 1 ? `<div class="row wrap bulk-desc"><label class="grow">Description for all selected cameras <input id="edDescAll" placeholder="e.g. Stage {n}" autocomplete="off"></label><button type="button" class="ghost small" id="edDescFill">Fill in</button></div>
       <p class="hint">{n} becomes 1, 2, 3… in the order of the list, so “Stage {n}” gives Stage 1, Stage 2… Without {n} every camera gets the same description. You can still change single rows afterwards.</p>` : ''}
-      <p class="hint">Change the IP address when a camera got a new one. The app then talks to the new address; destinations on the Import page and in your shows move along.</p>
+      <p class="hint">Change the IP address when a camera got a new one. The app then talks to the new address; destinations on the Restore page and in your shows move along.</p>
       <div class="row wrap">
       <label class="w140">Zone <input id="edZone" list="zoneList" value="${esc(same('zone'))}" placeholder="${sel.length > 1 && !same('zone') ? 'several' : ''}"></label>
       <label class="w90">Port <input id="edPort" type="number" value="${esc(same('port') || '')}" placeholder="${sel.length > 1 && !same('port') ? 'several' : '80'}"></label></div>
@@ -1322,8 +1325,8 @@ $('#exportBtn').onclick = async () => {
   const zip = cams.length > 1 && $('#expZip').checked;
   const jumps = kind === 'scene' && mode === 'pick';
   const ok = await ask({
-    title: `Export ${kind === 'operator' ? 'operator files' : 'scene files'} of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
-    wide: true, danger: jumps, ok: jumps ? 'Switch scenes and export' : 'Export',
+    title: `Back up ${kind === 'operator' ? 'the operator settings of ' : ''}${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
+    wide: true, danger: jumps, ok: jumps ? 'Switch scenes and back up' : 'Back up',
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${p.html ? p.what : esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
       <p>${zip ? `The files go into one ZIP: <span class="mono">${esc(zipName(kind, cams.length))}</span>, ` : 'The files are saved '}in <span class="mono">${esc([state.saveDir || 'Downloads › Panasonic Toolbox', ...subFor(kind)].join(' › '))}</span>. Existing files are never overwritten.</p>
       ${jumps ? '<p><b>The picture will change:</b> to read these scenes each camera switches to them and then returns to the scene that was live. Do not do this while a camera is on air.</p>' : '<p>Reading changes nothing on the cameras.</p>'}`,
@@ -1538,7 +1541,7 @@ async function compareImport(j, tr) {
 $('#importBtn').onclick = () => runImport(state.jobs.filter(j => j.include), {
   backup: $('#optBackup').checked, restore: $('#optRestore').checked, store: $('#optStore').checked, verify: $('#optVerify').checked, force: $('#optForce').checked,
 });
-async function runImport(jobs, opts, title = 'Import into these cameras?') {
+async function runImport(jobs, opts, title = 'Restore these cameras?') {
   if (!jobs.length) return info('Nothing to import', 'Open a file and choose a camera for it in step 2.');
   const missing = jobs.filter(j => !state.cameras.some(c => c.ip === j.target));
   if (missing.length) return info('Choose a camera for every row', `${missing.length} row${missing.length > 1 ? 's have' : ' has'} no camera yet.`);
@@ -1551,7 +1554,7 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Gets</th><th>Into</th><th>Settings</th></tr></thead><tbody>${[...byCam].map(([c, js]) => js.map((j, k) => { const sr = srcById(j.srcId); const into = sr.kind === 'operator' ? 'the camera (operator settings)' : j.targetScene === 'active' ? `the live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : `scene ${j.targetScene}${c.scene && +j.targetScene !== c.scene ? ' <span class="muted">(camera switches to it, then back)</span>' : ''}`;
         return `<tr><td>${k ? '' : `${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span>`}</td><td>${esc(srcLabel(sr))}<div class="muted small mono">${esc(sr.fileName)}</div></td><td>${into}</td><td>${srcParams(sr)}</td></tr>`; }).join('')).join('')}</tbody></table>
       <ul class="tight">${opts.backup !== false ? '<li>The current settings of every destination are saved first as a backup file.</li>' : ''}${opts.verify ? '<li>Afterwards every value is read back to check it.</li>' : ''}<li>The picture of these cameras changes immediately. You can undo this afterwards.</li></ul>`,
-    ok: 'Import', danger: true,
+    ok: 'Restore', danger: true,
   });
   if (!ok) return;
   $('#importBtn').disabled = true;
@@ -2807,7 +2810,7 @@ async function engClick(btn) {
   const ok = rows.filter(r => !r.bad).length;
   $('#engStatus').textContent = `${ok} of ${rows.length} done · ${new Date().toLocaleTimeString('en-GB')}`;
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td class="${r.bad ? 'warn-text' : 'ok-text'}">${esc(r.res)}</td><td class="mono raw">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
-  log(`Engineering: ${label}: ${ok}/${rows.length} ok`);
+  log(`All cameras: ${label}: ${ok}/${rows.length} ok`);
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
@@ -2934,7 +2937,7 @@ $('#setupApply').onclick = async () => {
   progress(`${ok} of ${rows.length} camera${rows.length > 1 ? 's' : ''} done · ${new Date().toLocaleTimeString('en-GB')}`);
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td>${r.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td><td class="mono small muted"><details><summary>${r.raw.length} commands</summary>${r.raw.map(esc).join('<br>')}</details></td></tr>`).join('')}</tbody></table>`;
   $('#engResultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  log(`Engineering: setup: ${ok}/${rows.length} ok`);
+  log(`All cameras: setup: ${ok}/${rows.length} ok`);
   if (live.cam && cams.includes(live.cam)) liveRead();
 };
 // Put the setup v on every camera; returns per camera what was done ({ c, out: [{ t, bad }], raw })
@@ -3628,3 +3631,28 @@ window.addEventListener('resize', () => $$('details.menu[open]').forEach(d => d.
     h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
   });
 })();
+
+
+/* ---- easy for everyone: expert tools hidden unless switched on, one big button per page ---- */
+// Parameters, RP150, IP video and the raw camera answers in result tables only show with Settings > Show expert tools.
+function applyExpert() {
+  const on = !!ls.get('pscene.expert', false);
+  document.body.classList.toggle('expert', on);
+  const cur = $('[role=tab].active')?.dataset.tab;
+  if (!on && (cur === 'params' || cur === 'rp150')) $('[role=tab][data-tab=cams]').click();
+}
+applyExpert();
+// Back up: every camera's live scene in one ZIP (the confirmation still shows what will be saved)
+$('#expQuick').onclick = () => {
+  if (!state.cameras.length) return info('No cameras yet', 'Find your cameras on the Cameras page first.');
+  state.cameras.forEach(c => c.selected = true); saveCams();
+  $('input[name=expKind][value=scene]').click(); $('input[name=expMode][value=active]').click();
+  $('#expZip').checked = true; $('#expZip').dispatchEvent(new Event('change'));
+  renderExport(); renderCams(); $('#exportBtn').click();
+};
+// Restore: choose a backup; the cameras are matched by IP address and the Restore button is right below
+$('#impQuick').onclick = () => $('#openFilesBtn').click();
+$('#impQuickGo').onclick = () => $('#importBtn').click();
+// once a backup is open, the big Restore button sits right next to Choose a backup…
+new MutationObserver(() => { const n = new Set(state.jobs.filter(j => j.include !== false && j.target).map(j => j.target)).size; $('#impQuickGo').classList.toggle('hidden', !n); $('#impQuickGo').textContent = n ? `Restore ${n} camera${n > 1 ? 's' : ''} now` : 'Restore now'; $('#impQuick').classList.toggle('ghost-big', !!n); }).observe($('#impTable tbody'), { childList: true, subtree: true });
+$('#camWelcomeBtn').onclick = () => camSearch();
