@@ -2839,7 +2839,7 @@ const SETUP = [
   { g: 'Pan / tilt', k: 'swz', l: 'Speed with zoom position', ptz: '#SWZ', o: OFFON },
   { g: 'Pan / tilt', k: 'faz', l: 'Focus adjust with PTZ', set: 'OAZ:', q: 'QAZ', o: OFFON },
   { g: 'Presets', k: 'scope', l: 'Preset scope', set: 'OSE:71:', q: 'QSE:71', o: [['0', 'Mode A'], ['1', 'Mode B'], ['2', 'Mode C']] },
-  { g: 'Presets', k: 'pst', l: 'Preset speed table', ptz: '#PST', o: [['0', 'Slow'], ['1', 'Mid'], ['2', 'Fast']] },
+  { g: 'Presets', k: 'pst', l: 'Preset speed table', ptz: '#PST', o: [['0', 'Slow'], ['1', 'Mid (not on AW-UE150)'], ['2', 'Fast']] }, // AW-UE150 V3.20 answers eR3 to #PST1
   { g: 'Presets', k: 'prf', l: 'Freeze during preset', ptz: '#PRF', o: OFFON },
   { g: 'Presets', k: 'pwron', l: 'Power-on position', set: 'OSJ:45:', q: 'QSJ:45', o: [['0', 'None'], ['1', 'Standby'], ['2', 'Home'], ['3', 'Preset']] },
   { g: 'System', k: 'wlc', l: 'Wireless control', ptz: '#WLC', o: DISEN },
