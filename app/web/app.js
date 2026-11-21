@@ -234,7 +234,7 @@ async function batch(cam, items, opts = {}) {
   const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, items });
   return j.results;
 }
-const isErr = body => /^e[rR]\d/.test(body || '');
+const isErr = body => /^er\d/i.test((body || '').trim());
 
 /* ------------------------------------------------------------------ camera helpers */
 async function identify(cam) {
@@ -245,7 +245,7 @@ async function identify(cam) {
   cam.model = r[0].body.slice(4);
   cam.scene = parseSceneResp(r[1], cam);
   cam.power = r[2].ok ? (r[2].body === 'p1' ? 'aan' : r[2].body === 'p0' ? 'standby' : r[2].body) : '?';
-  if (r[3].ok && /^OSJ:5C:/i.test(r[3].body)) cam.title = r[3].body.slice(7).trim();
+  if (r[3].ok && /^OSJ:5C:/i.test(r[3].body)) cam.title = titleFrom(r[3].body.slice(7));
   else { // older models: the title from the camera's basic settings page
     try { const [t] = await batch(cam, [{ type: 'basic' }]); if (t?.ok && t.body) cam.title = t.body.trim(); } catch { }
   }
@@ -259,6 +259,17 @@ function parseSceneResp(res, cam) {
   if (profileFor(cam.model).fam === 'UE160' && n >= 8) return 0; // OFF
   return n + 1;
 }
+// Camera title (OSJ:5C): newer models (AW-UE150 V3.x) send and want it as 40 hex digits, the ASCII bytes padded
+// with zeros ("43414D38…" = "CAM8"); others use plain text.
+const titleHex = t => [...t].map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')).join('').padEnd(40, '0').slice(0, 40);
+function titleFrom(v) {
+  v = (v || '').trim();
+  if (/^([0-9A-F]{2}){8,}$/i.test(v)) {
+    const s = v.match(/../g).map(h => parseInt(h, 16)).filter(n => n !== 0).map(n => String.fromCharCode(n)).join('');
+    if (/^[\x20-\x7e]*$/.test(s)) return s.trim();
+  }
+  return v;
+}
 async function getScene(cam) {
   const [r] = await batch(cam, [{ cmd: 'QSF' }]);
   return parseSceneResp(r, cam);
@@ -271,7 +282,7 @@ async function switchScene(cam, n) {
 function parseRead(p, res) {
   if (!res || !res.ok) return { err: res?.error || 'no response' };
   const b = (res.body || '').trim();
-  if (isErr(b)) return { err: b.slice(0, 3).toUpperCase() };
+  if (isErr(b)) return { err: /^er1/i.test(b) ? 'not on this model or firmware (ER1)' : b.slice(0, 3).toUpperCase() };
   if (p.t === 'ptz') {
     const code = p.cmd.slice(1).toLowerCase();
     if (b.toLowerCase().startsWith(code)) return { raw: '#' + b.toUpperCase() };
@@ -2302,9 +2313,13 @@ async function setCamName(r, v, waitForNetwork) {
     try {
       // two names: the camera title in the camera menu (OSJ:5C) and the camera name of the web page and the
       // network (cam_title, also what Easy IP shows). Both are set; the web name needs the admin login.
-      const res = await batch(cam, [{ cmd: 'OSJ:5C:' + v.name }, { type: 'cgi', path: '/cgi-bin/set_basic', query: { cam_title: v.name } }, { type: 'basic' }], { delayMs: 300 });
-      if (res[0]?.status === 401 || res[1]?.status === 401) throw new Error('login required (enter the camera login in Settings)');
-      const title = res[0]?.ok && !isErr(res[0].body), web = (res[2]?.body || '') === v.name;
+      // web name first (set_basic, admin login), then the title: as hex (AW-UE150 V3.x), else as text
+      const [webSet, hexTitle] = await batch(cam, [{ type: 'cgi', path: '/cgi-bin/set_basic', query: { cam_title: v.name } }, { cmd: 'OSJ:5C:' + titleHex(v.name) }], { delayMs: 300 });
+      const titleSet = hexTitle?.ok && isErr(hexTitle.body) ? (await batch(cam, [{ cmd: 'OSJ:5C:' + v.name }]))[0] : hexTitle;
+      const [webNow] = await batch(cam, [{ type: 'basic' }]);
+      const res = [titleSet, webSet, webNow];
+      if (titleSet?.status === 401 || webSet?.status === 401) throw new Error('login required (enter the camera login in Settings)');
+      const title = titleSet?.ok && !isErr(titleSet.body), web = (webNow?.body || '') === v.name;
       if (title || web) {
         log(`Name of ${r.mac} set to "${v.name}" (menu title ${title ? 'ok' : res[0]?.body}, web name ${web ? 'ok' : 'still ' + (res[2]?.body || '?')})`);
         if (!web) throw new Error(`the camera title changed, but the name on the web page is still "${res[2]?.body || '?'}" (answer to set_basic: ${res[1]?.status || res[1]?.error})`);
@@ -2433,7 +2448,7 @@ function engVerdict(r, okText = 'Done') {
   if (!r) return { res: 'No answer', bad: true };
   if (r.status === 401) return { res: 'Login required (Camera login in Settings)', bad: true };
   if (r.unreachable || !r.ok) return { res: 'Not reachable', bad: true };
-  if (isErr(r.body)) return { res: r.body.toUpperCase().startsWith('ER2') ? 'Camera busy (ER2), try again' : r.body.toUpperCase().startsWith('ER3') ? 'Value out of range (ER3)' : 'Not supported by this camera (' + r.body + ')', bad: true };
+  if (isErr(r.body)) return { res: r.body.toUpperCase().startsWith('ER2') ? 'Camera busy or in standby (ER2)' : r.body.toUpperCase().startsWith('ER3') ? 'Value out of range (ER3)' : 'Not supported by this camera (' + r.body + ')', bad: true };
   return { res: okText };
 }
 const ENG = {
@@ -2481,11 +2496,15 @@ const ENG = {
     } },
   ipvideo: { label: v => `IP video ${v === '1' ? 'on' : 'off'}`, confirm: v => v === '0' && 'Switches the H.264 streams of the camera off. Anything that watches those streams (a decoder, a recorder, vMix) loses the picture.',
     run: async (send, c, v, b, cgi) => {
+      // the camera's own settings page posts h264_transmit to set_h264, set_h264_2…4 (a GET is refused with 400)
       const paths = ['/cgi-bin/set_h264', '/cgi-bin/set_h264_2', '/cgi-bin/set_h264_3', '/cgi-bin/set_h264_4'];
-      const rs = []; for (const p of paths) rs.push(await cgi(p, { h264_transmit: v }));
+      const rs = []; for (const p of paths) rs.push(await cgi(p, { h264_transmit: v }, 'POST'));
       if (rs[0]?.status === 401) return { res: 'Login required (Camera login in Settings)', bad: true };
-      if (rs.every(r => !r?.ok)) return { res: rs[0]?.unreachable ? 'Not reachable' : 'Not accepted', bad: true };
-      return { res: `${rs.filter(r => r?.ok).length} of ${paths.length} streams ${v === '1' ? 'on' : 'off'}` };
+      if (rs.every(r => !r?.ok)) return { res: rs[0]?.unreachable ? 'Not reachable' : 'Not accepted (HTTP ' + (rs[0]?.status || '?') + ')', bad: true };
+      const sd = (await cgi('/cgi-bin/setdata', {}))?.body || '';
+      const now = ['H264', 'H264_2', 'H264_3', 'H264_4'].map(k => (new RegExp('^' + k + ',"(\\d)"', 'm').exec(sd) || [])[1]).filter(Boolean);
+      const good = now.filter(x => x === v).length;
+      return now.length ? (good === now.length ? { res: `${good} H.264 stream${good > 1 ? 's' : ''} ${v === '1' ? 'on' : 'off'}` } : { res: `${good} of ${now.length} streams ${v === '1' ? 'on' : 'off'}`, bad: true }) : { res: `${rs.filter(r => r?.ok).length} of ${paths.length} streams ${v === '1' ? 'on' : 'off'}` };
     } },
 };
 async function engClick(btn) {
@@ -2505,7 +2524,7 @@ async function engClick(btn) {
   const rows = await Promise.all(cams.map(async c => {
     const raw = [];
     const send = async (type, cmd) => { try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
-    const cgi = async (path, query) => { try { const r = (await batch(c, [{ type: 'cgi', path, query }], { delayMs: 0 }))[0]; raw.push(`${path} → ${r?.ok ? 'HTTP ' + r.status + ' ' + (r.body || '').slice(0, 60) : (r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${path} → ${e.message}`); return { ok: false }; } };
+    const cgi = async (path, query, method) => { try { const r = (await batch(c, [{ type: 'cgi', path, query, method }], { delayMs: 0 }))[0]; raw.push(`${path} → ${r?.ok ? 'HTTP ' + r.status + ' ' + (r.body || '').slice(0, 60) : (r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${path} → ${e.message}`); return { ok: false }; } };
     try { return { c, raw, ...(await a.run(send, c, v, btn, cgi)) }; } catch (e) { return { c, raw, res: e.message, bad: true }; }
   }));
   $('#tab-eng').classList.remove('busy');
@@ -2868,7 +2887,7 @@ async function liveReadNow(cam) {
     } catch { }
   }
   const sc = /^OSF:(\d)/.exec(b(6)); if (sc) { cam.scene = +sc[1] + 1; $$('#liveScenes button').forEach(x => x.classList.toggle('on', +x.dataset.scene === cam.scene)); }
-  const ir = /^i(\d{2})$/i.exec(b(7)); live.irisVal = ir ? +ir[1] : null; $('#liveIris').textContent = ir ? ir[1] : '–';
+  const ir = /^ic?(\d{2})$/i.exec(b(7)); live.irisVal = ir ? +ir[1] : null; $('#liveIris').textContent = ir ? ir[1] : '–';
   $('#liveStatus').textContent = `${cam.model || ''} ${live.power ? '· ' + live.power : ''}`;
 }
 
@@ -2923,7 +2942,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 $$('[data-iris]').forEach(b => {
   let timer = null;
   const step = async () => {
-    if (live.irisVal == null) { const r = await liveSend('ptz', '#I'); const m = /^i(\d{2})$/i.exec(r?.body || ''); live.irisVal = m ? +m[1] : 50; }
+    if (live.irisVal == null) { const r = await liveSend('ptz', '#I'); const m = /^ic?(\d{2})$/i.exec(r?.body || ''); live.irisVal = m ? +m[1] : 50; }
     live.irisVal = Math.max(1, Math.min(99, live.irisVal + 3 * +b.dataset.iris));
     $('#liveIris').textContent = pad2(live.irisVal);
     if ($('#liveAI').classList.contains('on')) { await liveSend('ptz', '#D30'); setToggle('#liveAI', false); }
@@ -2957,7 +2976,9 @@ $('#liveNight').onclick = () => liveDayNight(true);
 // White balance mode: OAW 0 = ATW (auto), 1 = AWB A, 2 = AWB B, 9 = VAR.
 // The AW-UE160 uses OSL:2A (ATW on/off) and OSL:2B (0 = A, 1 = B, 4 = VAR) when OAW is refused.
 const WB_OAW = { auto: '0', a: '1', b: '2', var: '9' };
-const WB_FROM_OAW = { 0: 'auto', 1: 'a', 2: 'b', 9: 'var' };
+// QAW answers with other numbers than OAW takes: 0 ATW, 2 AWB A, 3 AWB B, 4 3200K, 5 5600K, 9 VAR
+// ("Data of control and question is different", Panasonic protocol table; checked on an AW-UE150 V3.20)
+const WB_FROM_OAW = { 0: 'auto', 2: 'a', 3: 'b', 9: 'var' };
 const WB_UE160 = { auto: ['OSL:2A:1'], a: ['OSL:2A:0', 'OSL:2B:0'], b: ['OSL:2A:0', 'OSL:2B:1'], var: ['OSL:2A:0', 'OSL:2B:4'] };
 const showWb = m => $$('#liveWB [data-wb]').forEach(x => setToggle(x, x.dataset.wb === m));
 $$('#liveWB [data-wb]').forEach(btn => btn.onclick = async () => {

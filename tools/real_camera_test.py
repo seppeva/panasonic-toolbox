@@ -337,7 +337,7 @@ def t_live(cam, restore):
         time.sleep(0.4)
         back = cam.body("QAW")
         good = r.get("ok") and not is_err(r.get("body"))
-        exact = back and back.upper() == "OAW:" + val
+        exact = back and back.upper() == "OAW:" + {"1": "2", "2": "3"}.get(val, val)  # QAW numbers A/B as 2/3
         R.add(cam.ip, A, f"White {label} ({used})", "PASS" if good and (exact or used != "OAW:" + val) else ("WARN" if good else "FAIL"),
               f"answer {r.get('body')}, read back {back}" + ("" if exact or used != "OAW:" + val else " - CHECK on the camera menu which mode is really active"), [r.get("body"), back])
         if label == "A":

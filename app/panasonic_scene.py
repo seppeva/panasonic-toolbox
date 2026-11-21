@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.20.3"
+VERSION = "2.20.4"
 DEFAULT_PORT = 8765
 
 
@@ -147,13 +147,17 @@ def get_basic(ip, port, user=None, password=None, timeout=2.0):
 CGI_ALLOWED = re.compile(r"^/cgi-bin/(set_h264(_[234])?|setdata|getinfo|get_basic|set_basic)$")
 
 
-def get_cgi(ip, port, path, query, user=None, password=None, timeout=4.0):
+def get_cgi(ip, port, path, query, user=None, password=None, timeout=4.0, method="GET"):
     if not CGI_ALLOWED.match(path):
         return {"ok": False, "status": 0, "error": f"CGI {path!r} not allowed"}
     q = urllib.parse.urlencode({str(k): str(v) for k, v in dict(query).items()})
-    url = f"http://{ip}:{port}{path}" + (f"?{q}" if q else "")
+    if method == "POST":  # settings the camera's own web page posts (set_h264…): a GET is refused with HTTP 400
+        req = urllib.request.Request(f"http://{ip}:{port}{path}", data=q.encode(), method="POST",
+                                     headers={"Content-Type": "application/x-www-form-urlencoded"})
+    else:
+        req = f"http://{ip}:{port}{path}" + (f"?{q}" if q else "")
     try:
-        with build_opener(ip, port, user, password).open(url, timeout=timeout) as r:
+        with build_opener(ip, port, user, password).open(req, timeout=timeout) as r:
             return {"ok": True, "status": r.status, "body": r.read(4000).decode("utf-8", "replace").strip()}
     except urllib.error.HTTPError as e:
         return {"ok": False, "status": e.code, "error": f"HTTP {e.code}"}
@@ -662,7 +666,8 @@ def api_batch(req):
                 results.append(r)
                 continue
             if it.get("type") == "cgi":
-                r = get_cgi(ip, port, str(it.get("path", "")), it.get("query") or {}, user, pw, min(timeout, 5.0))
+                r = get_cgi(ip, port, str(it.get("path", "")), it.get("query") or {}, user, pw, min(timeout, 5.0),
+                            method="POST" if str(it.get("method", "")).upper() == "POST" else "GET")
                 r["cmd"] = it.get("path")
                 results.append(r)
                 continue

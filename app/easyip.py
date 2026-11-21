@@ -5,7 +5,7 @@ The cameras listen for requests on UDP port 10670 and answer with a broadcast on
 Messages: a 6-byte header (00 01, length, type), the camera MAC, the sender's MAC and IPv4 address,
 a fixed block, then tag-length-value fields, closed by FF FF and a 16-bit checksum
 (sum of all preceding bytes + 1). Type 0x000D = discovery request, 0x000E = announcement,
-0x0002 = reconfiguration. Layout verified against packet captures of the official Easy IP Setup tool.
+0x0002 = reconfiguration, 0x0003 = the camera's answer to it, 0x0004 = confirmation. Layout verified against packet captures of the official Easy IP Setup tool.
 
 Cameras only accept a reconfiguration during a limited time after power-on (setting
 "Easy IP Setup accommodate period", 20 minutes by default).
@@ -134,13 +134,20 @@ def _broadcast_targets(local_ips):
     return targets
 
 
-def _send(pkt, local_ips):
+def _send(pkt, local_ips, sport=0):
     for dst, src in _broadcast_targets(local_ips):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            if src:
-                s.bind((src, 0))
+            if sport:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if hasattr(socket, "SO_REUSEPORT"):
+                    try:
+                        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+                    except OSError:
+                        pass
+            if src or sport:
+                s.bind((src or "", sport))
             s.sendto(pkt, (dst, REQUEST_PORT))
             s.close()
         except OSError:
@@ -205,6 +212,51 @@ def configure(mac, ip, mask, gateway, dns1, dns2, port, local_ips):
         parts = v.split(".")
         if len(parts) != 4 or not all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
             raise ValueError(f"Invalid address: {v}")
-    src = local_ips[0] if local_ips else "0.0.0.0"
-    _send(reconfiguration(cam, ip, mask, gateway, dns1, dns2, int(port), src), local_ips)
+    # The camera only applies the new settings after a handshake, like Panasonic's Easy IP Setup tool does it:
+    # request (type 0x0002, sent from port 10669) -> camera answers 0x0003 -> we confirm with 0x0004.
+    # Verified against captures of the official tool and on an AW-UE150 (V3.20).
+    src = _source_for(cam, local_ips)
+    try:
+        lst = _listener()
+    except OSError as e:
+        raise RuntimeError(f"UDP port {ANNOUNCE_PORT} is in use (is the Panasonic Easy IP Setup tool open?): {e}")
+    lst.settimeout(0.25)
+    acked = False
+    try:
+        pkt = reconfiguration(cam, ip, mask, gateway, dns1, dns2, int(port), src)
+        for attempt in range(2):
+            _send(pkt, local_ips, sport=ANNOUNCE_PORT)
+            end = time.time() + 2.0
+            while time.time() < end and not acked:
+                try:
+                    data, _ = lst.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                if len(data) >= 52 and data[4:6] == b"\x00\x03" and data[6:12] == cam["_macb"]:
+                    acked = True
+                    cnf = bytearray(data[:-4])
+                    cnf[4:6] = b"\x00\x04"
+                    cnf[22:24] = b"\x00\x02"
+                    _send(_finish(bytes(cnf)), local_ips, sport=ANNOUNCE_PORT)
+            if acked:
+                break
+    finally:
+        lst.close()
+    if not acked:
+        raise RuntimeError("The camera did not answer the change. Is the computer on the same cable/VLAN, and is the camera "
+                           "within its Easy IP Setup accommodate period (20 minutes after power-on, unless set to unlimited)?")
     return True
+
+
+def _source_for(cam, local_ips):
+    """The address of this computer in the camera's range if there is one, else the first one."""
+    try:
+        cip = _ip_bytes(cam.get("ip", "0.0.0.0"))
+        m = _ip_bytes(cam.get("mask", "255.255.255.0"))
+        for lip in local_ips:
+            b = _ip_bytes(lip)
+            if all((b[i] & m[i]) == (cip[i] & m[i]) for i in range(4)):
+                return lip
+    except Exception:
+        pass
+    return local_ips[0] if local_ips else "0.0.0.0"
