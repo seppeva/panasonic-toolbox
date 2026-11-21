@@ -677,13 +677,13 @@ async function openCamPage(c, kind) {
   if (state.localIps.length && !sameRange(c.ip)) {
     if (!await ask({ title: `${esc(camName(c))} is in another IP range`, ok: 'Open anyway', body: `<p>This computer (${state.localIps.map(i => `<span class="mono">${esc(i)}</span>`).join(', ')}) cannot reach <span class="mono">${esc(c.ip)}</span>, so the browser will say the page is not reachable.</p><p>Give the camera an address in your range on the Network setup page, or give this computer an address in the camera's range.</p>` })) return;
   }
-  const user = $('#authUser').value.trim(), pass = $('#authPass').value;
+  const { user, pass } = camAuth(c);
   const path = kind === 'setup' ? state.setupPath : state.livePath;
-  const cred = user ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}@` : '';
-  const url = `http://${cred}${hostPort(c)}${path.startsWith('/') ? path : '/' + path}`;
   try {
-    if (IN_APP) await bridgeFetch('/api/open_url', { url });
-    else window.open(url, '_blank', 'noopener');
+    // with a login, the app opens the page through its own pass-through on this computer and signs in for you
+    // (browsers ignore a login in the address, and the camera asks with Digest authentication)
+    const j = await bridgeFetch('/api/open_cam', { ip: c.ip, port: c.port || 80, user, pass, path, noOpen: !IN_APP });
+    if (!IN_APP) window.open(j.url, '_blank', 'noopener');
     log(`${c.ip}: opened the ${kind === 'setup' ? 'settings' : 'live'} page in the browser`);
     if (kind === 'setup' && !user) toast('Tip: fill in Camera login to sign in to the settings page automatically.');
   } catch (e) { info('Could not open the page', esc(e.message)); }
@@ -2300,12 +2300,19 @@ async function setCamName(r, v, waitForNetwork) {
   for (let i = 0; i < tries; i++) {
     if (waitForNetwork) await sleep(i ? 2000 : 4000); // the camera restarts its network after an IP change
     try {
-      const res = await batch(cam, [{ cmd: 'OSJ:5C:' + v.name }]);
-      if (res[0]?.status === 401) throw new Error('login required (enter it on the Cameras page)');
-      if (res[0]?.ok && !isErr(res[0].body)) { log(`Name of ${r.mac} set to "${v.name}"`); return; }
+      // two names: the camera title in the camera menu (OSJ:5C) and the camera name of the web page and the
+      // network (cam_title, also what Easy IP shows). Both are set; the web name needs the admin login.
+      const res = await batch(cam, [{ cmd: 'OSJ:5C:' + v.name }, { type: 'cgi', path: '/cgi-bin/set_basic', query: { cam_title: v.name } }, { type: 'basic' }], { delayMs: 300 });
+      if (res[0]?.status === 401 || res[1]?.status === 401) throw new Error('login required (enter the camera login in Settings)');
+      const title = res[0]?.ok && !isErr(res[0].body), web = (res[2]?.body || '') === v.name;
+      if (title || web) {
+        log(`Name of ${r.mac} set to "${v.name}" (menu title ${title ? 'ok' : res[0]?.body}, web name ${web ? 'ok' : 'still ' + (res[2]?.body || '?')})`);
+        if (!web) throw new Error(`the camera title changed, but the name on the web page is still "${res[2]?.body || '?'}" (answer to set_basic: ${res[1]?.status || res[1]?.error})`);
+        return;
+      }
       last = res[0]?.ok ? 'this model does not accept a new name this way (' + res[0].body + ')' : (res[0]?.error || 'no answer');
       if (res[0]?.ok) break;
-    } catch (e) { last = e.message; if (/login/.test(last)) break; }
+    } catch (e) { last = e.message; if (/login|web page/.test(last)) throw new Error('name: ' + last); }
   }
   throw new Error(`name not changed: ${last}. The computer must be in the same IP range as ${v.ip}.`);
 }
@@ -2844,8 +2851,7 @@ async function liveReadNow(cam) {
   // shooting mode and preset scope: only when the camera answers them
   { const sm = /^OSI:30:([01])$/i.exec(b(11)); setToggle('#liveShoot0', sm?.[1] === '0'); setToggle('#liveShoot1', sm?.[1] === '1');
     for (const id of ['#liveShoot0', '#liveShoot1']) $(id).disabled = !sm;
-    $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.';
-    const ps = /^OSE:71:([012])$/i.exec(b(12)); $$('#liveScope [data-scope]').forEach(x => { setToggle(x, ps?.[1] === x.dataset.scope); x.disabled = !ps; }); }
+    $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.' }
   { const k = kelvinFrom(b(13)); if (k && document.activeElement !== $('#liveVarK')) $('#liveVarK').value = k; }
   const wb = /^OAW:(\d)$/i.exec(b(9));
   if (wb && Date.now() - (live.wbAt || 0) > 3000) showWb(WB_FROM_OAW[wb[1]]);
@@ -2914,14 +2920,6 @@ async function liveShoot(v) {
   if (r?.ok && !isErr(r.body)) { setToggle('#liveShoot0', v === 0); setToggle('#liveShoot1', v === 1); $('#liveStatus').textContent = 'Shooting mode: ' + $(v ? '#liveShoot1' : '#liveShoot0').textContent; }
   else toast(`Shooting mode is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
 }
-// Preset scope (OSE:71): A = position and picture, B = position and iris, C = only pan/tilt/zoom/focus
-$$('#liveScope [data-scope]').forEach(btn => btn.onclick = async () => {
-  if (!live.cam || btn.classList.contains('on')) return;
-  const v = btn.dataset.scope;
-  const r = await liveSend('cam', 'OSE:71:' + v);
-  if (r?.ok && !isErr(r.body)) { $$('#liveScope [data-scope]').forEach(x => setToggle(x, x === btn)); $('#liveStatus').textContent = 'Preset scope: Mode ' + 'ABC'[v]; }
-  else toast(`Preset scope is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
-});
 $('#liveShoot0').onclick = () => liveShoot(0);
 $('#liveShoot1').onclick = () => liveShoot(1);
 $('#liveDay').onclick = () => liveDayNight(false);

@@ -426,3 +426,4 @@ button.copied{color:#8fd19e}
 .eng-tiles button:active{background:var(--accent);border-color:var(--accent)}
 label.kfield{flex-direction:row}
 .kfield input{height:32px}
+.live-tiles .t-shoot{grid-column:span 2}

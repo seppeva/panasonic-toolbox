@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.20.0"
+VERSION = "2.20.1"
 DEFAULT_PORT = 8765
 
 
@@ -143,7 +143,7 @@ def get_basic(ip, port, user=None, password=None, timeout=2.0):
 
 
 # Web CGIs the app may call (besides aw_cam/aw_ptz): the H.264 stream switches and the settings readout.
-CGI_ALLOWED = re.compile(r"^/cgi-bin/(set_h264(_[234])?|setdata|getinfo|get_basic)$")
+CGI_ALLOWED = re.compile(r"^/cgi-bin/(set_h264(_[234])?|setdata|getinfo|get_basic|set_basic)$")
 
 
 def get_cgi(ip, port, path, query, user=None, password=None, timeout=4.0):
@@ -404,6 +404,115 @@ def open_camera_page(url):
     return {"ok": True}
 
 
+# Camera web pages with the login filled in. Browsers ignore (or block) a login in the address
+# (http://user:pass@ip/), and the camera asks with Digest authentication. So the app opens the page through a
+# small pass-through server on this computer, one port per camera: the browser talks to 127.0.0.1:<port> and the
+# app adds the login on its way to the camera. Only this computer can reach it.
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+_cam_proxies = {}
+_cam_proxies_lock = threading.Lock()
+_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers",
+        "transfer-encoding", "upgrade", "content-length", "host"}
+
+
+def _cam_proxy_handler(ip, port, user, password):
+    def opener():
+        handlers = [_NoRedirect(), urllib.request.ProxyHandler({})]
+        if user:
+            mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+            mgr.add_password(None, f"http://{ip}:{port}/", user, password or "")
+            handlers += [urllib.request.HTTPDigestAuthHandler(mgr), urllib.request.HTTPBasicAuthHandler(mgr)]
+        return urllib.request.build_opener(*handlers)
+
+    class P(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def log_message(self, *a):
+            pass
+
+        def _go(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            data = self.rfile.read(n) if n else None
+            req = urllib.request.Request(f"http://{ip}:{port}{self.path}", data=data, method=self.command)
+            for k, v in self.headers.items():
+                if k.lower() not in _HOP and k.lower() not in ("authorization", "accept-encoding", "origin", "referer"):
+                    req.add_header(k, v)
+            try:
+                resp = opener().open(req, timeout=15)
+            except urllib.error.HTTPError as e:
+                resp = e
+            except Exception as e:
+                msg = f"Camera {ip} not reachable: {getattr(e, 'reason', e)}".encode()
+                self.send_response(502); self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(msg))); self.end_headers(); self.wfile.write(msg)
+                return
+            code = resp.status if hasattr(resp, "status") else resp.code
+            if code == 401:
+                msg = (f"<html><body style='font-family:sans-serif;background:#1d1f22;color:#ddd;padding:40px'><h2>The camera {ip} refused the login</h2>"
+                       "<p>Check the camera login in Panasonic Toolbox (Settings, Camera communication) and open the page again.</p></body></html>").encode()
+                self.send_response(401); self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(msg))); self.end_headers(); self.wfile.write(msg)
+                return
+            try:
+                self.send_response(code)
+                for k, v in resp.headers.items():
+                    kl = k.lower()
+                    if kl in _HOP or kl == "www-authenticate":
+                        continue
+                    if kl == "location":
+                        v = v.replace(f"http://{ip}:{port}", "").replace(f"http://{ip}", "")
+                    self.send_header(k, v)
+                self.end_headers()
+                if self.command != "HEAD":
+                    while True:
+                        chunk = resp.read(65536) if hasattr(resp, "read") else b""
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                try:
+                    resp.close()
+                except Exception:
+                    pass
+
+        do_GET = do_POST = do_HEAD = do_PUT = _go
+    return P
+
+
+def cam_page_url(ip, port, user, password, path):
+    if not target_allowed(ip):
+        raise ValueError("Only camera addresses on the local network can be opened")
+    key = (ip, int(port), user or "", password or "")
+    with _cam_proxies_lock:
+        srv = _cam_proxies.get(key)
+        if not srv:
+            srv = ThreadingHTTPServer(("127.0.0.1", 0), _cam_proxy_handler(ip, int(port), user, password))
+            srv.daemon_threads = True
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            _cam_proxies[key] = srv
+    path = path if path.startswith("/") else "/" + path
+    return f"http://127.0.0.1:{srv.server_address[1]}{path}"
+
+
+def open_camera_with_login(req):
+    ip, port = str(req.get("ip", "")).strip(), int(req.get("port") or 80)
+    user, pw = req.get("user") or None, req.get("pass") or None
+    path = str(req.get("path") or "/")
+    url = cam_page_url(ip, port, user, pw, path) if user else f"http://{ip}{'' if port == 80 else ':' + str(port)}{path if path.startswith('/') else '/' + path}"
+    if not user and not target_allowed(ip):
+        raise ValueError("Only camera addresses on the local network can be opened")
+    if not req.get("noOpen"):
+        webbrowser.open(url)
+    return {"ok": True, "url": url}
+
+
 _ips_cache = {"t": 0.0, "ips": []}
 _ips_guard = threading.Lock()
 
@@ -648,6 +757,8 @@ def api_call(path, req):
         return ({"ok": True, **rename_project_dir(str(req.get("old", "")), str(req.get("new", "")))})
     if path == "/api/read_file":
         return ({"ok": True, **read_file(req.get("path"))})
+    if path == "/api/open_cam":
+        return open_camera_with_login(req)
     if path == "/api/open_url":
         return (open_camera_page(str(req.get("url", ""))))
     if path == "/api/quit":

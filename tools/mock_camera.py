@@ -37,8 +37,12 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/cgi-bin/mjpeg":
             return self.mjpeg()
         if u.path == "/cgi-bin/get_basic":
-            b = f"cam_title={cur.get('title', TITLE)}\r\nmodel={MODEL}\r\n".encode(); self.send_response(200); self.send_header("Content-Type", "text/plain")
+            b = f"cam_title={cur.get('webtitle', cur.get('title', TITLE))}\r\nmodel={MODEL}\r\n".encode(); self.send_response(200); self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b); return
+        if u.path == "/cgi-bin/set_basic":  # web/network camera name
+            t = parse_qs(u.query).get("cam_title", [""])[0]
+            if t: cur["webtitle"] = t
+            b = b"OK"; self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b); return
         if re.match(r"/cgi-bin/set_h264(_[234])?$", u.path):  # H.264 stream on/off
             v = parse_qs(u.query).get("h264_transmit", [""])[0]; cur[u.path] = v
             b = b"OK"; self.send_response(200); self.send_header("Content-Length", "2"); self.end_headers(); self.wfile.write(b); return
