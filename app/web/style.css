@@ -436,3 +436,9 @@ label.kfield{flex-direction:row}
 .zone-ed-row{display:grid;grid-template-columns:180px 1fr auto;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--rule-soft)}
 .zone-ed-row .zone-cams{display:flex;flex-wrap:wrap;gap:4px 14px}
 #askBody #zoneNew{flex:1}
+
+/* simpler UI: camera buttons on Live, camera name as a link to Live */
+.live-cams{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
+.live-cams .chip.off{opacity:.55}
+.linkbtn{background:none;border:0;padding:0;height:auto;color:var(--text);font:inherit;font-weight:500;cursor:pointer;text-decoration:underline;text-decoration-color:var(--rule);text-underline-offset:3px}
+.linkbtn:hover{color:#cfe0fb;text-decoration-color:currentColor}

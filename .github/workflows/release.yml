@@ -3,9 +3,11 @@ name: Build & release
 # Een release ontstaat automatisch bij elke push naar main die de app wijzigt.
 # Het versienummer komt uit app/panasonic_scene.py (VERSION = "x.y.z"); de tag vX.Y.Z wordt aangemaakt.
 # Een tag pushen (git tag v2.1.0 && git push origin v2.1.0) werkt ook en gaat dan voor.
+# On a preview/** branch the same build runs, but it becomes a pre-release (tag preview-…): not "latest", so the
+# installers, the website and the update check in the app keep using the normal release from main.
 on:
   push:
-    branches: [main]
+    branches: [main, 'preview/**']
     paths:
       - 'app/**'
       - 'installer/**'
@@ -166,7 +168,7 @@ jobs:
 
   release:
     needs: build
-    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main') }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/preview/')) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -189,7 +191,21 @@ jobs:
         run: |
           test -f out/PanasonicToolbox-macOS-AppleSilicon.dmg
           test -f out/PanasonicToolbox-Windows-Setup.exe
-      - uses: softprops/action-gh-release@v2
+      - name: Preview release (from a preview/** branch)
+        if: ${{ startsWith(github.ref, 'refs/heads/preview/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: preview-${{ steps.v.outputs.version }}-${{ github.run_number }}
+          name: Preview ${{ steps.v.outputs.version }} (${{ github.ref_name }})
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          files: out/*
+          body: |
+            Test version from the branch ${{ github.ref_name }}. Not the normal release: the installers and the update check ignore it.
+            Download the file for your computer below.
+      - if: ${{ !startsWith(github.ref, 'refs/heads/preview/') }}
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
           name: Panasonic Toolbox ${{ steps.v.outputs.version }}
