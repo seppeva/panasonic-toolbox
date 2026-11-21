@@ -2462,7 +2462,8 @@ const ENG = {
       const back = kelvinFrom((await send('cam', 'QSI:20'))?.body);
       return back && Math.abs(back - k) > 20 ? { res: `VAR, camera reports ${back} K`, bad: true } : x;
     } },
-  awbMem: { label: v => `AWB into memory ${v.toUpperCase()}`,
+  awb: { label: () => 'Auto white balance', run: async (send) => engVerdict(await send('cam', 'OWS'), 'AWB started (active memory)') },
+  awbMem: { label: v => `AWB stored in memory ${v.toUpperCase()}`,
     run: async (send, c, v) => {
       const m = engVerdict(await wbModeCmds(send, c.model, v)); if (m.bad) return { ...m, res: `Memory ${v.toUpperCase()}: ${m.res}` };
       return engVerdict(await send('cam', 'OWS'), `AWB saved in ${v.toUpperCase()}`);
@@ -2874,13 +2875,38 @@ async function liveReadNow(cam) {
 // press and hold: pan/tilt, zoom and focus move while the button is held and stop on release
 const spd = id => Math.max(1, Math.min(49, +$(id).value || 25));
 function ptCmd(dx, dy) { const s = spd('#ptSpeed'); return `#PTS${pad2(50 + dx * s)}${pad2(50 + dy * s)}`; }
+// Movements never pile up: one channel per kind (pan/tilt, zoom, focus, iris) with at most one request on its way.
+// A newer command replaces one that is still waiting, so a camera that hangs for a moment does not play back
+// everything later. A stop that does not get through is sent again (a few times) so the camera really stops.
+const motionCh = {};
+function motionSend(kind, cmd) {
+  const cam = live.cam; if (!cam) return;
+  const ch = motionCh[kind] ||= { busy: false, next: null };
+  ch.next = { cam, cmd };
+  if (!ch.busy) motionPump(ch);
+}
+const isStopCmd = cmd => /^#(PTS5050|Z50|F50)$/.test(cmd);
+async function motionPump(ch) {
+  ch.busy = true;
+  let stopTries = 0;
+  while (ch.next) {
+    const { cam, cmd } = ch.next; ch.next = null;
+    let r = null;
+    try { [r] = await batch(cam, [{ type: 'ptz', cmd, motion: true }], { delayMs: 0 }); } catch { }
+    if (r?.ok && !isErr(r.body)) { stopTries = 0; continue; }
+    if (cam === live.cam) $('#liveStatus').textContent = `${cmd}: ${r?.ok ? 'not accepted (' + r.body + ')' : 'camera did not answer in time, skipped'}`;
+    // only a stop is worth repeating, and only when nothing newer is waiting
+    if (isStopCmd(cmd) && !ch.next && stopTries++ < 3) { await sleep(300); if (!ch.next) ch.next = { cam, cmd }; }
+  }
+  ch.busy = false;
+}
 function liveMove(kind, cmd) {
   if (live.moving && live.moving.kind !== kind) liveStop();
-  live.moving = { kind }; liveSend('ptz', cmd);
+  live.moving = { kind }; motionSend(kind, cmd);
 }
 function liveStop() {
   const m = live.moving; live.moving = null; if (!m) return;
-  liveSend('ptz', m.kind === 'PT' ? '#PTS5050' : `#${m.kind}50`);
+  motionSend(m.kind, m.kind === 'PT' ? '#PTS5050' : `#${m.kind}50`);
 }
 function holdButton(btn, start) {
   btn.addEventListener('pointerdown', e => { e.preventDefault(); btn.setPointerCapture?.(e.pointerId); btn.classList.add('pressed'); start(); });
@@ -2901,7 +2927,7 @@ $$('[data-iris]').forEach(b => {
     live.irisVal = Math.max(1, Math.min(99, live.irisVal + 3 * +b.dataset.iris));
     $('#liveIris').textContent = pad2(live.irisVal);
     if ($('#liveAI').classList.contains('on')) { await liveSend('ptz', '#D30'); setToggle('#liveAI', false); }
-    liveSend('ptz', '#I' + pad2(live.irisVal));
+    motionSend('I', '#I' + pad2(live.irisVal));
   };
   b.addEventListener('pointerdown', e => { e.preventDefault(); step(); timer = setInterval(step, 250); });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { clearInterval(timer); timer = null; }));
@@ -2989,6 +3015,7 @@ async function liveAwbMem(m) {
 }
 $('#liveAWBa').onclick = () => liveAwbMem('a');
 $('#liveAWBb').onclick = () => liveAwbMem('b');
+$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first, or use Store A / Store B.` : 'Auto white balance started (kept in the memory that is active)'); };
 $('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
 function renderLiveScenes() {
   const cam = live.cam; const box = $('#liveScenes');

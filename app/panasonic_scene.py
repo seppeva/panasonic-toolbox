@@ -13,6 +13,7 @@ Starten vanuit broncode:  python3 panasonic_scene.py   [--browser] [--port 8765]
 """
 import argparse
 import base64
+import contextlib
 import re
 import subprocess
 import ipaddress
@@ -33,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.20.2"
+VERSION = "2.20.3"
 DEFAULT_PORT = 8765
 
 
@@ -644,7 +645,10 @@ def api_batch(req):
     if len(items) > 1000:
         raise ValueError("At most 1000 commands per batch")
     results = []
-    with cam_lock(ip):
+    # Movements (pan/tilt, zoom, focus, iris from the Live page) skip the per-camera queue and are never retried:
+    # a move that comes late is worse than one that does not come, because the page already sends the next one.
+    motion = bool(items) and all(it.get("motion") for it in items)
+    with (contextlib.nullcontext() if motion else cam_lock(ip)):
         for i, it in enumerate(items):
             if it.get("sleepMs"):
                 time.sleep(min(10000, int(it["sleepMs"])) / 1000.0)
@@ -663,7 +667,10 @@ def api_batch(req):
                 results.append(r)
                 continue
             kind = "ptz" if it.get("type") == "ptz" else "cam"
-            r = send_command(ip, port, kind, str(it.get("cmd", "")), user, pw, timeout)
+            if motion:
+                r = send_command(ip, port, kind, str(it.get("cmd", "")), user, pw, min(timeout, 1.5), retries=0)
+            else:
+                r = send_command(ip, port, kind, str(it.get("cmd", "")), user, pw, timeout)
             r["cmd"] = it.get("cmd")
             results.append(r)
             if r.get("status") == 401:
