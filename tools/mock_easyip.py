@@ -41,11 +41,18 @@ while True:
         for c in CAMS:
             s.sendto(announcement(c, data[12:18], data[18:22]), ("255.255.255.255", easyip.ANNOUNCE_PORT))
     elif kind == b"\x00\x02":
-        t = easyip._tlvs(data)
+        # like a real camera: answer 0x0003, apply only when the 0x0004 confirmation comes
         for c in CAMS:
             if c["mac"] == data[6:12]:
                 if c.get("locked"):
                     print("ignored (accommodate period over)", c["model"], flush=True)
                     continue
+                c["pending"] = easyip._tlvs(data)
+                ack = bytes([0, 1, 0, 0, 0, 3]) + c["mac"] + data[12:18] + data[18:22] + bytes([0, 1]) + easyip._MAGIC + bytes([0, 0, 2, 2]) + bytes(11)
+                s.sendto(easyip._finish(ack), ("255.255.255.255", easyip.ANNOUNCE_PORT))
+    elif kind == b"\x00\x04":
+        for c in CAMS:
+            if c["mac"] == data[6:12] and c.get("pending"):
+                t = c.pop("pending")
                 c["ip"], c["mask"], c["gw"] = easyip._ip_str(t[0x20]), easyip._ip_str(t[0x21]), easyip._ip_str(t[0x22])
                 print("reconfigured", c["name"], "->", c["ip"], flush=True)

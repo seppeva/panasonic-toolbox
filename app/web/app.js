@@ -1943,7 +1943,17 @@ function renderShows() {
     const ni = $('.namein', tr);
     ni.addEventListener('keydown', e => { if (e.key === 'Enter') ni.blur(); if (e.key === 'Escape') { ni.value = sh.name; ni.blur(); } });
     ni.addEventListener('change', () => renameShow(sh, ni.value));
-    $('[data-act=file]', tr).onclick = async () => { const p = await download(showFile(sh), showJson(sh), undefined, 'show'); if (p) { sh.path = p; saveShows(); renderShows(); } };
+    // Save file: a show that already has its file is written into that same file (no "… (1).pshow" copies)
+    $('[data-act=file]', tr).onclick = async () => {
+      if (IN_APP && sh.path) {
+        try {
+          const b = new TextEncoder().encode(showJson(sh)); let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+          const j = await bridgeFetch('/api/rename', { path: sh.path, name: showFile(sh), dataB64: btoa(bin) });
+          sh.path = j.path; saveShows(); renderShows(); log(`Saved: ${j.path}`); toast('Show file updated', j.path); return;
+        } catch (e) { log(`${sh.path}: ${e.message}, saving a new file`); }
+      }
+      const p = await download(showFile(sh), showJson(sh), undefined, 'show'); if (p) { sh.path = p; saveShows(); renderShows(); }
+    };
     $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete show', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
     tb.appendChild(tr);
   }

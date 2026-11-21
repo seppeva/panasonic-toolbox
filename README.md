@@ -22,6 +22,15 @@ Website: **https://seppeva.github.io/panasonic-toolbox/**
 
 Exports, imports, saving an edited show, opening a project file and closing a project ask for confirmation first and show exactly what will happen. Changes in the app and on the cameras can be undone.
 
+### Behaviour verified on a real AW-UE150 (V3.20)
+
+- Camera errors come back in upper case (`ER1:OSJ`, `ER2:XSF`, `ER3:XSF`); `ER2` also means "not changeable in the current mode" (Synchro Value while the shutter is in Step mode, Matrix values while the matrix type is Normal, a scene while in standby).
+- Import, Initialize and show recall first read the camera (the backup) and only send values that differ.
+- Camera title `OSJ:5C` / `QSJ:5C` is 40 hex digits on the UE150 (`43414D38…` = "CAM8"); it is the same name as the web page's `cam_title`.
+- `QAW` answers 2 for AWB A and 3 for AWB B (`OAW` takes 1 and 2). `#I` answers `iC80`.
+- Easy IP changes need the handshake of the official tool: request `0x0002` from UDP port 10669, the camera answers `0x0003`, the app confirms with `0x0004`.
+- Long command series go in parts of 20; a connection attempt that gets no answer within 0.2 s is started again at once instead of after the system's one-second retry.
+
 ## Repository layout
 
 | Path | What |

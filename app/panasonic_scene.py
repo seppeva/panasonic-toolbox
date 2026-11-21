@@ -14,6 +14,7 @@ Starten vanuit broncode:  python3 panasonic_scene.py   [--browser] [--port 8765]
 import argparse
 import base64
 import contextlib
+import http.client
 import re
 import subprocess
 import ipaddress
@@ -100,16 +101,73 @@ def build_opener(ip, port, user, password):
     return urllib.request.build_opener(*handlers)
 
 
+# Connecting fast. A camera that is busy with other clients (a live stream, a controller) sometimes drops the first
+# connection attempt, and the computer only repeats it after a full second. On a local network a connection is
+# made in a few milliseconds, so the app gives up on an attempt after 0.2 s and starts a new one right away.
+# Cameras with User Auth on answer 401: those (remembered per camera) use the path with the login.
+_needs_auth = set()
+
+
+def _quick_get(ip, port, path, timeout):
+    """GET on a new connection that is set up with quick retries. Returns (status, body). Raises OSError when
+    the camera cannot be reached."""
+    sock = None
+    for i in range(3):
+        try:
+            sock = socket.create_connection((ip, int(port)), timeout=0.2 if i < 2 else timeout)
+            break
+        except socket.timeout:
+            if i == 2:
+                raise
+    sock.settimeout(timeout)
+    conn = http.client.HTTPConnection(ip, int(port), timeout=timeout)
+    conn.sock = sock
+    try:
+        conn.request("GET", path, headers={"Connection": "close"})
+        r = conn.getresponse()
+        return r.status, r.read()
+    except (http.client.HTTPException, socket.timeout) as e:
+        raise OSError(str(e) or "timed out")
+    finally:
+        conn.close()
+
+
 def send_command(ip, port, kind, cmd, user=None, password=None, timeout=3.0, retries=2):
     """Eén AW-commando. kind = 'cam' (aw_cam) of 'ptz' (aw_ptz).
     A busy camera (ER2) is asked again up to `retries` times. A camera that does not answer at all is tried
     once more at most, so a camera that is switched off costs seconds, not minutes."""
     path = "aw_ptz" if kind == "ptz" else "aw_cam"
-    url = f"http://{ip}:{port}/cgi-bin/{path}?cmd={urllib.parse.quote(cmd, safe=':')}&res=1"
+    rel = f"/cgi-bin/{path}?cmd={urllib.parse.quote(cmd, safe=':')}&res=1"
+    url = f"http://{ip}:{port}{rel}"
     opener = build_opener(ip, port, user, password)
     last_err = None
     net_tries = 0
     for attempt in range(retries + 1):
+        if (ip, int(port)) not in _needs_auth:
+            try:
+                got = _quick_get(ip, port, rel, timeout)
+            except OSError as e:
+                last_err = str(e)
+                net_tries += 1
+                refused = "refused" in last_err.lower() or "unreachable" in last_err.lower()
+                if refused or net_tries >= 2 or attempt >= retries:
+                    return {"ok": False, "status": 0, "error": last_err, "unreachable": True}
+                time.sleep(0.15)
+                continue
+            if got is not None:
+                status, raw = got
+                if status == 401:
+                    _needs_auth.add((ip, int(port)))  # User Auth is on: from now on with the login
+                elif status == 200:
+                    body = raw.decode("ascii", "replace").strip()
+                    if body.upper().startswith("ER2") and attempt < retries:
+                        time.sleep(0.3)
+                        continue
+                    return {"ok": True, "status": 200, "body": body}
+                else:
+                    last_err = f"HTTP {status}"
+                    time.sleep(0.15)
+                    continue
         try:
             with opener.open(url, timeout=timeout) as r:
                 body = r.read().decode("ascii", "replace").strip()
