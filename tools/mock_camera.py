@@ -106,12 +106,13 @@ class H(BaseHTTPRequestHandler):
             if m: cur["tally" + m.group(1)] = m.group(2); return c
             m = re.match(r"QL([RG])$", c)
             if m: return f"OL{m.group(1)}:" + cur.get("tally" + m.group(1), "0")
-            if c == "QAW": return "OAW:" + cur.get("wb", "1")
+            if c == "QAW": return "OAW:" + {"1": "2", "2": "3"}.get(st.get("OAW", "1"), st.get("OAW", "1"))  # query numbers like a real UE150
             if c == "QSI:30": return "OSI:30:" + cur.get("shoot", "0")
             m = re.match(r"OSI:30:([01])$", c)
             if m: cur["shoot"] = m.group(1); return c
             m = re.match(r"OAW:([0129])$", c)
-            if m: cur["wb"] = m.group(1); return c
+            if m: st["OAW"] = m.group(1); return c
+            if re.match(r"OSI:20:", c) and st.get("OAW") != "9": return "ER2:OSI"  # colour temperature only in VAR
             if c in ("OWS", "OAS"): return c
             m = re.match(r"OSL:90:(\d)$", c)
             if m and fam == "UE160": cur["store"][int(m.group(1))] = dict(st); return c

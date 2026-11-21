@@ -288,6 +288,14 @@ async function switchScene(cam, n) {
   const r = await batch(cam, [{ cmd: 'XSF:' + n }, { sleepMs: state.sceneWait }]);
   if (!r[0].ok || isErr(r[0].body)) throw new Error(`Switching to scene ${n} failed (${r[0].body || r[0].error})`);
 }
+// White balance mode: the camera answers QAW with other numbers than OAW takes (query 2 = AWB A, 3 = AWB B;
+// set 1 = A, 2 = B). Scene files keep the numbers to send. Files from before 2.21.1 (no wbSet mark) hold the
+// query numbers and are converted when they are imported.
+const wbQueryToSet = raw => raw.replace(/^OAW:([23])$/i, (_, d) => 'OAW:' + (+d - 1));
+function sceneWbFixed(sc) {
+  if (sc.wbSet) return sc;
+  return { ...sc, wbSet: true, params: sc.params.map(x => x.cmd === 'OAW' && x.raw ? { ...x, raw: wbQueryToSet(x.raw) } : x) };
+}
 function parseRead(p, res) {
   if (!res || !res.ok) return { err: res?.error || 'no response' };
   const b = (res.body || '').trim();
@@ -295,7 +303,7 @@ function parseRead(p, res) {
   if (p.t === 'ptz') {
     const code = p.cmd.slice(1).toLowerCase();
     if (b.toLowerCase().startsWith(code)) return { raw: '#' + b.toUpperCase() };
-  } else if (b.toUpperCase().startsWith(p.cmd + ':')) return { raw: b };
+  } else if (b.toUpperCase().startsWith(p.cmd + ':')) return { raw: p.cmd === 'OAW' ? wbQueryToSet(b) : b };
   return { err: 'unexpected: ' + b.slice(0, 40) };
 }
 async function readParams(cam, params) {
@@ -310,6 +318,7 @@ async function readSceneFile(cam, sceneNo) {
     scene: sceneNo,
     params: ok.map(r => ({ cmd: r.p.cmd, name: r.p.name, group: r.p.g, raw: r.raw, value: decode(r.p, r.raw) })),
     unavailable: read.filter(r => !r.raw).map(r => ({ cmd: r.p.cmd, name: r.p.name, reason: r.err })),
+    wbSet: true,
   };
 }
 function makeFile(cam, scenes) {
@@ -1400,7 +1409,8 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
   }));
   if (undos.length) pushHistory({
     label: `Import ${undos.length} file${undos.length > 1 ? 's' : ''}`, camera: true, many: byCam.size > 1,
-    undo: async () => { for (const u of [...undos].reverse()) await u.undo(); }, redo: async () => { for (const u of undos) await u.redo(); },
+    undo: async () => { toast('Undoing the import…'); for (const u of [...undos].reverse()) await u.undo(); log(`Import undone (${undos.length} file${undos.length > 1 ? 's' : ''})`); toast('Import undone: the cameras have their settings from before again'); },
+    redo: async () => { toast('Redoing the import…'); for (const u of undos) await u.redo(); log('Import redone'); toast('Import redone'); },
   });
   if (backups.length === 1) await download(backups[0].name, backups[0].text, undefined, 'backup');
   else if (backups.length > 1) await download(`backup_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`, makeZip(backups), undefined, 'backup');
@@ -1408,6 +1418,7 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
 }
 
 async function importScene(cam, sceneData, targetScene, opts, progress) {
+  sceneData = sceneWbFixed(sceneData);
   if (!cam.model) await identify(cam);
   const prof = profileFor(cam.model);
   const allowed = new Map(paramsFor(cam).map(p => [p.cmd, p]));
@@ -1451,6 +1462,14 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     r = await send(multi.map(x => ({ ...x, send: x.cmd + ':' + dataPart(x.cmd, x.raw).split(':')[0] })), 'simplifying fields…');
     const fixed = new Set(r.filter(z => z.ok).map(z => z.x.cmd));
     pending = pending.filter(x => !fixed.has(x.cmd));
+  }
+  // Colour temperature (OSI:20) can only be written in VAR: switch to VAR, write it, put the mode back
+  const ct = pending.find(x => x.cmd === 'OSI:20');
+  if (ct) {
+    progress('setting the colour temperature…');
+    const mode = (list.find(x => x.cmd === 'OAW')?.raw) || wbQueryToSet((await batch(cam, [{ cmd: 'QAW' }]))[0]?.body || '');
+    const r3 = await batch(cam, [{ cmd: 'OAW:9' }, { cmd: ct.raw }, ...(/^OAW:\d$/i.test(mode) ? [{ cmd: mode }] : [])]);
+    if (r3[1]?.ok && !isErr(r3[1].body)) pending = pending.filter(x => x !== ct);
   }
   const failed = pending.map(x => ({ cmd: x.cmd, name: x.name, err: /^er2/i.test(x.lastErr || '') ? 'ER2: not changeable in the current mode' : String(x.lastErr || '').slice(0, 3) || 'error' }));
   let stored = false;
