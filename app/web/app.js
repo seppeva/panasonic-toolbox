@@ -736,7 +736,7 @@ function renderCams() {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
       <td class="mono">${esc(hostPort(c))}</td>
-      <td><button type="button" class="linkbtn" data-act="golive" title="Show ${esc(c.ip)} on the Live page">${c.title ? esc(c.title) : esc(c.desc || c.ip)}</button></td>
+      <td>${c.title ? esc(c.title) : esc(c.desc || c.ip)}</td>
       <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
       <td>${c.model ? `<span class="pill">${esc(c.model)}</span>` : '<span class="muted">–</span>'}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
       <td>${c.scene == null ? '–' : c.scene === 0 ? 'Off' : 'Scene ' + c.scene}</td>
@@ -748,7 +748,6 @@ function renderCams() {
     $('.zonein', tr).onchange = e => { const z = e.target.value.trim(); if (z === (c.zone || '')) return; track(`Zone of ${c.ip}`, () => { c.zone = z; }); saveCams(); renderZones(); };
     $('[data-act=live]', tr).onclick = () => openCamPage(c, 'live');
     $('[data-act=setup]', tr).onclick = () => openCamPage(c, 'setup');
-    $('[data-act=golive]', tr).onclick = () => goLive(c.ip);
     $('[data-act=del]', tr).onclick = () => { track(`Remove ${c.ip}`, () => { state.cameras = state.cameras.filter(x => x !== c); }); saveCams(); renderCams(); };
     tb.appendChild(tr);
   }
@@ -1193,9 +1192,7 @@ $('#exportBtn').onclick = async () => {
   });
   const zip = cams.length > 1 && $('#expZip').checked;
   const jumps = kind === 'scene' && mode === 'pick';
-  // Reading the live scene or the operator settings changes nothing: no confirmation needed when every camera
-  // answers. The result rows show what was saved where.
-  const ok = !jumps && !offline.size ? true : await ask({
+  const ok = await ask({
     title: `Export ${kind === 'operator' ? 'operator files' : 'scene files'} of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
     wide: true, danger: jumps, ok: jumps ? 'Switch scenes and export' : 'Export',
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${p.html ? p.what : esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
@@ -2957,11 +2954,7 @@ function renderLiveCams() {
   sel.innerHTML = !state.cameras.length ? '<option value="">No cameras yet</option>' : !zs.length ? state.cameras.map(opt).join('')
     : zs.map(z => `<optgroup label="${/^\d+$/.test(z) ? "Zone " + esc(z) : esc(z)}">${state.cameras.filter(c => c.zone === z).map(opt).join('')}</optgroup>`).join('') + (state.cameras.some(c => !c.zone) ? `<optgroup label="No zone">${state.cameras.filter(c => !c.zone).map(opt).join('')}</optgroup>` : '');
   sel.value = state.cameras.some(c => c.ip === cur) ? cur : (state.cameras[0]?.ip || '');
-  // one click to switch camera: a button per camera (the dropdown stays for many cameras)
-  const chips = $('#liveCamChips');
-  chips.innerHTML = state.cameras.length <= 24 ? state.cameras.map(c => `<button type="button" class="chip${c.ip === sel.value ? ' on' : ''}${c.statusKind === 'err' ? ' off' : ''}" data-ip="${esc(c.ip)}" title="${esc(c.ip)}${c.zone ? ' · ' + esc(c.zone) : ''}">${esc(camName(c))}</button>`).join('') : '';
-  $('#liveCamWrap').classList.toggle('hidden', !!chips.innerHTML);
-  $$('[data-ip]', chips).forEach(b => b.onclick = () => { if (sel.value === b.dataset.ip) return; sel.value = b.dataset.ip; $$('[data-ip]', chips).forEach(x => x.classList.toggle('on', x === b)); liveStart(); });
+
 }
 // From anywhere: show this camera on the Live page
 setInterval(() => {
