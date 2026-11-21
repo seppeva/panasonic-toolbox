@@ -1589,9 +1589,10 @@ async function runJob(cam, src, targetScene, opts, progress) {
     const r = await importOperator(cam, src.file, opts, progress);
     return { r, undo: () => importOperator(cam, r.before, { backup: false }, () => { }), redo: () => importOperator(cam, src.file, { backup: false }, () => { }) };
   }
+  // Undo and redo also read the camera first, so only the settings that differ are sent (a few seconds instead of minutes).
   const sceneData = src.file.scenes[src.sceneIdx];
   const r = await importScene(cam, sceneData, targetScene, opts, progress);
-  const o2 = { ...opts, backup: false, verify: false, noBackupRead: true };
+  const o2 = { ...opts, backup: false, verify: false, };
   return { r, undo: () => importScene(cam, r.before, String(r.scene), o2, () => { }), redo: () => importScene(cam, sceneData, String(r.scene), o2, () => { }) };
 }
 
@@ -2556,12 +2557,13 @@ $('#eipToList').onclick = () => {
 const engSel = () => new Set(state.cameras.filter(c => c.selected).map(c => c.ip));
 const setSelection = ips => { const on = new Set(ips); state.cameras.forEach(c => { c.selected = on.has(c.ip); }); saveCams(); renderCams(); };
 const engCams = () => { const on = engSel(); return state.cameras.filter(c => on.has(c.ip)); };
+$('#engAll').onclick = () => { setSelection(state.cameras.map(c => c.ip)); renderEng(); };
+$('#engNone').onclick = () => { setSelection([]); renderEng(); };
 function renderEng() {
   const on = engSel();
   $('#engCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${on.has(c.ip) ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted">${esc(c.ip)}</span>${c.statusKind === 'err' ? ' <span class="warn-text small">offline</span>' : ''}</label>`).join('') : '<span class="muted">Add cameras on the Cameras page first.</span>';
   const save = () => { setSelection($$('#engCams label:not(.selall-row) input:checked').map(x => x.value)); renderEng(); };
   $$('#engCams label:not(.selall-row) input').forEach(i => i.onchange = save);
-  { const set = engSel(); selAllRow($('#engCams'), state.cameras, c => set.has(c.ip), (c, v) => v ? set.add(c.ip) : set.delete(c.ip), () => { setSelection([...set]); renderEng(); }); }
   const box = c => $$('#engCams label:not(.selall-row) input').find(i => i.value === c.ip);
   zoneChips($('#engZones'), { get: c => !!box(c)?.checked, set: (c, v) => { const i = box(c); if (i) i.checked = v; }, done: save }, 'Zone');
   const n = Math.max(4, ...state.cameras.filter(c => c.model).map(c => profileFor(c.model).scenes || 4));
