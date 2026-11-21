@@ -229,10 +229,19 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function camAuth(cam) {
   return { user: cam.user ?? $('#authUser').value.trim(), pass: cam.pass ?? $('#authPass').value };
 }
+// Long series go in parts of 20 commands: a slow camera (refusals are retried, a lost connection costs a second)
+// then never runs into the time limit of one request. A camera that does not answer stops the rest, as before.
 async function batch(cam, items, opts = {}) {
   const a = camAuth(cam);
-  const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, items });
-  return j.results;
+  const out = [];
+  for (let i = 0; i < items.length; i += 20) {
+    const part = items.slice(i, i + 20);
+    const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, items: part }, Math.max(120000, part.length * 8000));
+    out.push(...j.results);
+    const stop = j.results.find(r => r.unreachable || r.status === 401);
+    if (stop && i + 20 < items.length) { out.push(...items.slice(i + 20).map(x => ({ ok: false, status: stop.status, cmd: x.cmd, error: stop.error, unreachable: stop.unreachable }))); break; }
+  }
+  return out;
 }
 const isErr = body => /^er\d/i.test((body || '').trim());
 
@@ -607,13 +616,14 @@ $('#projClose').onclick = async () => {
   if (!await ask({ title: `Close project “${esc(name)}”?`, ok: 'Close project', danger: true, body: `
     <p>The project is removed from the app: ${projSummary(d)}, its scripts, file names and settings.</p>
     <label class="check"><input type="checkbox" id="askSaveFirst" checked> Save a project file first <span class="muted">(in the folder ${esc(projectFolder())})</span></label>
-    <ul class="tight"><li>The app then opens an empty project.</li><li>Files already saved stay where they are, and the cameras are not changed.</li></ul>` })) return;
+    <ul class="tight"><li>${projects().length > 1 ? `The app then opens “${esc(projects().find(p => p.id !== id).name)}”.` : 'The app then opens an empty project.'}</li><li>Files already saved stay where they are, and the cameras are not changed.</li></ul>` })) return;
   if ($('#askSaveFirst').checked && !(await saveProjectFile()) && IN_APP) return info('Project not closed', 'The project file could not be saved, so the project stays open.');
   for (const k of Object.keys(projectData(id))) ls.set(keyFor(k, id), undefined);
   const rest = projects().filter(p => p.id !== id);
-  let nm = 'New project', i = 2; while (rest.some(p => p.name === nm)) nm = `New project ${i++}`;
+  // another project left: open that one; otherwise start an empty project
+  if (rest.length) { saveProjects(rest); ls.set('pscene.project', rest[0].id); return reloadAfterSave(); }
   const nid = 'p' + Date.now().toString(36);
-  saveProjects(rest.concat([{ id: nid, name: nm }]));
+  saveProjects([{ id: nid, name: 'New project' }]);
   ls.set('pscene.project', nid); reloadAfterSave();
 };
 async function importConfig(cfg) {
@@ -1362,6 +1372,8 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
   });
   if (!ok) return;
   $('#importBtn').disabled = true;
+  // Recall (Shows) and Initialize (Engineering, Live) run here too: show the progress where it is written
+  if (!$('#tab-import').classList.contains('active')) $('[role=tab][data-tab=import]').click();
   $('#impResultCard').classList.remove('hidden');
   const out = $('#impResult'); out.innerHTML = '';
   const backups = [], undos = [];
@@ -1376,12 +1388,12 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
         undos.push({ undo, redo });
         if (r.backup) backups.push(r.backup);
         const bad = r.failed.length + r.mismatch.length;
-        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${r.applied} settings applied` +
+        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${r.applied} settings changed${r.unchanged ? `, ${r.unchanged} already right` : ''}` +
           (r.skipped.length ? `, ${r.skipped.length} skipped (not supported by ${esc(profileFor(cam.model).fam)})` : '') +
           (r.failed.length ? `<br>Not accepted by the camera: ${r.failed.map(f => esc(f.name) + ' (' + esc(f.err) + ')').join(', ')}` : '') +
           (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}` : '') +
           (r.stored ? '<br>Stored in the scene file (UE160).' : ''));
-        log(`${cam.ip}: imported ${srcLabel(src)}: ${r.applied} applied, ${r.failed.length} refused, ${r.mismatch.length} different`);
+        log(`${cam.ip}: imported ${srcLabel(src)}: ${r.applied} changed, ${r.unchanged || 0} already right, ${r.failed.length} refused, ${r.mismatch.length} different`);
       } catch (e) { setRow('err', `${esc(cam.ip)}: import failed. ${esc(e.message)}`); log(`${cam.ip}: import failed: ${e.message}`, 'ERROR'); }
     }
     cam.busy = false; try { await identify(cam); } catch { } renderCams();
@@ -1421,8 +1433,14 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     const res = await batch(cam, items.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.send })));
     return items.map((x, i) => ({ x, res: res[i], ok: res[i]?.ok && !isErr(res[i].body) }));
   };
-  // Pass 1: everything in order (modes come first in the list)
-  let pending = list.map(x => ({ ...x, send: x.raw }));
+  // Only what differs from the camera's current values is sent. A value that already matches needs no command, and
+  // many of those cannot be written in the current mode anyway (the camera answers ER2, e.g. Synchro Value while the
+  // shutter is in Step mode, Matrix values while the matrix type is Normal).
+  const now = new Map((before?.params || []).map(b => [b.cmd, (b.raw || '').toUpperCase()]));
+  const unchanged = before ? list.filter(x => now.get(x.cmd) === x.raw.toUpperCase()) : [];
+  const toSend = before ? list.filter(x => now.get(x.cmd) !== x.raw.toUpperCase()) : list;
+  // Pass 1: everything that differs, in order (modes come first in the list)
+  let pending = toSend.map(x => ({ ...x, send: x.raw }));
   let r = await send(pending, `setting ${pending.length} values…`);
   // Pass 2: retry what failed (e.g. a value that only becomes valid after a mode further down)
   pending = r.filter(z => !z.ok).map(z => z.x);
@@ -1434,7 +1452,7 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     const fixed = new Set(r.filter(z => z.ok).map(z => z.x.cmd));
     pending = pending.filter(x => !fixed.has(x.cmd));
   }
-  const failed = pending.map(x => ({ cmd: x.cmd, name: x.name, err: String(x.lastErr || '').slice(0, 3) || 'error' }));
+  const failed = pending.map(x => ({ cmd: x.cmd, name: x.name, err: /^er2/i.test(x.lastErr || '') ? 'ER2: not changeable in the current mode' : String(x.lastErr || '').slice(0, 3) || 'error' }));
   let stored = false;
   if (opts.store && prof.fam === 'UE160') {
     progress('storing in scene file…');
@@ -1444,12 +1462,12 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
   let mismatch = [];
   if (opts.verify) {
     progress('checking…');
-    const okList = list.filter(x => !failed.some(f => f.cmd === x.cmd));
+    const okList = toSend.filter(x => !failed.some(f => f.cmd === x.cmd));
     const back = await readParams(cam, okList.map(x => x.p));
     mismatch = back.map((b, i) => ({ b, x: okList[i] })).filter(({ b, x }) => b.raw && b.raw.toUpperCase() !== x.raw.toUpperCase()).map(({ x }) => ({ cmd: x.cmd, name: x.name }));
   }
   if (opts.restore && target !== orig && orig) { progress(`returning to scene ${orig}…`); await switchScene(cam, orig); }
-  return { scene: target, applied: list.length - failed.length, skipped, failed, mismatch, stored, backup, before };
+  return { scene: target, applied: toSend.length - failed.length, unchanged: unchanged.length, skipped, failed, mismatch, stored, backup, before };
 }
 
 
@@ -1461,12 +1479,15 @@ async function importOperator(cam, data, opts, progress) {
   const before = await readOperatorFile(cam);
   const backup = opts.backup ? { name: operatorName(cam, '_BACKUP'), text: JSON.stringify(before, null, 1) } : null;
   const known = new Map(OPERATOR_PARAMS.map(p => [p.cmd, p]));
-  const list = data.settings.filter(x => x.raw && known.has(x.cmd));
+  const all = data.settings.filter(x => x.raw && known.has(x.cmd));
+  // only what differs (see importScene: values that already match may not be writable in the current mode)
+  const now = new Map((before?.settings || []).map(b => [b.cmd, (b.raw || '').toUpperCase()]));
+  const list = all.filter(x => now.get(x.cmd) !== x.raw.toUpperCase());
   progress(`setting ${list.length} values…`);
   let res = await batch(cam, list.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.raw })));
-  let failed = list.filter((x, i) => !(res[i]?.ok && !isErr(res[i].body)));
-  if (failed.length) { res = await batch(cam, failed.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.raw }))); failed = failed.filter((x, i) => !(res[i]?.ok && !isErr(res[i].body))); }
-  return { scene: null, applied: list.length - failed.length, skipped: data.settings.filter(x => !known.has(x.cmd)), failed: failed.map(x => ({ cmd: x.cmd, name: x.name, err: 'ER' })), mismatch: [], stored: false, backup, before };
+  let failed = list.map((x, i) => ({ x, r: res[i] })).filter(z => !(z.r?.ok && !isErr(z.r.body)));
+  if (failed.length) { res = await batch(cam, failed.map(z => ({ type: z.x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: z.x.raw }))); failed = failed.map((z, i) => ({ x: z.x, r: res[i] })).filter(z => !(z.r?.ok && !isErr(z.r.body))); }
+  return { scene: null, applied: list.length - failed.length, unchanged: all.length - list.length, skipped: data.settings.filter(x => !known.has(x.cmd)), failed: failed.map(z => ({ cmd: z.x.cmd, name: z.x.name, err: /^er2/i.test(z.r?.body || '') ? 'ER2: not changeable in the current mode' : (z.r?.body || z.r?.error || 'ER').slice(0, 8) })), mismatch: [], stored: false, backup, before };
 }
 // Run one import job (scene or operator) and return its result plus how to undo/redo it.
 async function runJob(cam, src, targetScene, opts, progress) {
@@ -2888,8 +2909,10 @@ async function liveReadNow(cam) {
   }
   const sc = /^OSF:(\d)/.exec(b(6)); if (sc) { cam.scene = +sc[1] + 1; $$('#liveScenes button').forEach(x => x.classList.toggle('on', +x.dataset.scene === cam.scene)); }
   const ir = /^ic?(\d{2})$/i.exec(b(7)); live.irisVal = ir ? +ir[1] : null; $('#liveIris').textContent = ir ? ir[1] : '–';
-  $('#liveStatus').textContent = `${cam.model || ''} ${live.power ? '· ' + live.power : ''}`;
+  // a message from a button (e.g. "White balance: VAR 4300 K") stays readable for a few seconds
+  if (Date.now() - (live.msgAt || 0) > 4000) { live.selfStatus = true; $('#liveStatus').textContent = `${cam.model || ''} ${live.power ? '· ' + live.power : ''}`; live.selfStatus = false; }
 }
+new MutationObserver(() => { if (!live.selfStatus) live.msgAt = Date.now(); }).observe($('#liveStatus'), { childList: true, characterData: true, subtree: true });
 
 // press and hold: pan/tilt, zoom and focus move while the button is held and stop on release
 const spd = id => Math.max(1, Math.min(49, +$(id).value || 25));
@@ -2900,22 +2923,24 @@ function ptCmd(dx, dy) { const s = spd('#ptSpeed'); return `#PTS${pad2(50 + dx *
 const motionCh = {};
 function motionSend(kind, cmd) {
   const cam = live.cam; if (!cam) return;
-  const ch = motionCh[kind] ||= { busy: false, next: null };
+  const ch = motionCh[kind] ||= { busy: false, next: null, kind };
   ch.next = { cam, cmd };
   if (!ch.busy) motionPump(ch);
 }
 const isStopCmd = cmd => /^#(PTS5050|Z50|F50)$/.test(cmd);
 async function motionPump(ch) {
   ch.busy = true;
-  let stopTries = 0;
+  let stopTries = 0, moveTries = 0;
   while (ch.next) {
     const { cam, cmd } = ch.next; ch.next = null;
     let r = null;
     try { [r] = await batch(cam, [{ type: 'ptz', cmd, motion: true }], { delayMs: 0 }); } catch { }
-    if (r?.ok && !isErr(r.body)) { stopTries = 0; continue; }
+    if (r?.ok && !isErr(r.body)) { stopTries = 0; moveTries = 0; continue; }
     if (cam === live.cam) $('#liveStatus').textContent = `${cmd}: ${r?.ok ? 'not accepted (' + r.body + ')' : 'camera did not answer in time, skipped'}`;
-    // only a stop is worth repeating, and only when nothing newer is waiting
+    // A stop is repeated so the camera really stops. A move is repeated only while its button is still held (the
+    // camera refuses moves for a moment, e.g. right after a scene switch); never when something newer is waiting.
     if (isStopCmd(cmd) && !ch.next && stopTries++ < 3) { await sleep(300); if (!ch.next) ch.next = { cam, cmd }; }
+    else if (!isStopCmd(cmd) && ch.kind && live.moving?.kind === ch.kind && !ch.next && moveTries++ < 8) { await sleep(300); if (!ch.next && live.moving?.kind === ch.kind) ch.next = { cam, cmd }; }
   }
   ch.busy = false;
 }
