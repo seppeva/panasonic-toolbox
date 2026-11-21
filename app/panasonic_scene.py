@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.21.2"
+VERSION = "2.21.3"
 DEFAULT_PORT = 8765
 
 
@@ -597,7 +597,7 @@ def open_camera_with_login(req):
     if not user and not target_allowed(ip):
         raise ValueError("Only camera addresses on the local network can be opened")
     if not req.get("noOpen"):
-        webbrowser.open(url)
+        webbrowser.open_new_tab(url)  # several cameras at once: one tab each
     return {"ok": True, "url": url}
 
 

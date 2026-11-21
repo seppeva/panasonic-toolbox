@@ -703,8 +703,18 @@ function saveLogin() {
 ['#authUser', '#authPass', '#rememberLogin'].forEach(s => $(s).addEventListener('change', saveLogin));
 
 function hostPort(c) { return c.ip + (c.port && +c.port !== 80 ? ':' + c.port : ''); }
-async function openCamPage(c, kind) {
-  if (state.localIps.length && !sameRange(c.ip)) {
+// Open the live or settings page of every selected camera, one browser tab each.
+async function openCamPages(cams, kind) {
+  if (!cams.length) return;
+  const far = state.localIps.length ? cams.filter(c => !sameRange(c.ip)) : [];
+  if (far.length && !await ask({ title: `${far.length} of ${cams.length} camera${cams.length > 1 ? 's are' : ' is'} in another IP range`, ok: 'Open anyway', body: `<p>This computer cannot reach ${far.map(c => `${esc(camName(c))} <span class="mono">${esc(c.ip)}</span>`).join(', ')}; their pages will not load.</p>` })) return;
+  for (const c of cams) { await openCamPage(c, kind, true); await sleep(250); }
+  toast(`Opened the ${kind === 'setup' ? 'settings' : 'live'} page of ${cams.length} camera${cams.length > 1 ? 's' : ''}`);
+}
+$('#camLiveSel').onclick = () => openCamPages(state.cameras.filter(c => c.selected), 'live');
+$('#camSetupSel').onclick = () => openCamPages(state.cameras.filter(c => c.selected), 'setup');
+async function openCamPage(c, kind, quiet = false) {
+  if (!quiet && state.localIps.length && !sameRange(c.ip)) {
     if (!await ask({ title: `${esc(camName(c))} is in another IP range`, ok: 'Open anyway', body: `<p>This computer (${state.localIps.map(i => `<span class="mono">${esc(i)}</span>`).join(', ')}) cannot reach <span class="mono">${esc(c.ip)}</span>, so the browser will say the page is not reachable.</p><p>Give the camera an address in your range on the Network setup page, or give this computer an address in the camera's range.</p>` })) return;
   }
   const { user, pass } = camAuth(c);
@@ -2125,8 +2135,7 @@ function renderDefaults() {
   box.innerHTML = keys.length ? `<table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th><th></th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span>, scene ${esc(String(d[m].scene ?? ''))}</td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td><td class="end"><button type="button" class="icon" data-defdel="${esc(m)}" aria-label="Delete default for ${esc(m)}">×</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No default scenes yet.</p>';
   $$('[data-defdel]', box).forEach(b => b.onclick = () => { const x = defaults(); delete x[b.dataset.defdel]; saveDefaults(x); renderDefaults(); toast(`Default for ${b.dataset.defdel} deleted`); });
 }
-$('#liveInit').onclick = () => live.cam && initializeCams([live.cam]);
-$('#liveDefSave').onclick = () => live.cam && saveAsDefault(live.cam);
+
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 $('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
 // Edit a saved show: its scenes go back into the grid (as opened files), its cameras are ticked.
