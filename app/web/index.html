@@ -17,7 +17,6 @@
   <div class="appname"><img src="icon.svg" alt="" width="28" height="28"><span>Panasonic Toolbox</span><button class="iconbtn" id="refreshAllBtn" title="Refresh: read every camera again (F5)" aria-label="Refresh"><svg viewBox="0 0 20 20"><path d="M16 10a6 6 0 1 1-1.8-4.3"/><path d="M16 3.5v3.5h-3.5"/></svg></button></div>
   <button type="button" class="project-name" id="projectName" title="Project. Switch projects in Settings"></button>
   <nav class="tabs" role="tablist" aria-label="Sections">
-    <button role="tab" data-tab="netsetup"><svg viewBox="0 0 20 20"><circle cx="10" cy="4.5" r="2"/><circle cx="4" cy="15.5" r="2"/><circle cx="16" cy="15.5" r="2"/><path d="M10 6.5v4M10 10.5L4.8 13.8M10 10.5l5.2 3.3"/></svg><span>Network setup</span></button>
     <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Cameras</span></button>
     <button role="tab" data-tab="live"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><circle cx="15.5" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg><span>Live</span></button>
     <button role="tab" data-tab="eng"><svg viewBox="0 0 20 20"><path d="M4 4.5h12M4 10h12M4 15.5h12"/><circle cx="7.5" cy="4.5" r="1.8"/><circle cx="12.5" cy="10" r="1.8"/><circle cx="6.5" cy="15.5" r="1.8"/></svg><span>Engineering</span></button>
@@ -46,60 +45,46 @@
 <div class="bridge-help hidden" id="updateBox"><div class="note ok" id="updateText"></div></div>
 
 <main>
-<!-- ================= CAMERAS ================= -->
+<!-- ================= CAMERAS (with network setup) ================= -->
 <section id="tab-cams" class="tab active">
-  <header class="page-head"><h1>Cameras</h1><p>Put this computer in the same IP range as the cameras, then search the network. The cameras you select here are used for export and import.</p></header>
-  <div class="grid2">
-    <div class="card">
-      <h2>Scan an IP range</h2>
-      <p class="hint">Finds the cameras this computer can reach and reads their model, name and scene. Only works for cameras in the same IP range as this computer.</p>
-      <div class="row wrap">
-        <label class="grow">IP range <input id="scanRange" placeholder="192.168.0.0/24 or 192.168.0.10-60"></label>
-        <label class="w90" title="The cameras' web port. Leave at 80 unless you changed it in the camera's network settings.">HTTP port <input id="scanPort" type="number" value="80"></label>
-      </div>
-      <p class="hint">Example: this computer on 192.168.0.200 with subnet mask 255.255.255.0 finds cameras on 192.168.0.1 to 192.168.0.254.</p>
-      <div class="card-foot">
-        <button id="scanBtn">Scan network</button>
-        <span id="scanStatus" class="muted"></span>
-      </div>
-      <div class="note hidden" id="scanOther"></div>
-      <p class="hint">Cameras in another IP range, or a new camera with a factory IP address? <a href="#" id="toNetsetup">Network setup</a> finds every Panasonic camera on the cable and lets you change its IP address first.</p>
-    </div>
-    <div class="card">
-      <h2>Camera login</h2>
-      <div class="row wrap">
-        <label class="grow">User name <input id="authUser" autocomplete="off"></label>
-        <label class="grow">Password <input id="authPass" type="password" autocomplete="off"></label>
-      </div>
-      <p class="hint">Used for cameras with User Auth turned on and to log in automatically when you open a camera's settings page.</p>
-      <label class="check"><input type="checkbox" id="rememberLogin"> Remember on this computer</label>
-    </div>
-  </div>
-
+  <header class="page-head"><h1>Cameras</h1><p>Every Panasonic camera on the network, also in another IP range. Change a name or IP address right in the list and choose Apply. The ticked cameras are the ones the other pages work with.</p></header>
   <div class="card">
-    <div class="row between">
-      <h2>Found cameras <span class="count" id="camCount">0</span></h2>
-      <div class="row">
-        <button class="ghost small" id="addCamsBtn">Add cameras…</button>
-        <button class="ghost small" id="zonesBtn" title="Rename or remove zones">Zones…</button>
-        <button class="ico" id="refreshBtn" title="Refresh status: read every camera in the list again" aria-label="Refresh status"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10a6 6 0 1 1-1.8-4.3"/><path d="M16 3.5v3.5h-3.5"/></svg></button>
-      </div>
+    <div class="row between wrap">
+      <h2>Cameras <span class="count" id="camCount">0</span> <span class="muted small" id="camFoundN"></span></h2>
+      <div class="row"><span class="muted small" id="camSearchStatus"></span><button class="small" id="camSearch" title="Search the network for Panasonic cameras (also in another IP range) and read every camera in the list again">Search</button><button class="ghost small" id="addCamsBtn" title="Add cameras by IP address, or scan an IP range">Add…</button><button class="ghost small" id="zonesBtn" title="Rename zones and choose which cameras are in them">Zones…</button></div>
     </div>
     <div class="zonebar" id="camZoneBar"></div>
+    <div class="note hidden" id="scanOther"></div>
     <div class="selbar hidden" id="camSelBar"><span class="seln"><b id="camSelN">0</b> selected</span>
-      <button class="ghost small" id="camEditSel">Edit…</button>
       <button class="ghost small" id="camLiveSel" title="Open the live page of every selected camera, each in its own browser tab">Live view</button>
       <button class="ghost small" id="camSetupSel" title="Open the settings page of every selected camera, each in its own browser tab, signed in">Settings</button>
-      <span class="grow"></span>
-      <button class="ghost small danger-text" id="camDelSel">Remove</button>
+      <button class="ghost small" id="camEditSel" title="Description, zone, port and login of the selected cameras">Edit…</button>
+      <details class="menu"><summary>More</summary><div class="menu-pop">
+        <button type="button" id="camNumber">Number the IP addresses…</button>
+        <button type="button" id="camAddFound">Add the found ones to the list</button>
+        <button type="button" id="camDelSel" class="danger-text">Remove from the list</button>
+      </div></details>
     </div>
     <datalist id="zoneList"></datalist>
     <table class="tbl" id="camTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>IP address</th><th>Name on camera</th><th>Description</th><th>Model</th><th>Zone</th><th>Active scene</th><th>Status</th><th>Camera web pages</th><th><span class="sr">Remove</span></th></tr></thead>
+      <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>Name</th><th>IP address</th><th>Description</th><th>Model</th><th>Zone</th><th>Scene</th><th>Status</th><th>Web pages</th><th><span class="sr">Remove</span></th></tr></thead>
       <tbody></tbody>
     </table>
-    <p class="empty muted" id="camEmpty">No cameras yet. Scan the network or add a camera by IP.</p>
+    <p class="empty muted" id="camEmpty">No cameras yet. Choose Search to find the cameras on the network, or Add… to add one by IP address.</p>
+    <div class="pendbar hidden" id="camPending"><span id="camPendingN"></span><span class="grow"></span><button class="ghost small" id="camDiscard">Discard</button><button class="small" id="camApply">Apply</button></div>
+    <p class="hint">A new name or IP address is sent with Easy IP, like Panasonic's Easy IP Setup tool. Cameras only accept a new IP address in the first 20 minutes after they are switched on (setting “Easy IP Setup accommodate period”); if a change is not accepted, switch the camera off and on and try again.</p>
   </div>
+  <details class="card foldcard" id="loginCard">
+    <summary><h2>Camera login</h2><span class="muted small" id="loginSummary"></span></summary>
+    <div class="row wrap">
+      <label class="grow">User name <input id="authUser" autocomplete="off"></label>
+      <label class="grow">Password <input id="authPass" type="password" autocomplete="off"></label>
+    </div>
+    <p class="hint">Used for cameras with User Auth turned on, to change a camera's name, and to log in automatically when you open a camera's settings page.</p>
+    <label class="check"><input type="checkbox" id="rememberLogin"> Remember on this computer</label>
+  </details>
+  <!-- scan of an IP range: started from Add…; kept here so its fields and status stay with the page -->
+  <div hidden><input id="scanRange"><input id="scanPort" type="number" value="80"><button id="scanBtn"></button><span id="scanStatus"></span><a href="#" id="toNetsetup"></a></div>
 </section>
 
 <!-- ================= EXPORT ================= -->
@@ -183,8 +168,10 @@
   <div class="card hidden" id="impResultCard"><h2>Result</h2><div id="impResult"></div></div>
 </section>
 
-<!-- ================= NETWORK SETUP (Easy IP) ================= -->
-<section id="tab-netsetup" class="tab">
+<!-- ================= NETWORK SETUP (Easy IP) =================
+     No tab of its own any more: the Cameras page shows these cameras and changes them.
+     The table below stays as the store of the Easy IP search results. -->
+<section id="tab-netsetup" class="tab" hidden>
   <header class="page-head"><h1>Network setup</h1><p>Finds every Panasonic camera on the cable, also in another IP range, and changes its name and IP address, the way Panasonic's Easy IP Setup tool does. Cameras in your IP range can be added to Cameras straight away; give the others an address in your range first.</p></header>
   <div class="card">
     <div class="row between">

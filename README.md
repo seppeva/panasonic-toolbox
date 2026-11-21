@@ -8,8 +8,7 @@ Website: **https://seppeva.github.io/panasonic-toolbox/**
 
 | Tab | What it is for |
 |---|---|
-| **Network setup** | Find every Panasonic camera on the network, in any IP range, and set its name and IP address, like Easy IP Setup. A new name goes both to the camera title (`OSJ:5C`) and to the camera name of the web page and the network (`/cgi-bin/set_basic?cam_title=`). Shows per camera whether it is in this computer's IP range and already in Cameras; after Apply changes the app searches again and shows per camera what really changed (changes a camera did not take are dropped from the table); an IP change moves the camera in the Cameras list along with it. A range scan on the Cameras page also points out cameras it could not reach. |
-| **Cameras** | **Zones…** renames zones, sets which cameras are in each zone, adds and removes zones in one dialog. Select cameras and open their live or settings pages in one click, each in its own browser tab. Your camera list: IP address, name on the camera, your own description, model, zone, live scene and status. Zones let you work on groups of cameras; a camera's IP address can be changed in the app when it got a new one. |
+| **Cameras** | One list with your cameras and every other Panasonic camera the network search finds, also in another IP range (Easy IP, like Easy IP Setup). Change a name or IP address right in the list and choose **Apply**: the app sends it, searches again and shows per camera what really changed. A new name goes both to the camera title (`OSJ:5C`) and to the camera name of the web page and the network (`/cgi-bin/set_basic?cam_title=`); an IP change moves the camera in the list along with it. **Search** finds the cameras and reads every listed camera again; **Add…** adds cameras by IP address or scans an IP range; **Zones…** renames zones and sets which cameras are in each. Select cameras and open their live or settings pages in one click, each in its own browser tab. |
 | **Live** | Live picture with control buttons: pan/tilt and zoom with a speed readout and a Nominal button, focus, iris, presets, scene files, day/night, white balance (with a field for the VAR colour temperature in kelvin, AWB, and AWB stored in memory A or B). Movements are never buffered: a camera that hangs for a moment does not play back old pan/tilt/zoom commands later, black balance and shooting mode. |
 | **Engineering** | One action on one or many cameras at once, with the result and the camera's answer per camera: power on/standby, scene file, tally (enable, red, green, brightness), white balance (Auto/Var/A/B, VAR in kelvin, AWB, AWB stored in memory A or B, ABB), installation (desktop/hanging), preset scope A/B/C, IP video (H.264 streams on/off, experimental), and **Initialize** / **Save as default** for the default scene per model. |
 | **Export** | Save the shading settings of any scene (scene files, `.pscene.json`) or an operator's own preferences (operator files, `.poper`), from one or many cameras. |
@@ -104,7 +103,7 @@ pip install pywebview            # optional; without it the app opens in your br
 python3 tools/mock_camera.py 127.0.0.11 8080 AW-UE150 "CAM 1" &
 python3 tools/mock_camera.py 127.0.0.12 8080 AW-UE160 "CAM 2" &
 python3 tools/mock_camera.py 127.0.0.13 8080 AW-HE130 "CAM 3" basic &   # older model: name only via get_basic
-python3 tools/mock_easyip.py &   # two cameras for Network setup
+python3 tools/mock_easyip.py &   # cameras in other IP ranges for the Cameras page search
 python3 app/panasonic_scene.py   # or --browser / --headless
 # in the app: scan 127.0.0.10-13 on port 8080
 ```

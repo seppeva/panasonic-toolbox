@@ -467,3 +467,21 @@ h3.fold::before{content:'';width:5px;height:5px;border-right:1.5px solid current
 .live-block.collapsed>:not(:first-child){display:none}
 .live-block.collapsed>h3{margin:0}
 .live-block.collapsed{padding-bottom:10px}
+/* ---- Cameras page with network setup ---- */
+#camTable input.namein{width:100%;min-width:110px}
+#camTable input.ipin{width:100%;min-width:118px}
+#camTable tr.found td{color:var(--muted)}
+#camTable tr.found{background:rgba(74,139,240,.05)}
+.pendbar{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;border-radius:var(--r);background:rgba(217,161,59,.12);border:1px solid rgba(217,161,59,.45)}
+.pendbar #camPendingN{color:#ebc77f;font-weight:500}
+details.foldcard>summary{list-style:none;display:flex;align-items:baseline;gap:10px;cursor:pointer;user-select:none}
+details.foldcard>summary::-webkit-details-marker{display:none}
+details.foldcard>summary h2{margin:0;display:flex;align-items:center;gap:8px}
+details.foldcard>summary h2::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);opacity:.6}
+details.foldcard[open]>summary h2::before{transform:rotate(45deg)}
+details.foldcard[open]>summary{margin-bottom:12px}
+#camTable input.namein,#camTable input.ipin{height:26px;padding:2px 7px;background:transparent;border-color:transparent}
+#camTable input.namein:hover,#camTable input.namein:focus,#camTable input.ipin:hover,#camTable input.ipin:focus{background:var(--field);border-color:var(--rule)}
+#camTable input.namein{font-weight:500}
+#camTable .pill{white-space:nowrap}
+#camTable input.changed,#camTable input.changed:hover{border-color:#d9a13b;background:rgba(217,161,59,.12)}

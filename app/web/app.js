@@ -98,6 +98,8 @@ const state = {
   cameras: store.get('cameras', []).map(c => ({ ...c, status: '', busy: false })),
   imports: [],   // {id, fileName, data(sceneFile), sceneIdx, target, targetScene, include}
   rp: store.get('rpRows', []),
+  eip: [],             // cameras found by the Easy IP network search
+  netLocal: new Map(), // name edits for listed cameras the search did not find (ip -> row)
 };
 
 /* ------------------------------------------------------------------ log */
@@ -498,7 +500,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'import') renderImports();
   if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); }
   if (b.dataset.tab === 'eng') renderEng();
-  if (b.dataset.tab === 'netsetup' && Date.now() - (state.eipAt || 0) > 60000 && !$('#eipSearch').disabled) { state.eipAt = Date.now(); eipDiscover(); }
+  if (b.dataset.tab === 'cams' && Date.now() - (state.eipAt || 0) > 60000 && !$('#eipSearch').disabled) { state.eipAt = Date.now(); eipDiscover(); }
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
   $('.content').scrollTop = 0;
 }));
@@ -715,6 +717,8 @@ function saveLogin() {
   else store.set('login', null);
 }
 ['#authUser', '#authPass', '#rememberLogin'].forEach(s => $(s).addEventListener('change', saveLogin));
+const loginSummary = () => { $('#loginSummary').textContent = $('#authUser').value.trim() ? `User ${$("#authUser").value.trim()}` : 'No login filled in'; };
+['#authUser', '#authPass'].forEach(s => $(s).addEventListener('input', loginSummary)); loginSummary();
 
 function hostPort(c) { return c.ip + (c.port && +c.port !== 80 ? ':' + c.port : ''); }
 // Open the live or settings page of every selected camera, one browser tab each.
@@ -729,7 +733,7 @@ $('#camLiveSel').onclick = () => openCamPages(state.cameras.filter(c => c.select
 $('#camSetupSel').onclick = () => openCamPages(state.cameras.filter(c => c.selected), 'setup');
 async function openCamPage(c, kind, quiet = false) {
   if (!quiet && state.localIps.length && !sameRange(c.ip)) {
-    if (!await ask({ title: `${esc(camName(c))} is in another IP range`, ok: 'Open anyway', body: `<p>This computer (${state.localIps.map(i => `<span class="mono">${esc(i)}</span>`).join(', ')}) cannot reach <span class="mono">${esc(c.ip)}</span>, so the browser will say the page is not reachable.</p><p>Give the camera an address in your range on the Network setup page, or give this computer an address in the camera's range.</p>` })) return;
+    if (!await ask({ title: `${esc(camName(c))} is in another IP range`, ok: 'Open anyway', body: `<p>This computer (${state.localIps.map(i => `<span class="mono">${esc(i)}</span>`).join(', ')}) cannot reach <span class="mono">${esc(c.ip)}</span>, so the browser will say the page is not reachable.</p><p>Give the camera an address in your range (type it in its IP column on the Cameras page and choose Apply), or give this computer an address in the camera's range.</p>` })) return;
   }
   const { user, pass } = camAuth(c);
   const path = kind === 'setup' ? state.setupPath : state.livePath;
@@ -743,20 +747,48 @@ async function openCamPage(c, kind, quiet = false) {
   } catch (e) { info('Could not open the page', esc(e.message)); }
 }
 
+// The Cameras page shows one list: the cameras in your list, then the Panasonic cameras the network search found
+// that are not in it yet. Name and IP address can be changed right in the list; Apply sends them with Easy IP.
+// netRow(c): the Easy IP row of a camera in the list (found by the search), or a local row when the search did not
+// find it (then only the name can change: that goes over the camera's web interface).
+function netRow(c) {
+  const r = state.eip.find(x => x.orig.ip === c.ip);
+  if (r) { state.netLocal.delete(c.ip); return r; }
+  let l = state.netLocal.get(c.ip);
+  const v = { name: c.title || '', ip: c.ip, mask: '255.255.255.0', gateway: '', port: c.port || 80 };
+  if (!l || (!netPending(l) && l.orig.name !== v.name)) { l = { mac: c.ip, model: c.model || '', local: true, orig: { ...v }, edit: { ...v } }; state.netLocal.set(c.ip, l); }
+  return l;
+}
+const netPending = r => JSON.stringify(r.edit) !== JSON.stringify(r.orig);
+const foundRows = () => state.eip.filter(r => !state.cameras.some(c => c.ip === r.orig.ip));
+const allNetRows = () => [...state.cameras.map(netRow), ...foundRows()];
 function renderCams() {
+  // do not rebuild the table while you type in one of its fields: it is drawn again when you leave the field
+  const f = document.activeElement;
+  if (f && $('#camTable').contains(f) && f.tagName === 'INPUT' && f.type !== 'checkbox') { state.camRedraw = true; updateSel(); return; }
+  state.camRedraw = false;
   const tb = $('#camTable tbody'); tb.innerHTML = '';
+  const ipCell = (r, editable) => editable
+    ? `<input data-k="ip" class="mono ipin${r.edit.ip !== r.orig.ip ? ' changed' : ''}" value="${esc(r.edit.ip)}" aria-label="IP address" title="Type a new IP address and choose Apply; it is sent with Easy IP">`
+    : `<span class="mono" title="Choose Search to change this address with Easy IP (the search did not find this camera)">${esc(r.orig.ip)}</span>`;
+  const nameCell = r => `<input data-k="name" class="namein${r.edit.name !== r.orig.name ? ' changed' : ''}" value="${esc(r.edit.name)}" maxlength="15" placeholder="${esc(r.model || 'Name')}" aria-label="Camera name" title="Name on the camera (menu and web page). Up to 15 letters, digits, spaces, - _ .">`;
+  const range = r => !r.local && state.localIps.length && !sameRange(r.orig.ip, r.orig.mask);
+  const bindNet = (tr, r) => $$('input[data-k]', tr).forEach(i => i.onchange = () => { r.edit[i.dataset.k] = i.value.trim(); renderCams(); });
   for (const c of state.cameras) {
+    const r = netRow(c);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="checkbox" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
-      <td class="mono">${esc(hostPort(c))}</td>
-      <td>${c.title ? esc(c.title) : esc(c.desc || c.ip)}</td>
+    const status = c.busy ? '<span class="pill busy">Busy</span>' : range(r) ? '<span class="pill warn" title="Another IP range than this computer: give the camera an address in your range (type it in the IP column), or change this computer\'s IP address">Other range</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : '';
+    tr.innerHTML = `<td><input type="checkbox" class="selcb" ${c.selected ? 'checked' : ''} aria-label="Select ${esc(c.ip)}"></td>
+      <td>${nameCell(r)}</td>
+      <td>${ipCell(r, !r.local)}${(c.port || 80) != 80 ? `<span class="mono muted small">:${c.port}</span>` : ''}</td>
       <td><input class="descin" value="${esc(c.desc || '')}" placeholder="Add a description" aria-label="Description of ${esc(c.ip)}" title="Your own description, e.g. where the camera is. Not sent to the camera."></td>
       <td>${c.model ? `<span class="pill">${esc(c.model)}</span>` : '<span class="muted">–</span>'}</td><td><input class="zonein" list="zoneList" value="${esc(c.zone || '')}" placeholder="–" aria-label="Zone of ${esc(c.ip)}"></td>
-      <td>${c.scene == null ? '–' : c.scene === 0 ? 'Off' : 'Scene ' + c.scene}</td>
-      <td>${c.busy ? '<span class="pill busy">Busy</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : ''}</td>
+      <td class="nowrap">${c.scene == null ? "–" : c.scene === 0 ? "Off" : "Scene " + c.scene}</td>
+      <td>${status}</td>
       <td class="nowrap">${icoBtn('live', 'live', 'Open the live page of ' + c.ip)}${icoBtn('setup', 'setup', 'Open the settings page of ' + c.ip + ', signed in')}</td>
-      <td class="end"><button class="icon" data-act="del" title="Remove from list" aria-label="Remove ${esc(c.ip)}">×</button></td>`;
-    $('input', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
+      <td class="end"><button class="icon" data-act="del" title="Remove from the list" aria-label="Remove ${esc(c.ip)}">×</button></td>`;
+    $('.selcb', tr).onchange = e => { c.selected = e.target.checked; saveCams(); updateSel(); };
+    bindNet(tr, r);
     $('.descin', tr).onchange = e => { const d = e.target.value.trim(); if (d === (c.desc || '')) return; track(`Description of ${c.ip}`, () => { c.desc = d; }); saveCams(); };
     $('.zonein', tr).onchange = e => { const z = e.target.value.trim(); if (z === (c.zone || '')) return; track(`Zone of ${c.ip}`, () => { c.zone = z; }); saveCams(); renderZones(); };
     $('[data-act=live]', tr).onclick = () => openCamPage(c, 'live');
@@ -764,11 +796,70 @@ function renderCams() {
     $('[data-act=del]', tr).onclick = () => { track(`Remove ${c.ip}`, () => { state.cameras = state.cameras.filter(x => x !== c); }); saveCams(); renderCams(); };
     tb.appendChild(tr);
   }
+  // found on the network, not in the list yet
+  for (const r of foundRows()) {
+    const tr = document.createElement('tr'); tr.className = 'found';
+    tr.innerHTML = `<td><input type="checkbox" class="selcb" ${r.sel ? 'checked' : ''} aria-label="Select ${esc(r.orig.ip)}"></td>
+      <td>${nameCell(r)}</td><td>${ipCell(r, true)}</td><td class="muted small">Found on the network</td>
+      <td>${r.model ? `<span class="pill">${esc(r.model)}</span>` : '–'}</td><td></td><td></td>
+      <td>${range(r) ? '<span class="pill warn" title="Another IP range than this computer: give the camera an address in your range (type it in the IP column) and choose Apply">Other range</span>' : '<span class="pill info">Found</span>'}</td>
+      <td colspan="2" class="end"><button type="button" class="ghost small" data-act="add" title="Add this camera to your list">Add</button></td>`;
+    $('.selcb', tr).onchange = e => { r.sel = e.target.checked; updateSel(); };
+    bindNet(tr, r);
+    $('[data-act=add]', tr).onclick = () => addFound([r]);
+    tb.appendChild(tr);
+  }
+  const nf = foundRows().length;
   $('#camCount').textContent = state.cameras.length;
-  $('#camEmpty').classList.toggle('hidden', state.cameras.length > 0);
-  selAllState($('#selAll'), state.cameras, c => c.selected);
+  $('#camFoundN').textContent = nf ? `+ ${nf} found on the network` : '';
+  $('#camEmpty').classList.toggle('hidden', state.cameras.length + nf > 0);
+  const pend = allNetRows().filter(netPending).length;
+  $('#camPending').classList.toggle('hidden', !pend);
+  $('#camPendingN').textContent = `${pend} camera${pend > 1 ? 's' : ''} changed, not sent yet`;
   updateSel(); renderZones(); renderGrid();
 }
+$('#camTable').addEventListener('focusout', () => setTimeout(() => { if (state.camRedraw && !$('#camTable').contains(document.activeElement)) renderCams(); }, 0));
+function addFound(list) {
+  if (!list.length) return info('Nothing to add', 'Choose Search first, or tick the found cameras you want to add.');
+  track(`Add ${list.length} camera(s) from the network`, () => list.forEach(r => { upsertCam(r.orig.ip, r.orig.port, { model: r.model, title: r.orig.name }); r.sel = false; }));
+  saveCams(); renderCams(); refreshAll(state.cameras.filter(c => list.some(r => r.orig.ip === c.ip)));
+  const far = list.filter(r => state.localIps.length && !sameRange(r.orig.ip, r.orig.mask));
+  if (far.length) info(`${list.length} camera${list.length > 1 ? 's' : ''} added`, `${far.length} of them ${far.length > 1 ? 'are' : 'is'} in another IP range than this computer (${far.map(r => `<span class="mono">${esc(r.orig.ip)}</span>`).join(', ')}) and cannot be reached yet. Type an address in your range in the IP column and choose Apply, or change this computer's IP address.`);
+  else toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to the list`);
+}
+$('#camAddFound').onclick = () => { const sel = foundRows().filter(r => r.sel); addFound(sel.length ? sel : foundRows()); };
+$('#camDiscard').onclick = () => { allNetRows().forEach(r => { r.edit = { ...r.orig }; }); renderCams(); };
+$('#camApply').onclick = () => applyNet(allNetRows().filter(netPending));
+// Search: Easy IP over the whole cable (also other IP ranges) and read every camera in the list again
+async function camSearch() {
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  $('#camSearch').disabled = true; state.eipAt = Date.now();
+  try { await Promise.all([eipDiscover(), state.cameras.length ? refreshAll(state.cameras) : null]); }
+  finally { $('#camSearch').disabled = false; }
+}
+$('#camSearch').onclick = camSearch;
+$('#camNumber').onclick = async () => {
+  const rows = [...state.cameras.filter(c => c.selected).map(netRow), ...foundRows().filter(r => r.sel)];
+  if (!rows.length) return info('Select cameras first', 'Tick the cameras you want to give new addresses.');
+  const first = rows.find(r => !r.local)?.edit;
+  const ok = await ask({ title: `New IP addresses for ${rows.length} camera${rows.length > 1 ? 's' : ''}`, ok: 'Fill in', body: `<div class="row wrap">
+      <label class="w140">First IP address <input id="nbIp" class="mono" value="${esc(first?.ip || '')}"></label>
+      <label class="w140">Subnet mask <input id="nbMask" class="mono" value="${esc(first?.mask || '255.255.255.0')}"></label>
+      <label class="w140">Gateway <input id="nbGw" class="mono" value="${esc(first?.gateway || '')}" placeholder="optional"></label></div>
+      <p class="hint">The ticked cameras get addresses counting up from the first one, in the order of the list. Nothing is sent yet: check the list and choose Apply.</p>` });
+  if (!ok) return;
+  const ip = $('#nbIp').value.trim(), mask = $('#nbMask').value.trim(), gw = $('#nbGw').value.trim();
+  if (ip && !validIp(ip)) return info('Invalid first IP address', esc(ip));
+  let n = ip ? ipNum(ip) : null; const skipped = [];
+  for (const r of rows) {
+    if (r.local) { skipped.push(r.orig.ip); continue; }
+    if (n != null) { r.edit.ip = ipStr(n); n++; }
+    if (mask) r.edit.mask = mask;
+    if (gw) r.edit.gateway = gw;
+  }
+  renderCams();
+  if (skipped.length) info('Not every camera got a new address', `The network search did not find ${skipped.map(esc).join(', ')}, so its address cannot be changed from here. Choose Search and try again.`);
+};
 /* ---- zones: group cameras (stage, FOH, ...) and select them per zone ---- */
 const zoneNames = () => [...new Set(state.cameras.map(c => (c.zone || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
 // Zone chips: click a zone to add its cameras to the selection; a zone whose cameras are all selected is blue,
@@ -857,6 +948,9 @@ function selAllClick(cb, list, get, set) {
 }
 $('#camDelSel').onclick = async () => {
   const sel = state.cameras.filter(c => c.selected);
+  const fsel = foundRows().filter(r => r.sel);
+  if (fsel.length) { state.eip = state.eip.filter(r => !fsel.includes(r)); renderEip(); } // found ones: hidden until the next search
+  if (!sel.length) return renderCams();
   if (!await ask({ title: `Remove ${sel.length} camera${sel.length > 1 ? 's' : ''} from the list?`, body: '<p>The cameras themselves are not changed. You can undo this.</p>', ok: 'Remove', danger: true })) return;
   track(`Remove ${sel.length} camera(s)`, () => { state.cameras = state.cameras.filter(c => !c.selected); });
   saveCams(); renderCams();
@@ -917,11 +1011,12 @@ $('#camEditSel').onclick = async () => {
 };
 function updateSel() {
   const n = state.cameras.filter(c => c.selected).length;
-  selAllState($('#selAll'), state.cameras, c => c.selected); renderZones();
-  $('#camSelN').textContent = n; selBar($('#camSelBar'), n);
+  const items = [...state.cameras, ...foundRows()], isSel = x => x.ip && !x.mac ? !!x.selected : !!x.sel;
+  selAllState($('#selAll'), items, isSel); renderZones();
+  $('#camSelN').textContent = n + foundRows().filter(r => r.sel).length; selBar($('#camSelBar'), n + foundRows().filter(r => r.sel).length);
   $('#expSel').textContent = n ? `${n} camera${n > 1 ? 's' : ''} selected` : 'Select at least one camera';
 }
-$('#selAll').onchange = () => { selAllClick($('#selAll'), state.cameras, c => c.selected, (c, v) => c.selected = v); saveCams(); renderCams(); };
+$('#selAll').onchange = () => { const items = [...state.cameras, ...foundRows()], isCam = x => !x.mac; selAllClick($('#selAll'), items, x => isCam(x) ? !!x.selected : !!x.sel, (x, v) => { if (isCam(x)) x.selected = v; else x.sel = v; }); saveCams(); renderCams(); };
 function upsertCam(ip, port, data = {}) {
   let c = state.cameras.find(x => x.ip === ip && (x.port || 80) == (port || 80));
   if (!c) { c = { ip, port: port || 80, selected: true }; state.cameras.push(c); }
@@ -945,20 +1040,21 @@ async function scanOthers(foundIps) {
   eipTake(j.cameras || []);
   const other = state.eip.filter(r => !foundIps.includes(r.orig.ip) && !state.cameras.some(c => c.ip === r.orig.ip));
   if (!other.length) return;
-  box.innerHTML = `<b>${other.length} more Panasonic camera${other.length > 1 ? 's' : ''} on the cable</b> that this scan could not reach: ${other.slice(0, 6).map(r => `${esc(r.orig.name || r.model)} <span class="mono">${esc(r.orig.ip)}</span>`).join(', ')}${other.length > 6 ? ', …' : ''}. ${other.some(r => !sameRange(r.orig.ip, r.orig.mask)) ? 'They are in another IP range.' : ''} <a href="#" id="scanOtherGo">Open Network setup</a> to give them an address in your range.`;
+  box.innerHTML = `<b>${other.length} more Panasonic camera${other.length > 1 ? 's' : ''} on the cable</b> that this scan could not reach: ${other.slice(0, 6).map(r => `${esc(r.orig.name || r.model)} <span class="mono">${esc(r.orig.ip)}</span>`).join(', ')}${other.length > 6 ? ', …' : ''}. ${other.some(r => !sameRange(r.orig.ip, r.orig.mask)) ? 'They are in another IP range.' : ''} They are in the list below as found cameras: type an address in your range in their IP column and choose Apply.`;
   box.classList.remove('hidden');
-  $('#scanOtherGo').onclick = e => { e.preventDefault(); other.forEach(r => r.sel = true); gotoNetsetup(); };
+  renderCams();
 }
 function gotoNetsetup() {
-  $('[role=tab][data-tab=netsetup]').click(); renderEip();
+  $('[role=tab][data-tab=cams]').click(); renderCams();
   if (!state.eip.length) eipDiscover();
 }
 $('#toNetsetup').onclick = e => { e.preventDefault(); gotoNetsetup(); };
+const scanMsg = t => { $('#scanStatus').textContent = t; $('#camSearchStatus').textContent = t; };
 $('#scanBtn').onclick = async () => {
   if (!state.bridgeOk && !(await checkBridge())) return;
   const range = $('#scanRange').value.trim();
   if (!range) return info('Fill in an IP range', 'For example 192.168.0.0/24 or 192.168.0.10-60.');
-  $('#scanBtn').disabled = true; $('#scanStatus').textContent = 'Scanning…';
+  $('#scanBtn').disabled = true; scanMsg('Scanning…');
   try {
     const j = await bridgeFetch('/api/scan', { range, port: +$('#scanPort').value || 80, user: $('#authUser').value.trim(), pass: $('#authPass').value });
     track('Scan', () => { for (const f of j.cameras) {
@@ -966,17 +1062,19 @@ $('#scanBtn').onclick = async () => {
       if (f.auth) { c.status = 'Login required'; c.statusKind = 'err'; }
       c.power = f.power === 'p1' ? 'on' : f.power === 'p0' ? 'standby' : f.power;
     } });
-    $('#scanStatus').textContent = `${j.scanned} addresses scanned, ${j.cameras.length} camera${j.cameras.length === 1 ? '' : 's'} found.`;
+    scanMsg(`${j.scanned} addresses scanned, ${j.cameras.length} camera${j.cameras.length === 1 ? '' : 's'} found.`);
     log(`Scan ${range}: ${j.cameras.map(c => c.ip + ' ' + c.model).join(', ') || 'nothing found'}`);
     saveCams(); renderCams();
     await refreshAll(state.cameras.filter(c => j.cameras.some(f => f.ip === c.ip)));
     scanOthers(j.cameras.map(f => f.ip));
-  } catch (e) { $('#scanStatus').textContent = 'Scan failed: ' + e.message; log('Scan failed: ' + e.message, 'ERROR'); }
+  } catch (e) { scanMsg('Scan failed: ' + e.message); log('Scan failed: ' + e.message, 'ERROR'); }
   finally { $('#scanBtn').disabled = false; }
 };
 $('#addCamsBtn').onclick = async () => {
   const last = state.cameras[state.cameras.length - 1];
-  const ok = await ask({ title: 'Add cameras', ok: 'Add', body: `<div class="row wrap">
+  const opened = ask({ title: 'Add cameras', ok: 'Add', body: `<label>Scan an IP range <span class="row nowrap"><input id="acRange" class="mono grow" value="${esc($('#scanRange').value)}" placeholder="192.168.0.0/24 or 192.168.0.10-60"><label class="check small nowrap"><input type="checkbox" id="acDoScan"> Scan this range</label></span></label>
+      <p class="hint">Finds the cameras this computer can reach in that range and adds them. Search on the Cameras page finds the cameras in other ranges too.</p>
+      <h4 class="mt">Or add by IP address</h4><div class="row wrap">
       <label class="w140">First IP address <input id="acIp" class="mono" value="${esc(last ? ipStr(ipNum(last.ip) + 1) : (state.localIps[0] || '192.168.0.10').replace(/\.\d+$/, '.11'))}"></label>
       <label class="w90">Amount <input id="acCount" type="number" min="1" max="254" value="1"></label>
       <label class="w90">IP step <input id="acStep" type="number" min="1" max="50" value="1"></label>
@@ -984,7 +1082,10 @@ $('#addCamsBtn').onclick = async () => {
       <label class="w140">Zone <input id="acZone" list="zoneList" placeholder="optional"></label></div>
       <label>Or paste a list <textarea id="acList" rows="5" placeholder="192.168.0.11&#10;192.168.0.12, 192.168.0.13"></textarea></label>
       <p class="hint">With Amount set to 4, 192.168.0.11 adds .11 to .14. A pasted list (one or more addresses per line, from Excel for example) is used instead when it is filled in.</p>` });
+  await sleep(0); $('#acRange').oninput = () => { $('#acDoScan').checked = !!$('#acRange').value.trim(); };
+  const ok = await opened;
   if (!ok) return;
+  if ($('#acDoScan').checked) { $('#scanRange').value = $('#acRange').value.trim(); $('#scanPort').value = $('#acPort').value || 80; return $('#scanBtn').click(); }
   const listTxt = $('#acList').value.trim(), port = +$('#acPort').value || 80, zone = $('#acZone').value.trim();
   let ips;
   if (listTxt) ips = listTxt.split(/[\s,;]+/).filter(Boolean);
@@ -1016,7 +1117,6 @@ async function refreshAll(cams) {
   }
   saveCams(); renderCams();
 }
-$('#refreshBtn').onclick = async () => { if (state.bridgeOk || await checkBridge()) refreshAll(state.cameras); };
 
 /* ------------------------------------------------------------------ undo / redo */
 // One history for app edits (lists and tables) and camera changes (imports, commands, network settings).
@@ -2384,7 +2484,6 @@ async function sendCmd(t, cmd, outEl, c) {
 }
 
 /* ------------------------------------------------------------------ network setup (Easy IP) */
-state.eip = [];
 function renderEip() {
   const tb = $('#eipTable tbody'); tb.innerHTML = '';
   for (const r of state.eip) {
@@ -2408,6 +2507,7 @@ function renderEip() {
   $('#eipChanged').textContent = changed ? `${changed} camera${changed > 1 ? 's' : ''} changed, not applied yet` : '';
   $('#eipCount').textContent = state.eip.length;
   updEipSel();
+  renderCams();
 }
 function updEipSel() {
   const n = state.eip.filter(r => r.sel).length;
@@ -2426,13 +2526,13 @@ function eipTake(found) {
 }
 async function eipDiscover() {
   if (!state.bridgeOk && !(await checkBridge())) return;
-  $('#eipSearch').disabled = true; $('#eipStatus').textContent = 'Searching (3 seconds)…';
+  $('#eipSearch').disabled = true; eipProgress('Searching the network…');
   try {
     const j = await bridgeFetch('/api/eip/discover', { timeout: 3 });
     eipTake(j.cameras);
-    $('#eipStatus').textContent = `${state.eip.length} camera${state.eip.length === 1 ? '' : 's'} found.`;
+    eipProgress(`${state.eip.length} camera${state.eip.length === 1 ? '' : 's'} on the network · ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`);
     log(`Easy IP: ${state.eip.length} camera(s) found`);
-  } catch (e) { $('#eipStatus').textContent = 'Search failed: ' + e.message; }
+  } catch (e) { eipProgress('Search failed: ' + e.message); }
   $('#eipSearch').disabled = false; renderEip();
 }
 $('#eipSearch').onclick = eipDiscover;
@@ -2485,21 +2585,21 @@ async function eipSend(list, field) {
   const fails = [];
   for (const r of list) {
     const v = r[field], other = r[field === 'edit' ? 'orig' : 'edit'];
-    const net = netChanged(v, other);
+    const net = !r.local && netChanged(v, other);
     if (net) {
       eipProgress(`${r.orig?.name || r.model || r.mac}: sending ${v.ip} with Easy IP…`);
       try { await bridgeFetch('/api/eip/set', { mac: r.mac, ip: v.ip, mask: v.mask, gateway: v.gateway, dns1: r.dns1, dns2: r.dns2, port: v.port }); log(`Easy IP: ${r.mac} → ${v.ip}`); }
       catch (e) { fails.push({ r, what: 'ip', msg: e.message }); continue; }
     }
     if (v.name !== other.name) {
-      if (state.localIps.length && !sameRange(v.ip, v.mask)) { fails.push({ r, what: 'name', msg: `Name not sent: the camera's web interface at ${v.ip} is not reachable from this computer (another IP range). Change the name once the camera is in your range.` }); continue; }
+      if (!r.local && state.localIps.length && !sameRange(v.ip, v.mask)) { fails.push({ r, what: 'name', msg: `Name not sent: the camera's web interface at ${v.ip} is not reachable from this computer (another IP range). Change the name once the camera is in your range.` }); continue; }
       eipProgress(`${r.orig?.name || r.model || r.mac}: sending the name…`);
-      try { await setCamName(r, v, net); const c = state.cameras.find(x => x.ip === v.ip); if (c) { c.title = v.name; saveCams(); renderCams(); } } catch (e) { fails.push({ r, what: 'name', msg: e.message }); }
+      try { await setCamName(r, v, net); const c = state.cameras.find(x => x.ip === v.ip) || state.cameras.find(x => x.ip === other.ip); if (c) { c.title = v.name; saveCams(); renderCams(); } } catch (e) { fails.push({ r, what: 'name', msg: e.message }); }
     }
   }
   return fails;
 }
-const eipProgress = t => { $('#eipStatus').textContent = t; };
+function eipProgress(t) { $('#eipStatus').textContent = t; $('#camSearchStatus').textContent = t; }
 // After sending: search again and compare what every camera now announces with what was asked.
 // Changes that did not happen are dropped from the table, so it shows the cameras as they really are.
 async function eipVerify(snap, field, fails) {
@@ -2531,18 +2631,20 @@ async function eipVerify(snap, field, fails) {
     }
     return { r, out };
   });
+  state.netLocal.clear(); renderCams();
   const bad = rows.some(x => x.out.some(o => o.bad));
   eipProgress(bad ? 'Not everything changed. See the result.' : `Done · ${new Date().toLocaleTimeString('en-GB')}`);
   await ask({ title: bad ? 'Not every change was made' : 'Network settings changed', ok: 'OK', cancel: null, wide: true,
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>MAC</th><th>Result</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(x.r.orig.name || x.r.model || '')}</td><td class="mono small">${esc(x.r.mac)}</td><td>${x.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td></tr>`).join('')}</tbody></table>` });
 }
-$('#eipApply').onclick = async () => {
-  const list = state.eip.filter(r => JSON.stringify(r.edit) !== JSON.stringify(r.orig));
+$('#eipApply').onclick = () => applyNet(state.eip.filter(netPending));
+async function applyNet(list) {
+  if (!list.length) return;
   const bad = list.find(r => !validIp(r.edit.ip, true) || !validIp(r.edit.mask, true) || (r.edit.gateway && r.edit.gateway !== '0.0.0.0' && !validIp(r.edit.gateway, true)));
   if (bad) return info('Check the values', `The settings for ${esc(bad.mac)} are not valid IPv4 addresses.`);
   const badName = list.find(r => r.edit.name !== r.orig.name && !validCamName(r.edit.name));
   if (badName) return info('Check the name', `“${esc(badName.edit.name)}” is not a valid camera name. Use at most 15 letters, digits, spaces, hyphens, underscores or dots.`);
-  const dup = list.find(r => state.eip.some(o => o !== r && (o.edit.ip === r.edit.ip)));
+  const dup = list.find(r => [...state.eip, ...state.netLocal.values()].some(o => o !== r && o.mac !== r.mac && (o.edit.ip === r.edit.ip)));
   if (dup) return info('Duplicate IP address', `${esc(dup.edit.ip)} is used more than once.`);
   const ok = await ask({
     title: `Change the network settings of ${list.length} camera${list.length > 1 ? 's' : ''}?`,
@@ -2553,13 +2655,13 @@ $('#eipApply').onclick = async () => {
   });
   if (!ok) return;
   $('#eipApply').disabled = true;
-  const snap = list.map(r => ({ mac: r.mac, model: r.model, dns1: r.dns1, dns2: r.dns2, orig: { ...r.orig }, edit: { ...r.edit } }));
+  const snap = list.map(r => ({ mac: r.mac, model: r.model, dns1: r.dns1, dns2: r.dns2, local: r.local, orig: { ...r.orig }, edit: { ...r.edit } }));
   const fails = await eipSend(snap, 'edit');
   pushHistory({ label: `Network settings of ${snap.length} camera${snap.length > 1 ? 's' : ''}`, camera: true, many: snap.length > 1,
     undo: async () => eipVerify(snap, 'orig', await eipSend(snap, 'orig')), redo: async () => eipVerify(snap, 'edit', await eipSend(snap, 'edit')) });
   await eipVerify(snap, 'edit', fails);
   renderEip();
-};
+}
 $('#eipDelSel').onclick = () => {
   const n = state.eip.filter(r => r.sel).length;
   if (!n) return info('Select cameras first', 'Tick the cameras you want to remove from this list. Search again to bring them back.');
@@ -2705,7 +2807,7 @@ async function refreshPage() {
     const tab = $('[role=tab][data-tab].active')?.dataset.tab;
     const jobs = [state.cameras.length ? refreshAll(state.cameras) : null];
     if (tab === 'live' && live.cam) jobs.push(liveRead());
-    if (tab === 'netsetup') jobs.push(eipDiscover());
+    if (tab === 'cams') jobs.push(eipDiscover());
     await Promise.all(jobs.filter(Boolean));
     if (tab === 'eng') renderEng();
     if (tab === 'export') renderExport();
