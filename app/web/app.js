@@ -1417,6 +1417,20 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
   $('#importBtn').disabled = false;
 }
 
+// Which mode makes a setting writable (found on an AW-UE150 V3.20 by trying every mode value).
+const COLOR_CORR = ['80', '81', '82', '83', '84', '85', '9A', '9B', '86', '87', '9C', '9D', '88', '89', '9E', '9F', '8A', '8B', '8C', '8D', '8E', '8F', '90', '91', '92', '93', '94', '95', '96', '97'].map(x => 'OSD:' + x);
+const MODE_ENABLERS = [
+  { ctl: 'ORS', on: '1', label: 'auto iris', deps: ['OSD:48'] },
+  { ctl: 'OSJ:03', on: '2', label: 'shutter Synchro', deps: ['OSJ:09'] },
+  { ctl: 'OSJ:03', on: '3', label: 'shutter ELC', deps: ['OSD:BF'] },
+  { ctl: 'OAW', on: '0', label: 'white ATW', deps: ['OSI:25', 'OSJ:0D', 'OSJ:0E'] },
+  { ctl: 'OAW', on: '9', label: 'white VAR', deps: ['OSI:20'] },
+  { ctl: 'OSE:72', on: '5', label: 'gamma F-REC', wait: 700, deps: ['OSA:10', 'OSA:0F'] },
+  { ctl: 'OSE:72', on: '6', label: 'gamma V-REC', wait: 700, deps: ['OSA:25', 'OSA:21'] },
+  { ctl: 'OSE:72', on: '7', label: 'gamma HLG', wait: 700, deps: ['OSI:40', 'OSI:41', 'OSI:42'], then: { ctl: 'OSI:40', on: '1', deps: ['OSI:41', 'OSI:42'] } },
+  { ctl: 'OSA:2D', on: '1', label: 'knee Manual', deps: ['OSA:20', 'OSA:24'] },
+  { ctl: 'OSE:31', on: '3', label: 'matrix User', deps: ['OSD:A4', 'OSD:A5', 'OSD:A6', 'OSD:A7', 'OSD:A8', 'OSD:A9', 'OSJ:1C', 'OSJ:1D', ...COLOR_CORR] },
+];
 async function importScene(cam, sceneData, targetScene, opts, progress) {
   sceneData = sceneWbFixed(sceneData);
   if (!cam.model) await identify(cam);
@@ -1463,13 +1477,26 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     const fixed = new Set(r.filter(z => z.ok).map(z => z.x.cmd));
     pending = pending.filter(x => !fixed.has(x.cmd));
   }
-  // Colour temperature (OSI:20) can only be written in VAR: switch to VAR, write it, put the mode back
-  const ct = pending.find(x => x.cmd === 'OSI:20');
-  if (ct) {
-    progress('setting the colour temperature…');
-    const mode = (list.find(x => x.cmd === 'OAW')?.raw) || wbQueryToSet((await batch(cam, [{ cmd: 'QAW' }]))[0]?.body || '');
-    const r3 = await batch(cam, [{ cmd: 'OAW:9' }, { cmd: ct.raw }, ...(/^OAW:\d$/i.test(mode) ? [{ cmd: mode }] : [])]);
-    if (r3[1]?.ok && !isErr(r3[1].body)) pending = pending.filter(x => x !== ct);
+  // Values that only become writable in another mode (the camera answers ER2): switch the mode that enables
+  // them, write them, then put the mode to the value it should have (the file's, else what the camera had).
+  const goal = c => (list.find(x => x.cmd === c)?.raw) || (before?.params || []).find(x => x.cmd === c)?.raw;
+  for (const en of MODE_ENABLERS) {
+    const deps = pending.filter(x => en.deps.includes(x.cmd));
+    if (!deps.length) continue;
+    const back = goal(en.ctl);
+    progress(`setting ${deps.length} value${deps.length > 1 ? 's' : ''} that need ${en.label}…`);
+    const items = [{ cmd: `${en.ctl}:${en.on}` }, { sleepMs: en.wait || 300 }];
+    const inner = en.then ? deps.filter(x => en.then.deps.includes(x.cmd)) : [];
+    const outer = deps.filter(x => !inner.includes(x));
+    items.push(...outer.map(x => ({ cmd: x.raw })));
+    if (inner.length) { // e.g. HLG Knee Point: gamma HLG and HLG Knee on
+      items.push({ cmd: `${en.then.ctl}:${en.then.on}` }, ...inner.map(x => ({ cmd: x.raw })));
+      const b2 = goal(en.then.ctl); if (b2) items.push({ cmd: b2 });
+    }
+    if (back) items.push({ cmd: back }, { sleepMs: en.wait || 300 });
+    const r3 = await batch(cam, items);
+    const okCmds = new Set(items.map((it, i) => ({ it, r: r3[i] })).filter(z => z.it.cmd && z.r?.ok && !isErr(z.r.body)).map(z => z.it.cmd));
+    pending = pending.filter(x => !(deps.includes(x) && okCmds.has(x.raw)));
   }
   const failed = pending.map(x => ({ cmd: x.cmd, name: x.name, err: /^er2/i.test(x.lastErr || '') ? 'ER2: not changeable in the current mode' : String(x.lastErr || '').slice(0, 3) || 'error' }));
   let stored = false;
