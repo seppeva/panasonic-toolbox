@@ -2462,7 +2462,11 @@ const ENG = {
       const back = kelvinFrom((await send('cam', 'QSI:20'))?.body);
       return back && Math.abs(back - k) > 20 ? { res: `VAR, camera reports ${back} K`, bad: true } : x;
     } },
-  awb: { label: () => 'Auto white balance', run: async (send) => engVerdict(await send('cam', 'OWS'), 'AWB started') },
+  awbMem: { label: v => `AWB into memory ${v.toUpperCase()}`,
+    run: async (send, c, v) => {
+      const m = engVerdict(await wbModeCmds(send, c.model, v)); if (m.bad) return { ...m, res: `Memory ${v.toUpperCase()}: ${m.res}` };
+      return engVerdict(await send('cam', 'OWS'), `AWB saved in ${v.toUpperCase()}`);
+    } },
   abb: { label: () => 'Auto black balance', run: async (send) => engVerdict(await send('cam', 'OAS'), 'ABB started') },
   install: { label: v => v === '1' ? 'Installation hanging' : 'Installation desktop', confirm: () => 'The picture and the pan/tilt directions turn around. Some cameras restart.',
     run: async (send, c, v) => engVerdict(await send('ptz', '#INS' + v), v === '1' ? 'Hanging' : 'Desktop') },
@@ -2972,7 +2976,19 @@ for (const id of ['#ptSpeed', '#zSpeed']) {
   $(id).addEventListener('input', show); show();
 }
 $$('[data-nominal]').forEach(b => b.onclick = () => { const r = $(b.dataset.nominal); r.value = 25; r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
-$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first.` : 'Auto white balance started'); };
+// AWB into memory A or B: switch to that memory first, then run the auto white balance (OWS); the camera keeps it there
+async function liveAwbMem(m) {
+  if (!live.cam) return;
+  live.wbAt = Date.now();
+  const sel = await wbModeCmds(liveSend, live.cam.model, m);
+  if (!sel?.ok || isErr(sel.body)) return toast(`Memory ${m.toUpperCase()} is not available on this camera right now`);
+  showWb(m);
+  const r = await liveSend('cam', 'OWS');
+  if (r?.ok && !isErr(r.body)) { $('#liveStatus').textContent = `Auto white balance saved in ${m.toUpperCase()}`; toast(`AWB running: saved in memory ${m.toUpperCase()} in a few seconds`); }
+  else toast(`AWB not possible now${r?.body ? ' (' + r.body + ')' : ''}`);
+}
+$('#liveAWBa').onclick = () => liveAwbMem('a');
+$('#liveAWBb').onclick = () => liveAwbMem('b');
 $('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
 function renderLiveScenes() {
   const cam = live.cam; const box = $('#liveScenes');

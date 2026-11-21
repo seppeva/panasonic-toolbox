@@ -65,7 +65,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await step('Live: every tile on the first camera', async () => {
     await p.click('[data-tab=live]'); await p.waitForTimeout(3000);
     const seen = [];
-    for (const [sel, label] of [['#liveWB [data-wb=auto]', 'White Auto'], ['#liveWB [data-wb=var]', 'White Var'], ['#liveWB [data-wb=a]', 'White A'], ['#liveAWB', 'AWB'], ['#liveWB [data-wb=b]', 'White B'], ['#liveABB', 'ABB'],
+    for (const [sel, label] of [['#liveWB [data-wb=auto]', 'White Auto'], ['#liveWB [data-wb=var]', 'White Var'], ['#liveAWBa', 'AWB into A'], ['#liveAWBb', 'AWB into B'], ['#liveWB [data-wb=b]', 'White B'], ['#liveABB', 'ABB'],
       ['#liveNight', 'Night'], ['#liveDay', 'Day'], ['[data-nominal="#ptSpeed"]', 'Speed nominal'],
       ['#liveAF', 'Auto focus'], ['#liveOPAF', 'One push AF'], ['#liveAI', 'Auto iris'], ['#liveScenes button[data-scene="2"]', 'Scene 2'], ['#liveScenes button[data-scene="1"]', 'Scene 1'], ['#ptPad [data-home]', 'Home']]) {
       await p.click(sel); await p.waitForTimeout(sel.includes('Scenes') ? 3500 : 1200);
@@ -104,7 +104,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await run('[data-eng=tally][data-c=R][data-v="1"]', 'Red on'); await run('[data-eng=tally][data-c=R][data-v="0"]', 'Red off');
     await run('[data-eng=tally][data-c=G][data-v="1"]', 'Green on'); await run('[data-eng=tally][data-c=G][data-v="0"]', 'Green off');
     await run('[data-eng=tallyBr][data-v="0"]', 'Tally brightness low'); await run('[data-eng=tallyBr][data-v="2"]', 'Tally brightness high');
-    await run('[data-eng=wb][data-v="a"]', 'WB A'); await run('[data-eng=awb]', 'AWB'); await p.waitForTimeout(4000);
+    await run('[data-eng=awbMem][data-v="a"]', 'AWB into A'); await p.waitForTimeout(4000); await run('[data-eng=awbMem][data-v="b"]', 'AWB into B'); await p.waitForTimeout(4000);
     await run('[data-eng=varK]', 'VAR 4300 K', false, '4300');
     await run('[data-eng=abb]', 'ABB'); await p.waitForTimeout(4000);
     await run('[data-eng=install][data-v="1"]', 'Hanging', true); await p.waitForTimeout(8000);
