@@ -513,3 +513,22 @@ label.setup-row .kfield input{width:72px}
 .setup-sum div{margin:2px 0}
 dialog.wide .ask-body{max-width:none}
 label.setup-row select{height:30px;padding-top:0;padding-bottom:0}
+/* ---- easy for everyone ---- */
+body:not(.expert) .expert-only{display:none!important}
+body:not(.expert) .eng-res th:nth-child(4),body:not(.expert) .eng-res td:nth-child(4){display:none}
+.card.quick{border-color:rgba(74,139,240,.35);background:linear-gradient(0deg,rgba(74,139,240,.06),rgba(74,139,240,.06)),var(--panel)}
+.quick-row{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.quick-row>div{flex:1;min-width:240px}
+.quick-row h2{margin:0 0 4px}
+.quick-row p{margin:0}
+button.big{height:44px;padding:0 22px;font-size:15px;font-weight:600;border-radius:8px}
+details.more-opts{margin:4px 0 16px}
+details.more-opts>summary{cursor:pointer;color:var(--muted);font-size:13px;padding:8px 2px;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+details.more-opts>summary::-webkit-details-marker{display:none}
+details.more-opts>summary::before{content:'';width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform .15s}
+details.more-opts[open]>summary::before{transform:rotate(45deg)}
+details.more-opts>summary:hover{color:var(--text)}
+details.more-opts.inline{margin:0 0 6px}
+button.big.ghost-big{background:var(--raised);color:var(--text);border:1px solid var(--rule)}
+button.big.ghost-big:hover{background:#33373d}
+body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-child(7){display:none}

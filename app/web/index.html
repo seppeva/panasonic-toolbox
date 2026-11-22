@@ -20,8 +20,8 @@
     <button role="tab" data-tab="cams" class="active"><svg viewBox="0 0 20 20"><rect x="2.5" y="5" width="11" height="10" rx="2"/><path d="M13.5 9l4-2.5v7l-4-2.5"/></svg><span>Cameras</span></button>
     <button role="tab" data-tab="live"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3"/><circle cx="15.5" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg><span>Live</span></button>
     <button role="tab" data-tab="eng"><svg viewBox="0 0 20 20"><path d="M4 4.5h12M4 10h12M4 15.5h12"/><circle cx="7.5" cy="4.5" r="1.8"/><circle cx="12.5" cy="10" r="1.8"/><circle cx="6.5" cy="15.5" r="1.8"/></svg><span>Engineering</span></button>
-    <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Export</span></button>
-    <button role="tab" data-tab="import"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Import</span></button>
+    <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Back up</span></button>
+    <button role="tab" data-tab="import"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Restore</span></button>
     <button role="tab" data-tab="shows"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 7.5l4.5 2.5L8 12.5z"/></svg><span>Shows</span></button>
     <button role="tab" data-tab="params"><svg viewBox="0 0 20 20"><path d="M4 5h12M4 10h12M4 15h8"/></svg><span>Parameters</span></button>
     <button role="tab" data-tab="rp150"><svg viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg><span>RP150 assignment</span></button>
@@ -47,7 +47,11 @@
 <main>
 <!-- ================= CAMERAS (with network setup) ================= -->
 <section id="tab-cams" class="tab active">
-  <header class="page-head"><h1>Cameras</h1><p>Every Panasonic camera on the network, also in another IP range. Change a name or IP address right in the list and choose Apply. The ticked cameras are the ones the other pages work with.</p></header>
+  <header class="page-head"><h1>Cameras</h1><p>All Panasonic cameras on your network. Tick the cameras you want to work with; the other pages use the ticked ones. A name or address can be changed right in the list.</p></header>
+  <div class="card quick hidden" id="camWelcome">
+    <div class="quick-row"><div><h2>Find your cameras</h2><p class="muted">Connect this computer to the same network as the cameras and choose the button. Cameras in another IP range are found too.</p></div>
+    <button class="big" id="camWelcomeBtn">Find my cameras</button></div>
+  </div>
   <div class="card">
     <div class="row between wrap">
       <h2>Cameras <span class="count" id="camCount">0</span> <span class="muted small" id="camFoundN"></span></h2>
@@ -73,7 +77,7 @@
     </table>
     <p class="empty muted" id="camEmpty">No cameras yet. Choose Search to find the cameras on the network, or Add… to add one by IP address.</p>
     <div class="pendbar hidden" id="camPending"><span id="camPendingN"></span><span class="grow"></span><button class="ghost small" id="camDiscard">Discard</button><button class="small" id="camApply">Apply</button></div>
-    <p class="hint">A new name or IP address is sent with Easy IP, like Panasonic's Easy IP Setup tool. Cameras only accept a new IP address in the first 20 minutes after they are switched on (setting “Easy IP Setup accommodate period”); if a change is not accepted, switch the camera off and on and try again.</p>
+    <p class="hint">Changing an IP address only works in the first 20 minutes after a camera is switched on. If it does not work, switch the camera off and on and try again.</p>
   </div>
   <details class="card foldcard" id="loginCard">
     <summary><h2>Camera login</h2><span class="muted small" id="loginSummary"></span></summary>
@@ -90,7 +94,12 @@
 
 <!-- ================= EXPORT ================= -->
 <section id="tab-export" class="tab">
-  <header class="page-head"><h1>Export</h1><p>Saves the shading settings of the scenes, or an operator's personal settings, as files in the save folder from Settings.</p></header>
+  <header class="page-head"><h1>Back up</h1><p>Save how your cameras look (colours, exposure, detail) in a file, so you can always put it back.</p></header>
+  <div class="card quick">
+    <div class="quick-row"><div><h2>Back up all cameras</h2><p class="muted">Saves the current settings of every camera in one file. Nothing changes on the cameras and the picture stays as it is.</p></div>
+    <button class="big" id="expQuick">Back up all cameras now</button></div>
+  </div>
+  <details class="more-opts" id="expMore"><summary>More options: choose cameras, other scenes, operator files, file names</summary>
   <div class="grid2">
     <div class="card">
       <div class="row between"><h2>Cameras</h2><span class="row"><button class="ghost small" id="expAll">All</button><button class="ghost small" id="expNone">None</button></span></div>
@@ -124,26 +133,31 @@
         <div class="chips tokens" id="expZipTokens"></div>
         <p class="hint" id="expZipPreview"></p>
       </div>
-      <div class="card-foot"><button id="exportBtn">Export</button><span class="muted" id="expSel"></span></div>
+      <div class="card-foot"><button id="exportBtn">Back up</button><span class="muted" id="expSel"></span></div>
     </div>
   </div>
+  </details>
   <div class="card hidden" id="expResultCard"><h2>Result</h2><div id="expResult"></div></div>
 </section>
 
 <!-- ================= IMPORT ================= -->
 <section id="tab-import" class="tab">
-  <header class="page-head"><h1>Import</h1><p>Put a saved scene back on a camera. Choose for each file which camera and which scene it goes to.</p></header>
+  <header class="page-head"><h1>Restore</h1><p>Put a backup back on your cameras. Every camera gets its own settings back.</p></header>
+  <div class="card quick">
+    <div class="quick-row"><div><h2>Restore a backup</h2><p class="muted">Choose a backup file. Every camera in it goes back to the same camera; you see what will change before anything is sent.</p></div>
+    <span class="row"><button class="big" id="impQuick">Choose a backup…</button><button class="big hidden" id="impQuickGo">Restore now</button></span></div>
+  </div>
   <div class="card">
-    <div class="row between"><h2>1. Open files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ico" id="browseFolderBtn" title="Show the files in the save folder of this project" aria-label="Show files in folder"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 6V15a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.2 4.5H4A1.5 1.5 0 0 0 2.5 6z"/></svg></button></div></div>
+    <div class="row between"><h2>Files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ico" id="browseFolderBtn" title="Show the files in the save folder of this project" aria-label="Show files in folder"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 6V15a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.2 4.5H4A1.5 1.5 0 0 0 2.5 6z"/></svg></button></div></div>
     <div class="drop" id="dropZone">
-      <p>Drop scene files (.pscene.json), operator files (.poper), shows (.pshow) or a .zip here, or <label class="link">choose files<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,.ptproject,.ps1,.sh,application/json,application/zip" multiple hidden></label></p>
-      <p class="muted small">Files you exported in this session are already listed below.</p>
+      <p>Drop a backup here, or <label class="link">choose a file<input type="file" id="fileInput" accept=".json,.zip,.pshow,.poper,.ptproject,.ps1,.sh,application/json,application/zip" multiple hidden></label></p>
+      <p class="muted small">Backups made in this session are already listed below.</p>
     </div>
     <div id="folderList"></div>
     <div id="srcList"></div>
   </div>
   <div class="card">
-    <div class="row between"><h2>2. Choose where each file goes <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ico" id="clearFilesBtn" title="Clear all: empty the list of files and destinations" aria-label="Clear all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/></svg></button></span></div>
+    <div class="row between"><h2>What goes where <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ico" id="clearFilesBtn" title="Clear all: empty the list of files and destinations" aria-label="Clear all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/></svg></button></span></div>
     <div class="selbar hidden" id="impSelBar"><span class="seln"><b id="impSelN">0</b> ticked</span>
       <span class="selgroup"><select id="impSelCam" aria-label="Camera"></select><select id="impSelScene" aria-label="Into scene"><option value="">Scene: keep</option><option value="active">Live scene</option><option value="1">Scene 1</option><option value="2">Scene 2</option><option value="3">Scene 3</option><option value="4">Scene 4</option><option value="5">Scene 5</option><option value="6">Scene 6</option><option value="7">Scene 7</option><option value="8">Scene 8</option></select><button class="ghost small" id="impSelApply">Apply</button></span>
       <span class="grow"></span>
@@ -153,10 +167,10 @@
       <thead><tr><th class="w30"><input type="checkbox" id="impSelAll" aria-label="Tick all rows"></th><th>Scene from file</th><th>Camera</th><th>Into scene</th><th>Settings</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
-    <p class="empty muted" id="impEmpty">Open a scene file first.</p>
+    <p class="empty muted" id="impEmpty">Choose a backup first. Each camera in it is put on the camera with the same IP address; you can change that here.</p>
   </div>
   <div class="card">
-    <h2>3. Options</h2>
+    <details class="more-opts inline"><summary>Options (backup first, check afterwards, …)</summary>
     <div class="opts">
       <label class="check"><input type="checkbox" id="optBackup" checked><span><b>Back up the destination first.</b> <span class="muted">Saves the camera's current values of that scene as a file, so you can always go back.</span></span></label>
       <label class="check"><input type="checkbox" id="optRestore" checked><span><b>Return to the scene that was live.</b> <span class="muted">If you import into another scene than the live one, the camera switches to it and then back again.</span></span></label>
@@ -164,7 +178,8 @@
       <label class="check"><input type="checkbox" id="optVerify" checked><span><b>Check afterwards.</b> <span class="muted">Reads every value back and reports anything that differs.</span></span></label>
       <label class="check"><input type="checkbox" id="optForce"><span><b>Also try settings the destination model doesn't list.</b> <span class="muted">Only useful between different camera models; unknown settings are skipped anyway.</span></span></label>
     </div>
-    <div class="card-foot"><button id="importBtn">Import</button><span class="muted" id="impStatus"></span></div>
+    </details>
+    <div class="card-foot"><button id="importBtn">Restore</button><span class="muted" id="impStatus"></span></div>
   </div>
   <div class="card hidden" id="impResultCard"><h2>Result</h2><div id="impResult"></div></div>
 </section>
@@ -233,7 +248,7 @@
           <div class="hold-row"><button class="toggle" id="liveShoot0" title="Shooting mode: normal">Normal</button><button class="toggle" id="liveShoot1" title="Shooting mode: high sensitivity (Low Light on the AW-UE160)">High Sens.</button></div>
         </div>
         <div class="live-block t-scenes">
-        <h3>Scene files</h3>
+        <h3>Scenes</h3>
         <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
       </div>
       </div>
@@ -271,7 +286,7 @@
 
 <!-- ================= ENGINEERING ================= -->
 <section id="tab-eng" class="tab">
-  <header class="page-head"><h1>Engineering</h1><p>Do the same thing on one or many cameras at once. Every action shows the result and the camera's answer per camera.</p></header>
+  <header class="page-head"><h1>Engineering</h1><p>Do something on many cameras at once: switch them on, pick a scene, white balance, tally, or set them all up the same way.</p></header>
   <div class="card">
     <div class="row between wrap"><h2>Cameras</h2><span class="row wrap"><button class="ghost small" id="engAll" title="Select every camera">All</button><button class="ghost small" id="engNone" title="Select no camera">None</button><span class="zonebar inline" id="engZones"></span></span></div>
     <div class="row wrap" id="engCams"></div>
@@ -299,7 +314,7 @@
     </div>
     <div class="live-block e-install"><h3>Installation</h3><div class="hold-row"><button data-eng="install" data-v="0">Desktop</button><button data-eng="install" data-v="1">Hanging</button></div></div>
     <div class="live-block e-scope"><h3>Preset scope</h3><div class="hold-row"><button data-eng="scope" data-v="0" title="Mode A: presets recall position and picture settings">A</button><button data-eng="scope" data-v="1" title="Mode B: presets recall position and iris">B</button><button data-eng="scope" data-v="2" title="Mode C: presets only recall pan, tilt, zoom and focus">C</button></div></div>
-    <div class="live-block e-ip"><h3>IP video <span class="tag">Experimental</span></h3><div class="hold-row"><button data-eng="ipvideo" data-v="1" title="Switch the H.264 streams on">On</button><button data-eng="ipvideo" data-v="0" title="Switch the H.264 streams off, so the network carries less video">Off</button></div><p class="hint small">The H.264 streams of the camera (needs the camera login). The picture in this app only flows while the Live page shows a camera.</p></div>
+    <div class="live-block e-ip"><h3>IP video</h3><div class="hold-row"><button data-eng="ipvideo" data-v="1" title="Switch the H.264 streams on">On</button><button data-eng="ipvideo" data-v="0" title="Switch the H.264 streams off, so the network carries less video">Off</button></div><p class="hint small">Switches the camera's H.264 network streams (for vMix, a decoder or a recorder) on or off. Needs the camera login.</p></div>
     <div class="live-block e-init"><h3>Default scene</h3><p class="hint small">Your standard picture settings per model. <b>Save as default</b> stores the live scene of one camera (for example right after a scene reset in the camera menu) as the standard for its model. <b>Initialize</b> puts that standard back into the live scene of every chosen camera, with a backup first.</p><div class="hold-row"><button data-eng="init" title="Put the default scene of each camera's model into its live scene">Initialize…</button><button class="ghost" data-eng="defsave" title="Save the live scene of one camera as the default for its model">Save as default…</button></div></div>
   </div>
   <div class="card" id="engResultCard"><div class="row between"><h2 id="engResultTitle">Result</h2><span class="muted small" id="engStatus"></span></div><div id="engResult"><p class="muted small">Choose cameras and an action. The result per camera shows up here.</p></div></div>
@@ -307,7 +322,7 @@
 
 <!-- ================= SHOWS ================= -->
 <section id="tab-shows" class="tab">
-  <header class="page-head"><h1>Shows</h1><p>A show puts the right scene and operator files on the right cameras in the right scenes with one click. Make one here from the cameras, or on the Import page with <b>Save as show</b>.</p></header>
+  <header class="page-head"><h1>Shows</h1><p>A show puts the right settings on every camera with one click, for example "Concert" or "Talk show". Make one from your cameras as they are now with <b>New show from cameras…</b>, then recall it whenever you need it.</p></header>
   <div class="card">
     <div class="row between wrap"><h2>Saved shows <span class="count" id="showCount">0</span></h2><span class="row"><button class="ghost small" id="showNew">New show from cameras…</button><button class="ghost small" id="showOpen">Open show file…</button></span></div>
     <div class="hidden" id="showProgress"></div>
@@ -320,7 +335,7 @@
   </div>
   <div class="card" id="gridCard">
     <div class="row between wrap"><h2>Build a show from files</h2><span class="row"><button class="ghost small" id="gridOpen">Open files…</button><details class="menu"><summary>More</summary><div class="menu-pop"><button type="button" id="gridAuto" title="Put every opened scene on the camera it came from, in the same scene number">Fill from the same cameras</button><button type="button" id="gridClear" class="danger-text">Clear grid</button></div></details></span></div>
-    <p class="hint">Rows are cameras, columns are scenes. In each cell choose which opened scene goes into that scene of that camera. Files opened here or on the Import page can be used.</p>
+    <p class="hint">Rows are cameras, columns are scenes. In each cell choose which opened scene goes into that scene of that camera. Files opened here or on the Restore page can be used.</p>
     <div class="note hidden" id="gridEditing"></div>
     <p class="muted small" id="gridFiles"></p>
     <div class="zonebar" id="gridZones"></div>
@@ -501,12 +516,17 @@
       <p class="hint">The pages that open with Live view and Settings on the Cameras page. Saved with the project.</p>
     </section>
     <section class="setsec">
+      <h4>Details for technicians</h4>
+      <label class="check"><input type="checkbox" id="setExpert"> Show the raw answers of the cameras <span class="muted">(the commands sent and what each camera answered, in the result tables)</span></label>
+    </section>
+    <section class="setsec">
       <h4>Updates</h4>
       <label class="check"><input type="checkbox" id="setUpdates"> Check for new versions <span class="muted">(asks GitHub for the latest version number; nothing about you or your cameras is sent)</span></label>
     </section>
     <section class="setsec about">
       <h4>About</h4>
       <p class="muted small" id="aboutText"></p>
+      <p class="small">Questions or a problem? Mail <a href="mailto:seppe@vanaken.be">seppe@vanaken.be</a></p>
       <p class="small"><a href="https://github.com/seppeva/panasonic-toolbox/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/LICENSE" target="_blank" rel="noopener">License</a> &nbsp; <a href="https://github.com/seppeva/panasonic-toolbox/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">Open source components</a></p>
     </section>
     <div class="row between setfoot"><button type="button" class="danger" id="quitBtn">Quit app</button><span class="row"><button value="cancel" class="ghost">Cancel</button><button value="ok" id="saveSettings">Save</button></span></div>

@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.25.1"
+VERSION = "2.27.0"
 DEFAULT_PORT = 8765
 
 
@@ -856,6 +856,9 @@ def api_call(path, req):
         return open_camera_with_login(req)
     if path == "/api/open_url":
         return (open_camera_page(str(req.get("url", ""))))
+    if path == "/api/mail_developer":  # Settings > About: open the mail app (fixed address, nothing else can be opened)
+        webbrowser.open("mailto:seppe@vanaken.be?subject=Panasonic%20Toolbox%20" + VERSION)
+        return {"ok": True}
     if path == "/api/quit":
         threading.Timer(0.3, lambda: os._exit(0)).start()
         return {"ok": True}

@@ -253,12 +253,23 @@ async function batch(cam, items, opts = {}) {
     const part = items.slice(i, i + 20);
     const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, items: part }, Math.max(120000, part.length * 8000));
     out.push(...j.results);
+    if (j.results.some(r => /Errno 65|No route to host/i.test(r.error || ''))) localNetworkBlocked(cam);
     const stop = j.results.find(r => r.unreachable || r.status === 401);
     if (stop && i + 20 < items.length) { out.push(...items.slice(i + 20).map(x => ({ ok: false, status: stop.status, cmd: x.cmd, error: stop.error, unreachable: stop.unreachable }))); break; }
   }
   return out;
 }
 const isErr = body => /^er\d/i.test((body || '').trim());
+// macOS answers "No route to host" (errno 65) to an app that may not use the local network, even when ping works.
+// Say so once, with what to do, instead of only "Not reachable".
+function localNetworkBlocked(cam) {
+  if (state.lnWarned || !/Mac/i.test(navigator.platform || navigator.userAgent)) return;
+  if (state.localIps.length && !sameRange(cam.ip)) return; // another range: a real routing problem
+  state.lnWarned = true;
+  info('macOS blocks the network for this app', `<p>The camera <span class="mono">${esc(cam.ip)}</span> is in your network, but macOS does not let Panasonic Toolbox reach it (“No route to host”). That happens after installing a new version.</p>
+    <ol><li>Open <b>System Settings › Privacy &amp; Security › Local Network</b>.</li><li>Switch <b>Panasonic Toolbox</b> on (if it is listed twice, both).</li><li>Quit the app with ⌘Q and open it again.</li></ol>
+    <p class="muted small">Is the switch already on? Switch it off and on again, then quit and reopen the app.</p>`);
+}
 
 /* ------------------------------------------------------------------ camera helpers */
 async function identify(cam) {
@@ -516,6 +527,7 @@ $('#bridgeSettingsBtn').onclick = () => {
   renderProjects(); renderDefaults();
   $('#setDelay').value = state.delayMs; $('#setSceneWait').value = state.sceneWait;
   $('#setUpdates').checked = store.get('updateCheck', true);
+  $('#setExpert').checked = !!ls.get('pscene.expert', false);
   $('#setLivePath').value = state.livePath; $('#setSetupPath').value = state.setupPath;
   $('#aboutText').textContent = `Panasonic Toolbox ${state.version || ''}. Running locally at ${location.host}. This computer's IP addresses: ${state.localIps.join(', ') || '–'}`;
   $('#settingsDlg').showModal();
@@ -526,6 +538,7 @@ $('#saveSettings').onclick = () => {
   store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
   store.set('livePath', state.livePath); store.set('setupPath', state.setupPath);
   store.set('updateCheck', $('#setUpdates').checked);
+  ls.set('pscene.expert', $('#setExpert').checked); applyExpert();
   const d = $('#setSaveDir').value.trim();
   if (d && d !== state.saveDir) setSaveDir(d).catch(e => info('Cannot use this folder', esc(e.message)));
 };
@@ -820,6 +833,7 @@ function renderCams() {
   $('#camCount').textContent = state.cameras.length;
   $('#camFoundN').textContent = nf ? `+ ${nf} found on the network` : '';
   $('#camEmpty').classList.toggle('hidden', state.cameras.length + nf > 0);
+  $('#camWelcome').classList.toggle('hidden', state.cameras.length + nf > 0);
   const pend = allNetRows().filter(netPending).length;
   $('#camPending').classList.toggle('hidden', !pend);
   $('#camPendingN').textContent = `${pend} camera${pend > 1 ? 's' : ''} changed, not sent yet`;
@@ -980,7 +994,7 @@ $('#camEditSel').onclick = async () => {
         <td><input data-ed-desc="${i}" value="${esc(c.desc || '')}" placeholder="e.g. balcony left" aria-label="Description"></td></tr>`).join('')}</tbody></table>
       ${sel.length > 1 ? `<div class="row wrap bulk-desc"><label class="grow">Description for all selected cameras <input id="edDescAll" placeholder="e.g. Stage {n}" autocomplete="off"></label><button type="button" class="ghost small" id="edDescFill">Fill in</button></div>
       <p class="hint">{n} becomes 1, 2, 3… in the order of the list, so “Stage {n}” gives Stage 1, Stage 2… Without {n} every camera gets the same description. You can still change single rows afterwards.</p>` : ''}
-      <p class="hint">Change the IP address when a camera got a new one. The app then talks to the new address; destinations on the Import page and in your shows move along.</p>
+      <p class="hint">Change the IP address when a camera got a new one. The app then talks to the new address; destinations on the Restore page and in your shows move along.</p>
       <div class="row wrap">
       <label class="w140">Zone <input id="edZone" list="zoneList" value="${esc(same('zone'))}" placeholder="${sel.length > 1 && !same('zone') ? 'several' : ''}"></label>
       <label class="w90">Port <input id="edPort" type="number" value="${esc(same('port') || '')}" placeholder="${sel.length > 1 && !same('port') ? 'several' : '80'}"></label></div>
@@ -1322,8 +1336,8 @@ $('#exportBtn').onclick = async () => {
   const zip = cams.length > 1 && $('#expZip').checked;
   const jumps = kind === 'scene' && mode === 'pick';
   const ok = await ask({
-    title: `Export ${kind === 'operator' ? 'operator files' : 'scene files'} of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
-    wide: true, danger: jumps, ok: jumps ? 'Switch scenes and export' : 'Export',
+    title: `Back up ${kind === 'operator' ? 'the operator settings of ' : ''}${cams.length} camera${cams.length > 1 ? 's' : ''}?`,
+    wide: true, danger: jumps, ok: jumps ? 'Switch scenes and back up' : 'Back up',
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Reads</th><th>File</th></tr></thead><tbody>${plan.map(p => `<tr><td>${esc(camName(p.c))} <span class="mono muted small">${esc(p.c.ip)}</span></td><td>${p.html ? p.what : esc(p.what)}</td><td class="mono small">${esc(p.name)}</td></tr>`).join('')}</tbody></table>
       <p>${zip ? `The files go into one ZIP: <span class="mono">${esc(zipName(kind, cams.length))}</span>, ` : 'The files are saved '}in <span class="mono">${esc([state.saveDir || 'Downloads › Panasonic Toolbox', ...subFor(kind)].join(' › '))}</span>. Existing files are never overwritten.</p>
       ${jumps ? '<p><b>The picture will change:</b> to read these scenes each camera switches to them and then returns to the scene that was live. Do not do this while a camera is on air.</p>' : '<p>Reading changes nothing on the cameras.</p>'}`,
@@ -1538,7 +1552,7 @@ async function compareImport(j, tr) {
 $('#importBtn').onclick = () => runImport(state.jobs.filter(j => j.include), {
   backup: $('#optBackup').checked, restore: $('#optRestore').checked, store: $('#optStore').checked, verify: $('#optVerify').checked, force: $('#optForce').checked,
 });
-async function runImport(jobs, opts, title = 'Import into these cameras?') {
+async function runImport(jobs, opts, title = 'Restore these cameras?') {
   if (!jobs.length) return info('Nothing to import', 'Open a file and choose a camera for it in step 2.');
   const missing = jobs.filter(j => !state.cameras.some(c => c.ip === j.target));
   if (missing.length) return info('Choose a camera for every row', `${missing.length} row${missing.length > 1 ? 's have' : ' has'} no camera yet.`);
@@ -1551,7 +1565,7 @@ async function runImport(jobs, opts, title = 'Import into these cameras?') {
     body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Gets</th><th>Into</th><th>Settings</th></tr></thead><tbody>${[...byCam].map(([c, js]) => js.map((j, k) => { const sr = srcById(j.srcId); const into = sr.kind === 'operator' ? 'the camera (operator settings)' : j.targetScene === 'active' ? `the live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : `scene ${j.targetScene}${c.scene && +j.targetScene !== c.scene ? ' <span class="muted">(camera switches to it, then back)</span>' : ''}`;
         return `<tr><td>${k ? '' : `${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span>`}</td><td>${esc(srcLabel(sr))}<div class="muted small mono">${esc(sr.fileName)}</div></td><td>${into}</td><td>${srcParams(sr)}</td></tr>`; }).join('')).join('')}</tbody></table>
       <ul class="tight">${opts.backup !== false ? '<li>The current settings of every destination are saved first as a backup file.</li>' : ''}${opts.verify ? '<li>Afterwards every value is read back to check it.</li>' : ''}<li>The picture of these cameras changes immediately. You can undo this afterwards.</li></ul>`,
-    ok: 'Import', danger: true,
+    ok: 'Restore', danger: true,
   });
   if (!ok) return;
   $('#importBtn').disabled = true;
@@ -2824,6 +2838,7 @@ const SETUP = [
   { g: 'Video', k: 'format', l: 'Frequency and format', format: true },
   { g: 'Video', k: 'shoot', l: 'Shooting mode', set: 'OSI:30:', q: 'QSI:30', o: [['0', 'Normal'], ['1', 'High Sens.']] },
   { g: 'Video', k: 'color', l: 'Color setting', set: 'OSJ:56:', q: 'QSJ:56', o: [['0', 'Normal'], ['1', 'V-Log']] },
+  { g: 'Video', k: 'ipvideo', l: 'IP video (H.264)', ipv: true, o: [['1', 'On'], ['0', 'Off']] },
   { g: 'OSD mix', k: 'osd12g', l: '12G SDI / optical', bit: 0x20, o: OFFON },
   { g: 'OSD mix', k: 'osd3g', l: '3G SDI', bit: 0x01, o: OFFON },
   { g: 'OSD mix', k: 'osdmoni', l: 'MONI', bit: 0x40, o: OFFON },
@@ -2861,12 +2876,18 @@ function renderSetup() {
   $('#setupStatus').textContent = n ? `${n} setting${n > 1 ? 's' : ''} chosen` : 'Nothing chosen yet';
 }
 $('#setupClear').onclick = () => { store.set('engSetup', {}); renderSetup(); };
+const H264_PATHS = ['/cgi-bin/set_h264', '/cgi-bin/set_h264_2', '/cgi-bin/set_h264_3', '/cgi-bin/set_h264_4'];
+async function readH264(c) {
+  const b = (await batch(c, [{ type: 'cgi', path: '/cgi-bin/setdata', query: {} }]))[0]?.body || '';
+  return ['H264', 'H264_2', 'H264_3', 'H264_4'].map(k => (new RegExp('^' + k + ',"(\\d)"', 'm').exec(b) || [])[1]).filter(Boolean);
+}
 // one camera: read every setting (and, if asked, the white balance of scenes 1 to 4: the camera switches scenes)
 async function readSetup(c, withScenes) {
   const send = async (type, cmd) => (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0];
   const got = {};
   for (const f of SETUP) {
     if (f.wb || f.bit) continue;
+    if (f.ipv) { const st = await readH264(c); if (st.length && st.every(x => x === st[0])) got.ipvideo = st[0]; continue; }
     if (f.format) { const a = await send('cam', 'QSE:77'), b = await send('cam', 'QSA:87'); const fr = /OSE:77:(\d)/.exec(a?.body || '')?.[1], fm = /OSA:87:([0-9A-F]{2})/i.exec(b?.body || '')?.[1]?.toUpperCase(); if (fr && fm) got.format = fr + '|' + fm; continue; }
     const r = f.ptz ? await send('ptz', f.ptz) : await send('cam', f.q);
     if (!r?.ok || isErr(r.body)) continue;
@@ -2960,12 +2981,24 @@ async function applySetup(cams, v, progress = () => {}) {
       out.push(chkF === 'OSE:77:' + fr && chkM === 'OSA:87:' + fm ? { t: `Format: ${setupLabel(f, v.format)}` } : { bad: true, t: `Format: reads ${chkF || '?'} ${chkM || '?'}` });
     }
     // 2. single settings: send only what differs, then read back
-    for (const f of plan.filter(f => !f.format && !f.wb && !f.bit)) {
+    for (const f of plan.filter(f => !f.format && !f.wb && !f.bit && !f.ipv)) {
       const want = v[f.k];
       const read = async () => { const r = f.ptz ? await send('ptz', f.ptz) : await send('cam', f.q); return !okBody(r) ? null : f.ptz ? r.body.slice(f.ptz.length - 1) : r.body.startsWith(f.set) ? r.body.slice(f.set.length) : null; };
       let now = await read();
       if (now !== want) { const r = f.ptz ? await send('ptz', f.ptz + want) : await send('cam', f.set + want); if (!okBody(r)) { out.push({ bad: true, t: `${f.l}: ${engVerdict(r).res}` }); continue; } await sleep(150); now = await read(); }
       out.push(now === want ? { t: `${f.l}: ${setupLabel(f, want)}` } : { bad: true, t: `${f.l}: reads ${now ?? '?'}` });
+    }
+    // IP video: the four H.264 streams together
+    if (v.ipvideo) {
+      const f = SETUP.find(x => x.ipv); let now = await readH264(c);
+      // right after a restart (frequency change) the camera answers commands before its web server is ready: wait for it
+      for (let i = 0; i < 15 && !now.length; i++) { await sleep(2000); now = await readH264(c); }
+      if (!now.length) out.push({ bad: true, t: `${f.l}: not available on this camera` });
+      else {
+        if (now.some(x => x !== v.ipvideo)) for (const p of H264_PATHS) { const r = (await batch(c, [{ type: 'cgi', path: p, query: { h264_transmit: v.ipvideo }, method: 'POST' }]))[0]; raw.push(`POST ${p} h264_transmit=${v.ipvideo} → ${r?.ok ? 'HTTP ' + (r.status || 200) : r?.status === 401 ? '401 (camera login needed)' : r?.error || 'no answer'}`); }
+        now = await readH264(c);
+        out.push(now.every(x => x === v.ipvideo) ? { t: `${f.l}: ${setupLabel(f, v.ipvideo)}` } : { bad: true, t: `${f.l}: ${now.filter(x => x === v.ipvideo).length} of ${now.length} streams ${v.ipvideo === '1' ? 'on' : 'off'}${!camAuth(c).user ? ' (fill in the camera login on the Cameras page)' : ''}` });
+      }
     }
     // 3. OSD mix: one byte, a bit per output
     const bits = plan.filter(f => f.bit);
@@ -3628,3 +3661,29 @@ window.addEventListener('resize', () => $$('details.menu[open]').forEach(d => d.
     h.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
   });
 })();
+
+
+/* ---- easy for everyone: expert tools hidden unless switched on, one big button per page ---- */
+// The raw camera answers in result tables only show with Settings > Show the raw answers of the cameras.
+function applyExpert() {
+  const on = !!ls.get('pscene.expert', false);
+  document.body.classList.toggle('expert', on);
+}
+applyExpert();
+// Back up: every camera's live scene in one ZIP (the confirmation still shows what will be saved)
+$('#expQuick').onclick = () => {
+  if (!state.cameras.length) return info('No cameras yet', 'Find your cameras on the Cameras page first.');
+  state.cameras.forEach(c => c.selected = true); saveCams();
+  $('input[name=expKind][value=scene]').click(); $('input[name=expMode][value=active]').click();
+  $('#expZip').checked = true; $('#expZip').dispatchEvent(new Event('change'));
+  renderExport(); renderCams(); $('#exportBtn').click();
+};
+// Restore: choose a backup; the cameras are matched by IP address and the Restore button is right below
+$('#impQuick').onclick = () => $('#openFilesBtn').click();
+$('#impQuickGo').onclick = () => $('#importBtn').click();
+// once a backup is open, the big Restore button sits right next to Choose a backup…
+new MutationObserver(() => { const n = new Set(state.jobs.filter(j => j.include !== false && j.target).map(j => j.target)).size; $('#impQuickGo').classList.toggle('hidden', !n); $('#impQuickGo').textContent = n ? `Restore ${n} camera${n > 1 ? 's' : ''} now` : 'Restore now'; $('#impQuick').classList.toggle('ghost-big', !!n); }).observe($('#impTable tbody'), { childList: true, subtree: true });
+$('#camWelcomeBtn').onclick = () => camSearch();
+
+// Settings > About: the mail link opens the mail app through the app (a mailto link does nothing inside the app window)
+document.addEventListener('click', e => { const a = e.target.closest('a[href^="mailto:"]'); if (!a) return; e.preventDefault(); bridgeFetch('/api/mail_developer', {}).catch(() => toast('Mail to seppe@vanaken.be')); });
