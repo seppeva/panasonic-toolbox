@@ -3682,3 +3682,6 @@ $('#impQuickGo').onclick = () => $('#importBtn').click();
 // once a backup is open, the big Restore button sits right next to Choose a backup…
 new MutationObserver(() => { const n = new Set(state.jobs.filter(j => j.include !== false && j.target).map(j => j.target)).size; $('#impQuickGo').classList.toggle('hidden', !n); $('#impQuickGo').textContent = n ? `Restore ${n} camera${n > 1 ? 's' : ''} now` : 'Restore now'; $('#impQuick').classList.toggle('ghost-big', !!n); }).observe($('#impTable tbody'), { childList: true, subtree: true });
 $('#camWelcomeBtn').onclick = () => camSearch();
+
+// Settings > About: the mail link opens the mail app through the app (a mailto link does nothing inside the app window)
+document.addEventListener('click', e => { const a = e.target.closest('a[href^="mailto:"]'); if (!a) return; e.preventDefault(); bridgeFetch('/api/mail_developer', {}).catch(() => toast('Mail to seppe@vanaken.be')); });

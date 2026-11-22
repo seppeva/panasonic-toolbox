@@ -25,7 +25,7 @@ Panasonic Toolbox is free, open source software by Seppe Van Aken (Belgium). Thi
 The developer of Panasonic Toolbox does not receive any personal data. Hosting and the version check through GitHub rely on legitimate interest (Article 6(1)(f) GDPR): offering the software and the page securely and up to date. GitHub keeps its data according to its own policy.
 
 ## 4. Your rights
-You have the right to access, correct, erase, restrict and object. Because the developer holds no data about you, you can delete the local data yourself (clear the camera list, untick *Remember on this computer*, or uninstall the app). For data held by GitHub, contact GitHub. You can also lodge a complaint with the Belgian **Data Protection Authority** (Gegevensbeschermingsautoriteit), Drukpersstraat 35, 1000 Brussels, [www.dataprotectionauthority.be](https://www.dataprotectionauthority.be).
+You have the right to access, correct, erase, restrict and object. Because the developer holds no data about you, you can delete the local data yourself (clear the camera list, untick *Remember on this computer*, or uninstall the app). For data held by GitHub, contact GitHub. Questions about privacy: [seppe@vanaken.be](mailto:seppe@vanaken.be). You can also lodge a complaint with the Belgian **Data Protection Authority** (Gegevensbeschermingsautoriteit), Drukpersstraat 35, 1000 Brussels, [www.dataprotectionauthority.be](https://www.dataprotectionauthority.be).
 
 ## 5. Changes
 If this statement changes, the new version is published on this page and in the source code on GitHub.
