@@ -3662,12 +3662,10 @@ window.addEventListener('resize', () => $$('details.menu[open]').forEach(d => d.
 
 
 /* ---- easy for everyone: expert tools hidden unless switched on, one big button per page ---- */
-// Parameters, RP150, IP video and the raw camera answers in result tables only show with Settings > Show expert tools.
+// The raw camera answers in result tables only show with Settings > Show the raw answers of the cameras.
 function applyExpert() {
   const on = !!ls.get('pscene.expert', false);
   document.body.classList.toggle('expert', on);
-  const cur = $('[role=tab].active')?.dataset.tab;
-  if (!on && (cur === 'params' || cur === 'rp150')) $('[role=tab][data-tab=cams]').click();
 }
 applyExpert();
 // Back up: every camera's live scene in one ZIP (the confirmation still shows what will be saved)

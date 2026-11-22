@@ -23,8 +23,8 @@
     <button role="tab" data-tab="export"><svg viewBox="0 0 20 20"><path d="M10 13V3M6 7l4-4 4 4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Back up</span></button>
     <button role="tab" data-tab="import"><svg viewBox="0 0 20 20"><path d="M10 3v10M6 9l4 4 4-4"/><path d="M3.5 12v4.5h13V12"/></svg><span>Restore</span></button>
     <button role="tab" data-tab="shows"><svg viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="2"/><path d="M8 7.5l4.5 2.5L8 12.5z"/></svg><span>Shows</span></button>
-    <button role="tab" data-tab="params" class="expert-only"><svg viewBox="0 0 20 20"><path d="M4 5h12M4 10h12M4 15h8"/></svg><span>Parameters</span></button>
-    <button role="tab" data-tab="rp150" class="expert-only"><svg viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg><span>RP150 assignment</span></button>
+    <button role="tab" data-tab="params"><svg viewBox="0 0 20 20"><path d="M4 5h12M4 10h12M4 15h8"/></svg><span>Parameters</span></button>
+    <button role="tab" data-tab="rp150"><svg viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M5.5 8h2M9 8h2M12.5 8h2M5.5 11.5h9"/></svg><span>RP150 assignment</span></button>
   </nav>
   <div class="side-foot">
     <div class="undo-row"><button class="sidebtn half" id="undoBtn" disabled title="Undo (Ctrl/Cmd+Z)"><svg viewBox="0 0 20 20"><path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 0 1 0 10h-2"/></svg><span>Undo</span></button><button class="sidebtn half" id="redoBtn" disabled title="Redo (Shift+Ctrl/Cmd+Z)"><svg viewBox="0 0 20 20"><path d="M13 5l4 4-4 4"/><path d="M17 9H8a5 5 0 0 0 0 10h2"/></svg><span>Redo</span></button></div>
@@ -516,8 +516,8 @@
       <p class="hint">The pages that open with Live view and Settings on the Cameras page. Saved with the project.</p>
     </section>
     <section class="setsec">
-      <h4>Expert tools</h4>
-      <label class="check"><input type="checkbox" id="setExpert"> Show expert tools <span class="muted">(Parameters with every REST command and scripts, RP150 assignment, and the raw answers of the cameras in the results)</span></label>
+      <h4>Details for technicians</h4>
+      <label class="check"><input type="checkbox" id="setExpert"> Show the raw answers of the cameras <span class="muted">(the commands sent and what each camera answered, in the result tables)</span></label>
     </section>
     <section class="setsec">
       <h4>Updates</h4>
