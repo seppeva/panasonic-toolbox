@@ -2821,7 +2821,7 @@ async function engClick(btn) {
   const ok = rows.filter(r => !r.bad).length;
   $('#engStatus').textContent = `${ok} of ${rows.length} done · ${new Date().toLocaleTimeString('en-GB')}`;
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td class="${r.bad ? 'warn-text' : 'ok-text'}">${esc(r.res)}</td><td class="mono raw">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
-  log(`All cameras: ${label}: ${ok}/${rows.length} ok`);
+  log(`Engineering: ${label}: ${ok}/${rows.length} ok`);
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
@@ -2955,7 +2955,7 @@ $('#setupApply').onclick = async () => {
   progress(`${ok} of ${rows.length} camera${rows.length > 1 ? 's' : ''} done · ${new Date().toLocaleTimeString('en-GB')}`);
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td>${r.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td><td class="mono small muted"><details><summary>${r.raw.length} commands</summary>${r.raw.map(esc).join('<br>')}</details></td></tr>`).join('')}</tbody></table>`;
   $('#engResultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  log(`All cameras: setup: ${ok}/${rows.length} ok`);
+  log(`Engineering: setup: ${ok}/${rows.length} ok`);
   if (live.cam && cams.includes(live.cam)) liveRead();
 };
 // Put the setup v on every camera; returns per camera what was done ({ c, out: [{ t, bad }], raw })
