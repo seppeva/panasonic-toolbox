@@ -95,11 +95,6 @@
 <!-- ================= EXPORT ================= -->
 <section id="tab-export" class="tab">
   <header class="page-head"><h1>Back up</h1><p>Save how your cameras look (colours, exposure, detail) in a file, so you can always put it back.</p></header>
-  <div class="card quick">
-    <div class="quick-row"><div><h2>Back up all cameras</h2><p class="muted">Saves the current settings of every camera in one file. Nothing changes on the cameras and the picture stays as it is.</p></div>
-    <button class="big" id="expQuick">Back up all cameras now</button></div>
-  </div>
-  <details class="more-opts" id="expMore"><summary>More options: choose cameras, other scenes, operator files, file names</summary>
   <div class="grid2">
     <div class="card">
       <div class="row between"><h2>Cameras</h2><span class="row"><button class="ghost small" id="expAll">All</button><button class="ghost small" id="expNone">None</button></span></div>
@@ -108,7 +103,7 @@
       <p class="empty muted hidden" id="expCamsEmpty">No cameras yet. Find them on the Cameras page first.</p>
     </div>
     <div class="card">
-      <h2>What to export</h2>
+      <h2>What to back up</h2>
       <fieldset class="seg">
         <legend class="sr">Kind</legend>
         <label><input type="radio" name="expKind" value="scene" checked> Scene files</label>
@@ -136,17 +131,12 @@
       <div class="card-foot"><button id="exportBtn">Back up</button><span class="muted" id="expSel"></span></div>
     </div>
   </div>
-  </details>
   <div class="card hidden" id="expResultCard"><h2>Result</h2><div id="expResult"></div></div>
 </section>
 
 <!-- ================= IMPORT ================= -->
 <section id="tab-import" class="tab">
   <header class="page-head"><h1>Restore</h1><p>Put a backup back on your cameras. Every camera gets its own settings back.</p></header>
-  <div class="card quick">
-    <div class="quick-row"><div><h2>Restore a backup</h2><p class="muted">Choose a backup file. Every camera in it goes back to the same camera; you see what will change before anything is sent.</p></div>
-    <span class="row"><button class="big" id="impQuick">Choose a backup…</button><button class="big hidden" id="impQuickGo">Restore now</button></span></div>
-  </div>
   <div class="card">
     <div class="row between"><h2>Files</h2><div class="row"><button class="ghost small" id="openFilesBtn">Open files…</button><button class="ico" id="browseFolderBtn" title="Show the files in the save folder of this project" aria-label="Show files in folder"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 6V15a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V8a1.5 1.5 0 0 0-1.5-1.5H10L8.2 4.5H4A1.5 1.5 0 0 0 2.5 6z"/></svg></button></div></div>
     <div class="drop" id="dropZone">

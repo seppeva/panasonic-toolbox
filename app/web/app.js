@@ -3670,19 +3670,6 @@ function applyExpert() {
   document.body.classList.toggle('expert', on);
 }
 applyExpert();
-// Back up: every camera's live scene in one ZIP (the confirmation still shows what will be saved)
-$('#expQuick').onclick = () => {
-  if (!state.cameras.length) return info('No cameras yet', 'Find your cameras on the Cameras page first.');
-  state.cameras.forEach(c => c.selected = true); saveCams();
-  $('input[name=expKind][value=scene]').click(); $('input[name=expMode][value=active]').click();
-  $('#expZip').checked = true; $('#expZip').dispatchEvent(new Event('change'));
-  renderExport(); renderCams(); $('#exportBtn').click();
-};
-// Restore: choose a backup; the cameras are matched by IP address and the Restore button is right below
-$('#impQuick').onclick = () => $('#openFilesBtn').click();
-$('#impQuickGo').onclick = () => $('#importBtn').click();
-// once a backup is open, the big Restore button sits right next to Choose a backup…
-new MutationObserver(() => { const n = new Set(state.jobs.filter(j => j.include !== false && j.target).map(j => j.target)).size; $('#impQuickGo').classList.toggle('hidden', !n); $('#impQuickGo').textContent = n ? `Restore ${n} camera${n > 1 ? 's' : ''} now` : 'Restore now'; $('#impQuick').classList.toggle('ghost-big', !!n); }).observe($('#impTable tbody'), { childList: true, subtree: true });
 $('#camWelcomeBtn').onclick = () => camSearch();
 
 // Settings > About: the mail link opens the mail app through the app (a mailto link does nothing inside the app window)
