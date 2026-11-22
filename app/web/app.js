@@ -253,12 +253,23 @@ async function batch(cam, items, opts = {}) {
     const part = items.slice(i, i + 20);
     const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, items: part }, Math.max(120000, part.length * 8000));
     out.push(...j.results);
+    if (j.results.some(r => /Errno 65|No route to host/i.test(r.error || ''))) localNetworkBlocked(cam);
     const stop = j.results.find(r => r.unreachable || r.status === 401);
     if (stop && i + 20 < items.length) { out.push(...items.slice(i + 20).map(x => ({ ok: false, status: stop.status, cmd: x.cmd, error: stop.error, unreachable: stop.unreachable }))); break; }
   }
   return out;
 }
 const isErr = body => /^er\d/i.test((body || '').trim());
+// macOS answers "No route to host" (errno 65) to an app that may not use the local network, even when ping works.
+// Say so once, with what to do, instead of only "Not reachable".
+function localNetworkBlocked(cam) {
+  if (state.lnWarned || !/Mac/i.test(navigator.platform || navigator.userAgent)) return;
+  if (state.localIps.length && !sameRange(cam.ip)) return; // another range: a real routing problem
+  state.lnWarned = true;
+  info('macOS blocks the network for this app', `<p>The camera <span class="mono">${esc(cam.ip)}</span> is in your network, but macOS does not let Panasonic Toolbox reach it (“No route to host”). That happens after installing a new version.</p>
+    <ol><li>Open <b>System Settings › Privacy &amp; Security › Local Network</b>.</li><li>Switch <b>Panasonic Toolbox</b> on (if it is listed twice, both).</li><li>Quit the app with ⌘Q and open it again.</li></ol>
+    <p class="muted small">Is the switch already on? Switch it off and on again, then quit and reopen the app.</p>`);
+}
 
 /* ------------------------------------------------------------------ camera helpers */
 async function identify(cam) {
@@ -2827,6 +2838,7 @@ const SETUP = [
   { g: 'Video', k: 'format', l: 'Frequency and format', format: true },
   { g: 'Video', k: 'shoot', l: 'Shooting mode', set: 'OSI:30:', q: 'QSI:30', o: [['0', 'Normal'], ['1', 'High Sens.']] },
   { g: 'Video', k: 'color', l: 'Color setting', set: 'OSJ:56:', q: 'QSJ:56', o: [['0', 'Normal'], ['1', 'V-Log']] },
+  { g: 'Video', k: 'ipvideo', l: 'IP video (H.264)', ipv: true, o: [['1', 'On'], ['0', 'Off']] },
   { g: 'OSD mix', k: 'osd12g', l: '12G SDI / optical', bit: 0x20, o: OFFON },
   { g: 'OSD mix', k: 'osd3g', l: '3G SDI', bit: 0x01, o: OFFON },
   { g: 'OSD mix', k: 'osdmoni', l: 'MONI', bit: 0x40, o: OFFON },
@@ -2864,12 +2876,18 @@ function renderSetup() {
   $('#setupStatus').textContent = n ? `${n} setting${n > 1 ? 's' : ''} chosen` : 'Nothing chosen yet';
 }
 $('#setupClear').onclick = () => { store.set('engSetup', {}); renderSetup(); };
+const H264_PATHS = ['/cgi-bin/set_h264', '/cgi-bin/set_h264_2', '/cgi-bin/set_h264_3', '/cgi-bin/set_h264_4'];
+async function readH264(c) {
+  const b = (await batch(c, [{ type: 'cgi', path: '/cgi-bin/setdata', query: {} }]))[0]?.body || '';
+  return ['H264', 'H264_2', 'H264_3', 'H264_4'].map(k => (new RegExp('^' + k + ',"(\\d)"', 'm').exec(b) || [])[1]).filter(Boolean);
+}
 // one camera: read every setting (and, if asked, the white balance of scenes 1 to 4: the camera switches scenes)
 async function readSetup(c, withScenes) {
   const send = async (type, cmd) => (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0];
   const got = {};
   for (const f of SETUP) {
     if (f.wb || f.bit) continue;
+    if (f.ipv) { const st = await readH264(c); if (st.length && st.every(x => x === st[0])) got.ipvideo = st[0]; continue; }
     if (f.format) { const a = await send('cam', 'QSE:77'), b = await send('cam', 'QSA:87'); const fr = /OSE:77:(\d)/.exec(a?.body || '')?.[1], fm = /OSA:87:([0-9A-F]{2})/i.exec(b?.body || '')?.[1]?.toUpperCase(); if (fr && fm) got.format = fr + '|' + fm; continue; }
     const r = f.ptz ? await send('ptz', f.ptz) : await send('cam', f.q);
     if (!r?.ok || isErr(r.body)) continue;
@@ -2962,8 +2980,18 @@ async function applySetup(cams, v, progress = () => {}) {
       const chkF = (await send('cam', 'QSE:77'))?.body, chkM = (await send('cam', 'QSA:87'))?.body?.toUpperCase();
       out.push(chkF === 'OSE:77:' + fr && chkM === 'OSA:87:' + fm ? { t: `Format: ${setupLabel(f, v.format)}` } : { bad: true, t: `Format: reads ${chkF || '?'} ${chkM || '?'}` });
     }
+    // IP video: the four H.264 streams together
+    if (v.ipvideo) {
+      const f = SETUP.find(x => x.ipv); let now = await readH264(c);
+      if (!now.length) out.push({ bad: true, t: `${f.l}: not available on this camera` });
+      else {
+        if (now.some(x => x !== v.ipvideo)) for (const p of H264_PATHS) { const r = (await batch(c, [{ type: 'cgi', path: p, query: { h264_transmit: v.ipvideo }, method: 'POST' }]))[0]; raw.push(`POST ${p} h264_transmit=${v.ipvideo} → ${r?.ok ? 'HTTP ' + (r.status || 200) : r?.status === 401 ? '401 (camera login needed)' : r?.error || 'no answer'}`); }
+        now = await readH264(c);
+        out.push(now.every(x => x === v.ipvideo) ? { t: `${f.l}: ${setupLabel(f, v.ipvideo)}` } : { bad: true, t: `${f.l}: ${now.filter(x => x === v.ipvideo).length} of ${now.length} streams ${v.ipvideo === '1' ? 'on' : 'off'}${!camAuth(c).user ? ' (fill in the camera login on the Cameras page)' : ''}` });
+      }
+    }
     // 2. single settings: send only what differs, then read back
-    for (const f of plan.filter(f => !f.format && !f.wb && !f.bit)) {
+    for (const f of plan.filter(f => !f.format && !f.wb && !f.bit && !f.ipv)) {
       const want = v[f.k];
       const read = async () => { const r = f.ptz ? await send('ptz', f.ptz) : await send('cam', f.q); return !okBody(r) ? null : f.ptz ? r.body.slice(f.ptz.length - 1) : r.body.startsWith(f.set) ? r.body.slice(f.set.length) : null; };
       let now = await read();
