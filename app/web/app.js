@@ -2980,16 +2980,6 @@ async function applySetup(cams, v, progress = () => {}) {
       const chkF = (await send('cam', 'QSE:77'))?.body, chkM = (await send('cam', 'QSA:87'))?.body?.toUpperCase();
       out.push(chkF === 'OSE:77:' + fr && chkM === 'OSA:87:' + fm ? { t: `Format: ${setupLabel(f, v.format)}` } : { bad: true, t: `Format: reads ${chkF || '?'} ${chkM || '?'}` });
     }
-    // IP video: the four H.264 streams together
-    if (v.ipvideo) {
-      const f = SETUP.find(x => x.ipv); let now = await readH264(c);
-      if (!now.length) out.push({ bad: true, t: `${f.l}: not available on this camera` });
-      else {
-        if (now.some(x => x !== v.ipvideo)) for (const p of H264_PATHS) { const r = (await batch(c, [{ type: 'cgi', path: p, query: { h264_transmit: v.ipvideo }, method: 'POST' }]))[0]; raw.push(`POST ${p} h264_transmit=${v.ipvideo} → ${r?.ok ? 'HTTP ' + (r.status || 200) : r?.status === 401 ? '401 (camera login needed)' : r?.error || 'no answer'}`); }
-        now = await readH264(c);
-        out.push(now.every(x => x === v.ipvideo) ? { t: `${f.l}: ${setupLabel(f, v.ipvideo)}` } : { bad: true, t: `${f.l}: ${now.filter(x => x === v.ipvideo).length} of ${now.length} streams ${v.ipvideo === '1' ? 'on' : 'off'}${!camAuth(c).user ? ' (fill in the camera login on the Cameras page)' : ''}` });
-      }
-    }
     // 2. single settings: send only what differs, then read back
     for (const f of plan.filter(f => !f.format && !f.wb && !f.bit && !f.ipv)) {
       const want = v[f.k];
@@ -2997,6 +2987,18 @@ async function applySetup(cams, v, progress = () => {}) {
       let now = await read();
       if (now !== want) { const r = f.ptz ? await send('ptz', f.ptz + want) : await send('cam', f.set + want); if (!okBody(r)) { out.push({ bad: true, t: `${f.l}: ${engVerdict(r).res}` }); continue; } await sleep(150); now = await read(); }
       out.push(now === want ? { t: `${f.l}: ${setupLabel(f, want)}` } : { bad: true, t: `${f.l}: reads ${now ?? '?'}` });
+    }
+    // IP video: the four H.264 streams together
+    if (v.ipvideo) {
+      const f = SETUP.find(x => x.ipv); let now = await readH264(c);
+      // right after a restart (frequency change) the camera answers commands before its web server is ready: wait for it
+      for (let i = 0; i < 15 && !now.length; i++) { await sleep(2000); now = await readH264(c); }
+      if (!now.length) out.push({ bad: true, t: `${f.l}: not available on this camera` });
+      else {
+        if (now.some(x => x !== v.ipvideo)) for (const p of H264_PATHS) { const r = (await batch(c, [{ type: 'cgi', path: p, query: { h264_transmit: v.ipvideo }, method: 'POST' }]))[0]; raw.push(`POST ${p} h264_transmit=${v.ipvideo} → ${r?.ok ? 'HTTP ' + (r.status || 200) : r?.status === 401 ? '401 (camera login needed)' : r?.error || 'no answer'}`); }
+        now = await readH264(c);
+        out.push(now.every(x => x === v.ipvideo) ? { t: `${f.l}: ${setupLabel(f, v.ipvideo)}` } : { bad: true, t: `${f.l}: ${now.filter(x => x === v.ipvideo).length} of ${now.length} streams ${v.ipvideo === '1' ? 'on' : 'off'}${!camAuth(c).user ? ' (fill in the camera login on the Cameras page)' : ''}` });
+      }
     }
     // 3. OSD mix: one byte, a bit per output
     const bits = plan.filter(f => f.bit);
