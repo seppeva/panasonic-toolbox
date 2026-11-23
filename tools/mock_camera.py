@@ -113,7 +113,7 @@ class H(BaseHTTPRequestHandler):
             m = re.match(r"OAW:([0123459])$", c)
             if m: st["OAW"] = m.group(1); return c
             # values that only take a write in a certain mode, like a real AW-UE150 (ER2 otherwise)
-            DEPS = {"OSI:20": [("OAW", "9")], "OSD:48": [("ORS", "1")], "OSJ:09": [("OSJ:03", "2")], "OSD:BF": [("OSJ:03", "3")],
+            DEPS = {"OSI:20": [("OAW", "9")], "OSD:48": [("ORS", "1")], "OSJ:06": [("OSJ:03", "1")], "OSJ:09": [("OSJ:03", "2")], "OSD:BF": [("OSJ:03", "3")],
                     "OSA:20": [("OSA:2D", "1")], "OSA:24": [("OSA:2D", "1")], "OSD:A4": [("OSE:31", "3")], "OSD:87": [("OSE:31", "3")],
                     "OSI:40": [("OSE:72", "7")], "OSI:41": [("OSE:72", "7"), ("OSI:40", "1")]}
             mm = re.match(r"(O[A-Z]{2}(?::[0-9A-F]{2})?):", c)

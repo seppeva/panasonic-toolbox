@@ -108,7 +108,10 @@
         <legend class="sr">Kind</legend>
         <label><input type="radio" name="expKind" value="scene" checked> Scene files</label>
         <label><input type="radio" name="expKind" value="operator"> Operator file</label>
+        <label><input type="radio" name="expKind" value="defaults"> Default scenes</label>
       </fieldset>
+      <p class="hint hidden" id="expDefHint"></p>
+      <div id="expCamOpts">
       <h2 class="mt">Scenes</h2>
       <fieldset class="seg" id="expSceneBox">
         <legend class="sr">Which scenes</legend>
@@ -127,6 +130,7 @@
         <label class="namefield">ZIP name <span class="row nowrap"><input id="expZipName" class="mono grow" autocomplete="off" placeholder="Click the parts below"><span class="mono muted ext">.zip</span></span></label>
         <div class="chips tokens" id="expZipTokens"></div>
         <p class="hint" id="expZipPreview"></p>
+      </div>
       </div>
       <div class="card-foot"><button id="exportBtn">Back up</button><span class="muted" id="expSel"></span></div>
     </div>
@@ -481,7 +485,7 @@
     </section>
     <section class="setsec">
       <h4>Default scenes</h4>
-      <p class="hint">Initialize puts the default scene of a camera's model into its live scene. Make one per model with Save as default (Cameras or Live), from a camera whose scene was reset to its factory settings in the camera menu. Default scenes are for this computer, not part of a project.</p>
+      <p class="hint">Initialize puts the default scene of a camera's model into its live scene. Make one per model with Save as default (Cameras or Live), from a camera whose scene was reset to its factory settings in the camera menu. Default scenes are for this computer, not part of a project. To take them to another computer, save them on the Back up page (Default scenes) and open that file on the Restore page.</p>
       <div id="defList"></div>
     </section>
     <section class="setsec">

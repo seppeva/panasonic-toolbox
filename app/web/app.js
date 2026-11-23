@@ -390,7 +390,7 @@ function uniqueNames(files) {
 /* ------------------------------------------------------------------ downloads + zip */
 const IN_APP = TOKEN && !TOKEN.startsWith('__');
 // Where saved files go: <save folder>/<project>/<type folder>. Backups get a folder per day.
-const FOLDERS = { scene: 'Scene files', operator: 'Operator files', show: 'Shows', backup: 'Backups', script: 'Scripts', rp150: 'RP150', params: 'Parameter lists', project: '' };
+const FOLDERS = { scene: 'Scene files', operator: 'Operator files', defaults: 'Default scenes', show: 'Shows', backup: 'Backups', script: 'Scripts', rp150: 'RP150', params: 'Parameter lists', project: '' };
 const today = () => { const d = new Date(), p2 = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
 const projectFolder = () => projectName().replace(/[^A-Za-z0-9._ ()&+-]+/g, '_').replace(/^[ .]+|[ .]+$/g, '') || 'Project';
 const subFor = kind => [projectFolder(), FOLDERS[kind] || '', kind === 'backup' ? today() : ''].filter(Boolean);
@@ -1228,6 +1228,7 @@ async function openBytes(name, u8, path) {
 }
 function openJson(name, data, path) {
   if (data?.format === SHOW_ID) return addShow(data, true, path);
+  if (data?.format === DEFAULTS_ID) return importDefaults(data).catch(e => info('Could not open', esc(e.message)));
   if (data?.format === CONFIG_ID) return importConfig(data).catch(e => info('Could not import', esc(e.message)));
   if (data?.format === PROJECT_ID) return importProject(data).catch(e => info('Could not open', esc(e.message)));
   return addImportFile(name, data);
@@ -1314,6 +1315,7 @@ async function readCamScenes(cam, mode, picked, status = () => { }) {
   return scenes;
 }
 $('#exportBtn').onclick = async () => {
+  if (expKindNow() === 'defaults') return exportDefaults();
   const cams = state.cameras.filter(c => c.selected);
   if (!cams.length) return info('No cameras selected', 'Tick the cameras you want to export.');
   if (!state.bridgeOk && !(await checkBridge())) return;
@@ -1383,7 +1385,19 @@ function showSceneTable(anchor, file) {
   anchor.after(div);
 }
 
-$$('input[name=expKind]').forEach(r => r.onchange = () => $('#expSceneBox').classList.toggle('disabled', $('input[name=expKind]:checked').value === 'operator'));
+function expKindUi() {
+  const k = expKindNow();
+  $('#expSceneBox').classList.toggle('disabled', k !== 'scene');
+  $('#expCamOpts').classList.toggle('hidden', k === 'defaults');
+  $('#expDefHint').classList.toggle('hidden', k !== 'defaults');
+  if (k === 'defaults') {
+    const keys = Object.keys(defaults()).sort();
+    $('#expDefHint').innerHTML = keys.length
+      ? `Saves the default scenes of this computer in one file: ${keys.map(esc).join(', ')}. The cameras are not read. Open the file on the Restore page to use them on another computer.`
+      : 'There are no default scenes yet. Make one on the Engineering page with <b>Save as default…</b>.';
+  }
+}
+$$('input[name=expKind]').forEach(r => r.onchange = expKindUi);
 function expKindNow() { return $('input[name=expKind]:checked')?.value || 'scene'; }
 function renderNameFields() {
   const k = expKindNow();
@@ -1392,6 +1406,7 @@ function renderNameFields() {
 }
 function updNamePreview() {
   const k = expKindNow();
+  if (k === 'defaults') return;
   $('#expExt').textContent = k === 'operator' ? '.poper' : '.pscene.json';
   const cam = state.cameras.find(c => c.selected) || state.cameras[0] || { ip: '192.168.0.11', title: 'CAM1', model: 'AW-UE150', zone: 'Stage' };
   const ex = k === 'operator' ? operatorName(cam) : fileName(cam, [{ scene: cam.scene || 1 }]);
@@ -1610,6 +1625,7 @@ const WRITE_FIRST = ['OSJ:4D'];
 const COLOR_CORR = ['80', '81', '82', '83', '84', '85', '9A', '9B', '86', '87', '9C', '9D', '88', '89', '9E', '9F', '8A', '8B', '8C', '8D', '8E', '8F', '90', '91', '92', '93', '94', '95', '96', '97'].map(x => 'OSD:' + x);
 const MODE_ENABLERS = [
   { ctl: 'ORS', on: '1', label: 'auto iris', deps: ['OSD:48'] },
+  { ctl: 'OSJ:03', on: '1', label: 'shutter Step', deps: ['OSJ:06'] },
   { ctl: 'OSJ:03', on: '2', label: 'shutter Synchro', deps: ['OSJ:09'] },
   { ctl: 'OSJ:03', on: '3', label: 'shutter ELC', deps: ['OSD:BF'] },
   { ctl: 'OAW', on: '0', label: 'white ATW', deps: ['OSI:25', 'OSJ:0D', 'OSJ:0E'] },
@@ -2328,6 +2344,33 @@ function renderDefaults() {
   box.innerHTML = keys.length ? `<table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th><th></th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span>, scene ${esc(String(d[m].scene ?? ''))}</td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td><td class="end"><button type="button" class="icon" data-defdel="${esc(m)}" aria-label="Delete default for ${esc(m)}">×</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No default scenes yet.</p>';
   $$('[data-defdel]', box).forEach(b => b.onclick = () => { const x = defaults(); delete x[b.dataset.defdel]; saveDefaults(x); renderDefaults(); toast(`Default for ${b.dataset.defdel} deleted`); });
 }
+const DEFAULTS_ID = 'panasonic-toolbox-defaults';
+async function exportDefaults() {
+  const d = defaults(), keys = Object.keys(d).sort();
+  if (!keys.length) return info('No default scenes yet', 'Make one on the Engineering page with <b>Save as default…</b>: it stores the live scene of one camera as the standard for its model.');
+  const name = `Default scenes ${today()}.json`;
+  if (!await ask({ title: `Back up ${keys.length} default scene${keys.length > 1 ? 's' : ''}?`, ok: 'Back up', body: `
+    <table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span></td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td></tr>`).join('')}</tbody></table>
+    <p>Saved as <span class="mono">${esc(name)}</span> in <span class="mono">${esc([state.saveDir || 'Downloads › Panasonic Toolbox', ...subFor('defaults')].join(' › '))}</span>. Reading changes nothing on the cameras.</p>` })) return;
+  await download(name, JSON.stringify({ format: DEFAULTS_ID, version: 1, savedAt: new Date().toISOString(), defaults: d }, null, 1), undefined, 'defaults');
+  $('#expResultCard').classList.remove('hidden');
+  $('#expResult').innerHTML = `<div class="note ok"><b>Default scenes</b><br>${keys.map(esc).join(', ')} saved in ${esc(name)}</div>`;
+  log(`Default scenes saved: ${keys.join(', ')}`);
+}
+async function importDefaults(data) {
+  const inFile = data.defaults || {}, keys = Object.keys(inFile).filter(m => inFile[m]?.file?.scenes?.length).sort();
+  if (!keys.length) return info('No default scenes in this file', 'The file holds no default scenes.');
+  const d = defaults();
+  if (!await ask({ title: `Use ${keys.length} default scene${keys.length > 1 ? 's' : ''} from this file?`, ok: 'Use them', danger: keys.some(m => d[m]), body: `
+    <table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>On this computer now</th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(inFile[m].fromName || '')}, ${new Date(inFile[m].savedAt).toLocaleDateString('en-GB')}</td><td>${d[m] ? `<span class="warn-text">replaced</span> (${new Date(d[m].savedAt).toLocaleDateString('en-GB')})` : '<span class="muted">none</span>'}</td></tr>`).join('')}</tbody></table>
+    <p>Nothing is sent to the cameras. Use <b>Initialize…</b> on the Engineering page to put a default into the live scene of your cameras.</p>` })) return;
+  const before = JSON.stringify(d);
+  for (const m of keys) d[m] = inFile[m];
+  saveDefaults(d); renderDefaults(); expKindUi();
+  pushHistory({ label: 'Load default scenes', undo: () => { saveDefaults(JSON.parse(before)); renderDefaults(); }, redo: () => { const x = defaults(); for (const m of keys) x[m] = inFile[m]; saveDefaults(x); renderDefaults(); } });
+  toast(`Default scene${keys.length > 1 ? 's' : ''} for ${keys.join(', ')} loaded`);
+  log(`Default scenes loaded: ${keys.join(', ')}`);
+}
 
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 $('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
@@ -2649,8 +2692,13 @@ async function eipVerify(snap, field, fails) {
       else if (now.ip === want.ip && now.mask === want.mask && now.gateway === want.gateway) {
         out.push({ t: `IP ${was.ip} → ${want.ip}` });
         // the camera keeps its place, description and zones in the Cameras list under its new address
-        const c = state.cameras.find(x => x.ip === was.ip);
-        if (c && !state.cameras.some(x => x !== c && x.ip === want.ip)) { c.ip = want.ip; c.port = want.port || 80; c.status = ''; saveCams(); renderCams(); }
+        const c = state.cameras.find(x => x.ip === was.ip), old = state.cameras.find(x => x !== c && x.ip === want.ip);
+        if (c && !old) { c.ip = want.ip; c.port = want.port || 80; c.status = ''; saveCams(); renderCams(); }
+        else if (old) { // a replaced camera: the new one takes over its entry (zone, description), the temporary entry goes
+          if (c) state.cameras.splice(state.cameras.indexOf(c), 1);
+          old.port = want.port || 80; old.status = ''; old.statusKind = ''; old.scene = null; if (now.model) old.model = now.model;
+          saveCams(); renderCams();
+        }
       }
       else out.push({ bad: true, t: `IP not changed: the camera still announces ${now.ip}. Cameras only accept a new address in the first 20 minutes after power-on (Easy IP Setup accommodate period): switch it off and on and try again.` });
     }
@@ -2673,17 +2721,34 @@ async function applyNet(list, opts = {}) {
   if (bad) return info('Check the values', `The settings for ${esc(bad.mac)} are not valid IPv4 addresses.`);
   const badName = list.find(r => r.edit.name !== r.orig.name && !validCamName(r.edit.name));
   if (badName) return info('Check the name', `“${esc(badName.edit.name)}” is not a valid camera name. Use at most 15 letters, digits, spaces, hyphens, underscores or dots.`);
-  const dup = list.find(r => [...state.eip, ...state.netLocal.values()].some(o => o !== r && o.mac !== r.mac && (o.edit.ip === r.edit.ip)));
+  // Two cameras in this change with the same new address: never.
+  const dup = list.find(r => list.some(o => o !== r && o.edit.ip === r.edit.ip));
   if (dup) return info('Duplicate IP address', `${esc(dup.edit.ip)} is used more than once.`);
+  // A new address that another camera in the list or in the last search had: only a problem if something still
+  // answers there. A broken camera that was replaced (switched off, unplugged) does not block its address.
+  const taken = [];
+  for (const r of list.filter(r => r.edit.ip !== r.orig.ip)) {
+    const ip = r.edit.ip;
+    const listed = state.cameras.filter(c => c.ip === ip && !list.some(o => o.orig.ip === ip));
+    const found = state.eip.filter(o => o.mac !== r.mac && o.orig.ip === ip && !list.includes(o));
+    if (!listed.length && !found.length) continue;
+    eipProgress(`Checking whether ${ip} is still in use…`);
+    const [q] = await batch({ ip, port: 80 }, [{ type: 'cam', cmd: 'QID' }]);
+    eipProgress('');
+    const names = [...listed.map(c => camName(c)), ...found.map(o => o.orig.name || o.model)].filter(Boolean).join(', ') || ip;
+    if (q?.ok || q?.status > 0) return info('IP address in use', `${esc(ip)} still answers on the network (${esc(names)}). Switch that camera off or give it another address first. Nothing was changed.`);
+    taken.push({ r, ip, names, listed });
+  }
   const ok = opts.confirmed || await ask({
     title: `Change the network settings of ${list.length} camera${list.length > 1 ? 's' : ''}?`,
-    body: `<ul>${list.map(r => `<li><b>${esc(r.model || r.mac)}</b> ${esc(r.orig.name)}: ${[r.edit.name !== r.orig.name ? `name → <b>${esc(r.edit.name)}</b>` : '', netChanged(r.edit, r.orig) ? `<span class="mono">${esc(r.orig.ip)} → ${esc(r.edit.ip)}</span>` : ''].filter(Boolean).join(', ')}</li>`).join('')}</ul>
+    body: `${taken.map(t => `<p class="warn-text">${esc(t.ip)} was used by ${esc(t.names)}, which no longer answers. ${t.listed.length ? 'That old entry is replaced in the Cameras list: the new camera keeps its zone and description.' : ''}</p>`).join('')}<ul>${list.map(r => `<li><b>${esc(r.model || r.mac)}</b> ${esc(r.orig.name)}: ${[r.edit.name !== r.orig.name ? `name → <b>${esc(r.edit.name)}</b>` : '', netChanged(r.edit, r.orig) ? `<span class="mono">${esc(r.orig.ip)} → ${esc(r.edit.ip)}</span>` : ''].filter(Boolean).join(', ')}</li>`).join('')}</ul>
       ${list.some(r => netChanged(r.edit, r.orig)) ? '<p>The cameras restart their network and are briefly unreachable. Cameras only accept new network settings within about 20 minutes after they were switched on; if a camera does not change, restart it and try again.</p>' : ''}
       ${list.some(r => r.edit.name !== r.orig.name) ? '<p>A new name is sent to the camera directly, so this computer must be in the same IP range as the camera (after any IP change).</p>' : ''}`,
     ok: 'Apply', danger: true,
   });
   if (!ok) return;
   $('#eipApply').disabled = true;
+  state.eip = state.eip.filter(o => !taken.some(t => o.orig.ip === t.ip && o.mac !== t.r.mac)); // the old camera is gone
   const snap = list.map(r => ({ mac: r.mac, model: r.model, dns1: r.dns1, dns2: r.dns2, local: r.local, orig: { ...r.orig }, edit: { ...r.edit } }));
   const fails = await eipSend(snap, 'edit');
   pushHistory({ label: `Network settings of ${snap.length} camera${snap.length > 1 ? 's' : ''}`, camera: true, many: snap.length > 1,
