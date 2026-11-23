@@ -1039,11 +1039,21 @@ $('#camEditSel').onclick = async () => {
   if (list.length) applyNet(list);
   else if (beforeApp === afterApp) toast('Nothing changed');
 };
+// The web page icons in the selection bar stand right above the Web pages column
+function placeSelWeb() {
+  const bar = $('#camSelBar'), web = $('#camSelWeb'), th = $$('#camTable thead th')[8];
+  if (!bar || !web || !th || bar.classList.contains('hidden')) return;
+  const td = $('#camTable tbody tr td:nth-child(9)');
+  const left = (td || th).getBoundingClientRect().left + (td ? parseFloat(getComputedStyle(td).paddingLeft) : 0) - bar.getBoundingClientRect().left - 2;
+  web.style.left = Math.max(0, left) + 'px';
+}
+window.addEventListener('resize', placeSelWeb);
 function updateSel() {
   const n = state.cameras.filter(c => c.selected).length;
   const items = [...state.cameras, ...foundRows()], isSel = x => x.ip && !x.mac ? !!x.selected : !!x.sel;
   selAllState($('#selAll'), items, isSel); renderZones();
   $('#camSelN').textContent = n + foundRows().filter(r => r.sel).length; selBar($('#camSelBar'), n + foundRows().filter(r => r.sel).length);
+  requestAnimationFrame(placeSelWeb);
   $('#expSel').textContent = n ? `${n} camera${n > 1 ? 's' : ''} selected` : 'Select at least one camera';
 }
 $('#selAll').onchange = () => { const items = [...state.cameras, ...foundRows()], isCam = x => !x.mac; selAllClick($('#selAll'), items, x => isCam(x) ? !!x.selected : !!x.sel, (x, v) => { if (isCam(x)) x.selected = v; else x.sel = v; }); saveCams(); renderCams(); };
@@ -1537,6 +1547,10 @@ function renderImports() {
   updImpSel();
 }
 function updImpSel() {
+  const camOf = ip => state.cameras.find(c => c.ip === ip);
+  zoneChips($('#impZones'), { get: c => { const js = state.jobs.filter(j => j.target === c.ip); return js.length > 0 && js.every(j => j.include); },
+    set: (c, v) => state.jobs.filter(j => j.target === c.ip).forEach(j => j.include = v), done: () => renderImports() }, 'Select zone');
+  if (!state.jobs.some(j => camOf(j.target)?.zone)) $('#impZones').innerHTML = '';
   const n = state.jobs.filter(j => j.include).length;
   $('#impSelN').textContent = n; selBar($('#impSelBar'), n);
   selAllState($('#impSelAll'), state.jobs, j => j.include);
@@ -2388,11 +2402,16 @@ async function initializeCams(pre) {
   const opened = ask({ title: 'Initialize: put the engineering file on…', ok: 'Next', wide: true, body: `
     <p>From ${esc(ef.fromName || ef.fromIp || 'a file')}${ef.model ? ` (${esc(ef.model)})` : ''}, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}.</p>
     <div class="setup-sum">${engSummary(engOnly(ef.values))}</div>
+    <div class="zonebar" id="iniZones"></div>
     <div class="row wrap ini-cams" id="iniCams">${cams.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${on.has(c.ip) ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted">${esc(c.ip)}</span></label>`).join('')}</div>
     ${ef.values.format ? '<p class="warn-text">A camera that gets another frequency restarts (about a minute without picture).</p>' : ''}` });
   await sleep(0);
   const box = c => $$('#iniCams label:not(.selall-row) input').find(i => i.value === c.ip);
-  selAllRow($('#iniCams'), cams, c => !!box(c)?.checked, (c, v) => { const i = box(c); if (i) i.checked = v; }, () => {});
+  let iniAll = null;
+  const iniSel = { get: c => !!box(c)?.checked, set: (c, v) => { const i = box(c); if (i) i.checked = v; }, done: () => { zoneChips($('#iniZones'), iniSel, 'Zone'); if (iniAll) selAllState(iniAll, cams, iniSel.get); } };
+  iniAll = selAllRow($('#iniCams'), cams, iniSel.get, iniSel.set, iniSel.done);
+  $$('#iniCams label:not(.selall-row) input').forEach(i => i.addEventListener('change', iniSel.done));
+  iniSel.done();
   if (!await opened) return;
   const ips = $$('#iniCams label:not(.selall-row) input:checked').map(i => i.value);
   if (!ips.length) return info('Choose cameras first', 'Select at least one camera.');
@@ -2663,6 +2682,7 @@ function eipTake(found) {
     const pending = o && JSON.stringify(o.edit) !== JSON.stringify(o.orig) && JSON.stringify(o.orig) === JSON.stringify(v);
     return { ...c, sel: o?.sel || false, orig: { ...v }, edit: pending ? o.edit : { ...v } };
   });
+  store.set('eipLast', found);
   renderEip();
 }
 async function eipDiscover() {
@@ -3807,7 +3827,9 @@ document.addEventListener('keyup', e => {
 
 /* ------------------------------------------------------------------ init */
 renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo(); renderEngFile(); renderEngfTab();
-checkBridge().then(() => loadSaveDir());
+// found cameras stay addable: the last search is remembered, and a new one runs right away
+{ const last = store.get('eipLast', []); if (Array.isArray(last) && last.length && !state.eip.length) eipTake(last); }
+checkBridge().then(ok => { loadSaveDir(); if (state.bridgeOk) { state.eipAt = Date.now(); eipDiscover(); } });
 
 
 /* ---- More menus (details.menu) and foldable blocks on Live and Engineering ---- */
