@@ -1612,7 +1612,7 @@ async function runImport(jobs, opts, title = 'Restore these cameras?') {
         setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${src.kind === 'engineering' ? `${r.applied} settings right after checking` : `${r.applied} settings changed${r.unchanged ? `, ${r.unchanged} already right` : ''}`}` +
           (r.skipped.length ? `, ${r.skipped.length} skipped (not supported by ${esc(profileFor(cam.model).fam)})` : '') +
           (r.failed.length ? `<br>Not accepted by the camera: ${r.failed.map(f => esc(f.name) + ' (' + esc(f.err) + ')').join(', ')}` : '') +
-          (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}` : '') +
+          (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}${r.mismatch.some(m => /shutter/i.test(m.name)) ? ' <span class="muted">(shutter values depend on the frequency: a file from a camera at another frequency, for example 50 Hz into 59.94 Hz, gets the nearest value)</span>' : ''}` : '') +
           (r.stored ? '<br>Stored in the scene file (UE160).' : ''));
         log(`${cam.ip}: imported ${srcLabel(src)}: ${r.applied} changed, ${r.unchanged || 0} already right, ${r.failed.length} refused, ${r.mismatch.length} different`);
       } catch (e) { setRow('err', `${esc(cam.ip)}: import failed. ${esc(e.message)}`); log(`${cam.ip}: import failed: ${e.message}`, 'ERROR'); }
@@ -2791,7 +2791,7 @@ async function applyNet(list, opts = {}) {
     eipProgress(`Checking whether ${ip} is still in use…`);
     const [q] = await batch({ ip, port: 80 }, [{ type: 'cam', cmd: 'QID' }]);
     eipProgress('');
-    const names = [...listed.map(c => camName(c)), ...found.map(o => o.orig.name || o.model)].filter(Boolean).join(', ') || ip;
+    const names = [...new Set([...listed.map(c => camName(c)), ...found.map(o => o.orig.name || o.model)].filter(Boolean))].join(', ') || ip;
     if (q?.ok || q?.status > 0) return info('IP address in use', `${esc(ip)} still answers on the network (${esc(names)}). Switch that camera off or give it another address first. Nothing was changed.`);
     taken.push({ r, ip, names, listed });
   }
