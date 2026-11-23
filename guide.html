@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Panasonic Toolbox – User guide</title><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="How to use Panasonic Toolbox: cameras, live control, engineering, back up, restore, shows, parameters and RP150 assignment.">
+<style>
+@page{size:A4;margin:0}
+:root{--bg:#1d1f22;--side:#18191c;--panel:#24272b;--raised:#2c3035;--rule:#34383e;--rule-soft:#2b2e33;--text:#e6e7e8;--text-2:#b8bdc3;--muted:#8c939b;--accent:#4a8bf0;--accent-soft:rgba(74,139,240,.16);--ok:#47b26c;--warn:#d9a13b;--err:#e0574d}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:10.5pt/1.55 Inter,"DejaVu Sans",sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.page{width:210mm;min-height:297mm;padding:18mm 17mm 16mm;page-break-after:always;position:relative;background:var(--bg)}
+.page:last-child{page-break-after:auto}
+.foot{position:absolute;left:17mm;right:17mm;bottom:9mm;display:flex;justify-content:space-between;color:var(--muted);font-size:8pt;border-top:1px solid var(--rule-soft);padding-top:5px}
+h1{font-size:22pt;font-weight:700;margin:0 0 4mm;letter-spacing:-.01em}
+h2{font-size:15pt;font-weight:600;margin:0 0 3mm;display:flex;align-items:center;gap:8px}
+h2 .n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;font-size:10pt}
+h3{font-size:9pt;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:5mm 0 2mm}
+p{margin:0 0 2.5mm;color:var(--text-2)}
+p.lead{color:var(--text);font-size:11.5pt}
+b{color:var(--text);font-weight:600}
+ul,ol{margin:0 0 3mm;padding-left:5mm;color:var(--text-2)} li{margin:1mm 0}
+code,.mono{font-family:"DejaVu Sans Mono",monospace;font-size:8.5pt;color:var(--text-2)}
+.card{background:var(--panel);border:1px solid var(--rule-soft);border-radius:8px;padding:4mm 5mm;margin:0 0 4mm}
+.shot{width:100%;border-radius:8px;border:1px solid var(--rule);display:block;margin:2mm 0 4mm}
+.btn{display:inline-block;padding:0 6px;border-radius:5px;background:var(--raised);border:1px solid var(--rule);color:var(--text);font-size:9pt;line-height:16px;white-space:nowrap}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+table{width:100%;border-collapse:collapse;margin:1mm 0 4mm;font-size:9.5pt}
+th{text-align:left;color:var(--muted);font-weight:500;font-size:8.5pt;border-bottom:1px solid var(--rule);padding:2mm 2mm}
+td{border-bottom:1px solid var(--rule-soft);padding:2mm;color:var(--text-2);vertical-align:top}
+td:first-child{color:var(--text)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:5mm}
+.tip{border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 6px 6px 0;padding:2.5mm 4mm;margin:2mm 0 4mm;color:var(--text)}
+.warn{border-left-color:var(--warn);background:rgba(217,161,59,.12)}
+/* cover */
+.cover{display:flex;flex-direction:column;justify-content:space-between;background:radial-gradient(ellipse at 80% 0%,rgba(74,139,240,.22),transparent 55%),var(--side)}
+.cover .brand{display:flex;align-items:center;gap:12px;font-weight:600;font-size:13pt}
+.cover .brand img{width:44px;height:44px}
+.cover h1{font-size:38pt;line-height:1.05;margin:0 0 6mm}
+.cover .sub{font-size:14pt;color:var(--text-2);max-width:140mm}
+.cover .meta{color:var(--muted);font-size:9.5pt}
+.toc{list-style:none;padding:0;margin:4mm 0 0;columns:2;column-gap:10mm}
+.toc li{display:flex;gap:3mm;padding:2mm 0;border-bottom:1px solid var(--rule-soft);break-inside:avoid;color:var(--text)}
+.toc li span{color:var(--accent);font-weight:600;width:6mm}
+
+@media screen{
+  body{padding:0 0 10mm}
+  .page{width:auto;max-width:860px;min-height:0;margin:0 auto;padding:12mm 6vw 10mm;page-break-after:auto;border-bottom:1px solid var(--rule-soft)}
+  .foot{display:none}
+  .cover{min-height:0;gap:10mm;border-radius:0}
+  .topbar{position:sticky;top:0;z-index:5;background:rgba(24,25,28,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--rule-soft)}
+  .topbar div{max-width:860px;margin:0 auto;padding:10px 6vw;display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:10pt}
+  .topbar a{color:var(--text);text-decoration:none} .topbar a.btnl{background:var(--accent);color:#fff;border-radius:6px;padding:4px 10px}
+  .toc li a{color:var(--text);text-decoration:none}
+  code{word-break:break-all}
+  @media (max-width:640px){.two{grid-template-columns:1fr}.toc{columns:1}}
+}
+@media print{.topbar{display:none}}
+</style></head><body>
+<nav class="topbar"><div><a href="./">← Panasonic Toolbox</a><a class="btnl" href="assets/Panasonic-Toolbox-User-Guide.pdf" download>Download PDF</a></div></nav>
+
+<section class="page cover">
+  <div class="brand"><img src="assets/guide/icon.svg" alt=""> Panasonic Toolbox</div>
+  <div>
+    <h1>User guide</h1>
+    <p class="sub">Find, control, back up and set up your Panasonic PTZ cameras and AW-RP150 remotes, from one app on your Mac or PC.</p>
+    <ul class="toc">
+      <li><span>1</span><a href="#s1">Getting started</a></li><li><span>2</span><a href="#s2">The basics</a></li><li><span>3</span><a href="#s3">Cameras</a></li><li><span>4</span><a href="#s4">Live</a></li>
+      <li><span>5</span><a href="#s5">Engineering</a></li><li><span>6</span><a href="#s6">Back up</a></li><li><span>7</span><a href="#s7">Restore and Initialize</a></li><li><span>8</span><a href="#s8">Shows</a></li>
+      <li><span>9</span><a href="#s9">Parameters</a></li><li><span>10</span><a href="#s10">RP150 assignment</a></li><li><span>11</span><a href="#s11">Troubleshooting</a></li><li><span>12</span><a href="#s12">Contact</a></li>
+    </ul>
+  </div>
+  <div class="meta">Version 2.30 · November 2026 · seppeva.github.io/panasonic-toolbox</div>
+</section>
+
+<section class="page">
+  <h2 id="s1"><span class="n">1</span>Getting started</h2>
+  <p class="lead">Panasonic Toolbox runs on macOS 11 or later and Windows 10/11. It is free and needs no account.</p>
+  <div class="two">
+    <div class="card"><h3 style="margin-top:0">Mac</h3>
+      <p>Open the .dmg and drag Panasonic Toolbox to Applications. Or install from Terminal, always the newest version:</p>
+      <p><code>cd /tmp &amp;&amp; curl -fL -o PT.zip https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-macOS-AppleSilicon.zip &amp;&amp; rm -rf "/Applications/Panasonic Toolbox.app" &amp;&amp; ditto -x -k PT.zip /Applications &amp;&amp; xattr -cr "/Applications/Panasonic Toolbox.app" &amp;&amp; open "/Applications/Panasonic Toolbox.app"</code></p>
+      <p>Intel Mac: replace <code>AppleSilicon</code> with <code>Intel</code>.</p>
+    </div>
+    <div class="card"><h3 style="margin-top:0">Windows</h3>
+      <p>Run the installer; no administrator rights are needed. Or in CMD, always the newest version:</p>
+      <p><code>curl -Lo p.exe https://github.com/seppeva/panasonic-toolbox/releases/latest/download/PanasonicToolbox-Windows-Setup.exe&amp;&amp;p.exe</code></p>
+      <p>"Windows protected your PC": click <b>More info</b>, then <b>Run anyway</b>. Allow private networks in the firewall.</p>
+    </div>
+  </div>
+  <div class="tip warn"><b>Mac: allow the local network.</b> The first time, macOS asks whether the app may find devices on your local network. Choose <b>Allow</b>. Without it the app finds no cameras and shows "No route to host". Fix it later in System Settings › Privacy &amp; Security › Local Network, then quit and reopen the app.</div>
+
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>2</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s2"><span class="n">2</span>The basics</h2>
+  <p class="lead">Select the cameras you want to work with on the Cameras page. The other pages use the selected cameras.</p>
+  <table>
+    <tr><th style="width:38mm">Where</th><th>What it does</th></tr>
+    <tr><td>Menu on the left</td><td>Cameras, Live, Engineering, Back up, Restore, Shows, Parameters, RP150 assignment</td></tr>
+    <tr><td>Project</td><td>Keeps productions apart: each project has its own cameras, zones, shows, settings and folder</td></tr>
+    <tr><td>Zones</td><td>Click a zone (for example <span class="btn">Stage 3</span>) on any page to select all its cameras; click again to deselect</td></tr>
+    <tr><td>Select all</td><td>The checkbox above every camera list selects or clears all cameras</td></tr>
+    <tr><td>Undo / Redo</td><td>Bottom left, or Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z</td></tr>
+    <tr><td>Log</td><td>Everything the app did, with the time</td></tr>
+    <tr><td>Settings</td><td>Save folder, projects, timing and the raw camera answers for technicians</td></tr>
+  </table>
+  <p><b>Camera login.</b> Fill in the cameras' user name and password once under <b>Camera login</b> at the bottom of the Cameras page. The app needs it to change settings, switch IP video and open the web pages for you.</p>
+  <p><b>Files</b> are saved in Downloads › Panasonic Toolbox, with a folder per project. <b>Nothing is sent</b> to a camera until you confirm what will change.</p>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>3</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s3"><span class="n">3</span>Cameras</h2>
+  <p class="lead">Finds every Panasonic camera on your network, even one outside your IP range, just like Easy IP Setup.</p>
+  <img class="shot" src="assets/guide/cameras.png">
+  <ol>
+    <li>Click <span class="btn p">Search</span>. The app also searches by itself when it starts. Cameras not in your list yet show a blue dot.</li>
+    <li>Select them and choose <span class="btn">More</span> › <b>Add found cameras to my list</b>. <span class="btn">Add…</span> adds a camera by hand.</li>
+    <li>Select the cameras you want to work with.</li>
+  </ol>
+  <table>
+    <tr><th style="width:30mm">Dot</th><th>Meaning</th></tr>
+    <tr><td><span class="dot" style="background:var(--ok)"></span>Green</td><td>In your IP range and reachable</td></tr>
+    <tr><td><span class="dot" style="background:var(--warn)"></span>Amber</td><td>In another IP range than this computer: give it a new address first</td></tr>
+    <tr><td><span class="dot" style="background:var(--err)"></span>Red</td><td>Not reachable: check power, cable and IP address</td></tr>
+    <tr><td><span class="dot" style="background:var(--accent)"></span>Blue</td><td>Found on the network, not in your list yet</td></tr>
+  </table>
+  <p><b>Edit…</b> (in the selection bar) changes everything about the selected cameras in one window: name, IP address, subnet mask and gateway go to the cameras; description, zone, port and login stay in the app. <b>Fill in all</b> numbers the addresses from the first one. A camera accepts a new IP address only in the first 20 minutes after it is switched on. An address of a broken camera that no longer answers can be reused: the new camera takes over its zone and description.</p>
+  <p><b>Web pages.</b> The icons in each row open the camera's live page or settings page, already logged in. The same icons in the selection bar open them for every selected camera. AW-RP remote controllers can be in the list too: they show <i>Online · remote controller</i> and get no camera actions.</p>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>4</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s4"><span class="n">4</span>Live</h2>
+  <p class="lead">Watch one camera and control it from your computer, like on its own web page.</p>
+  <img class="shot" src="assets/guide/live.png">
+  <table>
+    <tr><th style="width:38mm">Block</th><th>What you can do</th></tr>
+    <tr><td>Pan / tilt, zoom, focus, iris</td><td>Hold a button to move; the camera stops when you let go. Speed with a button back to nominal. Auto focus, Push AF, Auto iris.</td></tr>
+    <tr><td>Camera presets</td><td>Recall with one click; <span class="btn">Store</span> then a number saves the current position</td></tr>
+    <tr><td>White</td><td>Auto, Var, A, B, 3200K, 5600K, a kelvin value with Set VAR, AWB and Store</td></tr>
+    <tr><td>Black, Day / night</td><td>ABB; Day or Night</td></tr>
+    <tr><td>Shooting mode</td><td>Normal or High Sens.</td></tr>
+    <tr><td>ND filter</td><td>Clear, 1/4, 1/16, 1/64</td></tr>
+    <tr><td>Scenes</td><td>Switch to scene 1 to 4</td></tr>
+  </table>
+  <p><b>Keyboard:</b> arrow keys pan and tilt, + and − zoom, 1 to 9 recall presets. Fold a block you don't need by clicking its title. No picture? Switch on JPEG streaming in the camera (Video over IP).</p>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>5</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s5"><span class="n">5</span>Engineering</h2>
+  <p class="lead">Changes settings on many cameras in one go and shows the result per camera at the bottom of the page.</p>
+  <img class="shot" src="assets/guide/engineering.png">
+  <p>At the top, select the cameras (Select all and the zones help). Every setting is in one place:</p>
+  <div class="two">
+    <div class="card"><h3 style="margin-top:0">Tiles: right away</h3>
+      <ul><li><b>Power</b>: On or Standby</li><li><b>Scene file</b>: switch all to the same scene</li><li><b>Tally</b>: red and green on or off</li><li><b>White balance</b>: Auto, Var, A, B, 3200K, 5600K, kelvin, AWB, ABB, Store</li><li><b>White balance per scene</b>: scenes 1 to 4 in one go</li></ul></div>
+    <div class="card"><h3 style="margin-top:0">Setup form: the fixed setup</h3>
+      <ul><li>Frequency and format, shooting mode, colour, IP video</li><li>OSD mix per output</li><li>Tally on/off, brightness, status lamp</li><li>Installation, pan/tilt speed, presets and preset scope</li><li>Power-on position, wireless control, fans</li></ul></div>
+  </div>
+  <ol>
+    <li><span class="btn">Read from a camera…</span> fills the form from one camera, or fill it in yourself. A dash leaves that setting as it is.</li>
+    <li><span class="btn p">Apply to the selected cameras</span>. Only what differs is sent; every value is read back afterwards.</li>
+    <li><span class="btn">Save as engineering file</span> keeps the form as the engineering file, for Initialize and Back up.</li>
+  </ol>
+  <div class="tip warn">A new frequency (for example 50 Hz to 59.94 Hz) restarts the cameras. The app waits for them and then sends the rest: about 45 seconds.</div>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>6</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s6"><span class="n">6</span>Back up</h2>
+  <p class="lead">Saves how your cameras look and are set up, in files you can keep, share and put back.</p>
+  <img class="shot" src="assets/guide/backup.png">
+  <table>
+    <tr><th style="width:38mm">Kind</th><th>What is in it</th></tr>
+    <tr><td>Scene files</td><td>All picture settings of a scene. <i>Live scene only</i> (the picture does not change) or <i>Specific scenes</i>.</td></tr>
+    <tr><td>Operator file</td><td>An operator's own preferences: preset speeds, pan/tilt and lens behaviour</td></tr>
+    <tr><td>Engineering file</td><td>The system setup (format, OSD mix, tally, pan/tilt, presets, fans, IP video). No white balance per scene: that is in the scene files.</td></tr>
+  </table>
+  <p>Select the cameras, choose what to back up, check the file name and click <span class="btn p">Back up</span>. Several cameras go into one ZIP in your project folder.</p>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>7</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s7"><span class="n">7</span>Restore and Initialize</h2>
+  <p class="lead">Puts a back-up back on the same or other cameras.</p>
+  <img class="shot" src="assets/guide/restore.png" style="max-height:105mm;object-fit:cover;object-position:top">
+  <h3>Restore</h3>
+  <ol>
+    <li>Drop a back-up on the page or choose <span class="btn">Open files…</span>. Back-ups from this session are already listed.</li>
+    <li>Check <b>What goes where</b>: each file goes to the camera with the same IP address and into the same scene. Change the camera and scene per row; the zones select rows quickly.</li>
+    <li>Click <span class="btn p">Restore</span>. You first see what changes per camera.</li>
+  </ol>
+  <p>By default the current settings are saved first and every setting is read back afterwards. Undo takes a restore back. <b>Save as show</b> turns the rows into a show.</p>
+  <h3>Initialize: the engineering file on many cameras</h3>
+  <p>The <b>Engineering file</b> block shows which engineering file is in use. <span class="btn">Initialize…</span> asks which cameras get it, then runs like a restore: what changes first, a back-up, and a check afterwards. To take an engineering file to another computer, back it up and open the file here; <b>Use for Initialize</b> makes it the one Initialize uses.</p>
+  <div class="tip">Shutter values depend on the frequency. A scene file from a camera at 50 Hz put on a camera at 59.94 Hz gets the nearest shutter value; the result explains it.</div>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>8</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s8"><span class="n">8</span>Shows</h2>
+  <p class="lead">Puts a whole setup on all cameras with one click, for example "Concert" or "Talk show".</p>
+  <img class="shot" src="assets/guide/shows.png">
+  <ul>
+    <li><span class="btn">New show from cameras…</span> saves the scenes (and operator files) of the selected cameras as they are now.</li>
+    <li><b>Build a show from files</b>: rows are cameras, columns are scenes, the operator file and the engineering file. Pick per cell what goes there. No cameras needed.</li>
+    <li><span class="btn">Recall</span>: every camera gets its own files, the engineering file first, with a back-up before.</li>
+  </ul>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>9</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s9"><span class="n">9</span>Parameters</h2>
+  <p class="lead">A library of all REST commands, per model, for Bitfocus Companion and other software.</p>
+  <img class="shot" src="assets/guide/parameters.png" style="max-height:95mm;object-fit:cover;object-position:top">
+  <ul>
+    <li>Search or filter by type, category and model. Pick a camera under <i>Camera for the links</i>: every command shows a ready link.</li>
+    <li><span class="btn">Copy</span> copies the link, <span class="btn">Send</span> tries it, <span class="btn">+ Script</span> adds it to a script. In Companion use the Generic HTTP connection with a GET action.</li>
+    <li><b>Scripts</b> run one or more commands on the selected cameras, saved as PowerShell (Windows) or shell (Mac) files.</li>
+    <li><b>Scene file, Operator file and Engineering file contents</b>: every setting with its command, query and values; save as CSV.</li>
+  </ul>
+
+  <h2 id="s10" style="margin-top:6mm"><span class="n">10</span>RP150 assignment</h2>
+  <p class="lead">Assigns cameras to the CAM buttons of an AW-RP150 in one go. Experimental.</p>
+  <ol>
+    <li>On the RP150 with an SD card: SYSTEM › CONNECT SETTING › DATA SAVE › YES.</li>
+    <li>Open <code>PRIVATE/MEIGROUP/PAVCN/SBG/SYSCAM/RP150/DATA/Network.s15</code> from the card on this page.</li>
+    <li>Fill in which camera IP goes to which CAM; <b>Take found cameras</b> fills it from your list.</li>
+    <li><b>Save new Network.s15</b>, copy it to the same folder on the card, then DATA LOAD › YES+NW on the RP150.</li>
+  </ol>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>10</span></div>
+</section>
+
+<section class="page">
+  <h2 id="s11"><span class="n">11</span>Troubleshooting</h2>
+  <table>
+    <tr><th style="width:62mm">Problem</th><th>What to do</th></tr>
+    <tr><td>Mac finds no cameras, or "No route to host" while ping works</td><td>System Settings › Privacy &amp; Security › Local Network: switch Panasonic Toolbox on, then quit and reopen the app</td></tr>
+    <tr><td>Amber dot</td><td>The camera is in another IP range: give it an address in your range with Edit…, or change your computer's address</td></tr>
+    <tr><td>Red dot</td><td>The camera does not answer: check power, cable and IP address</td></tr>
+    <tr><td>A new IP address is not accepted</td><td>Switch the camera off and on, then try again within 20 minutes</td></tr>
+    <tr><td>"IP address in use"</td><td>Another device still answers at that address. Switch it off or give it another address first</td></tr>
+    <tr><td>Settings refused, or web pages ask for a password</td><td>Fill in the camera login on the Cameras page</td></tr>
+    <tr><td>No picture in Live</td><td>Switch on JPEG streaming in the camera (Video over IP)</td></tr>
+    <tr><td>A setting shows ER3</td><td>That value does not exist on this model, for example preset speed Mid on the AW-UE150</td></tr>
+    <tr><td>IP video "not available" right after a frequency change</td><td>The camera's web server needs a little longer after the restart; wait and try again</td></tr>
+  </table>
+  <h3>Start from scratch on a Mac</h3>
+  <p>Quit the app and run in Terminal. Projects, cameras, shows and settings are cleared; back-up files stay in Downloads.</p>
+  <p><code>rm -rf ~/Library/Application\ Support/Panasonic\ Toolbox ~/Library/WebKit/be.seppevanaken.panasonicscene ~/Library/Caches/be.seppevanaken.panasonicscene</code></p>
+
+  <h2 id="s12" style="margin-top:8mm"><span class="n">12</span>Contact</h2>
+  <div class="card"><p style="margin:0">Questions or a problem? Mail <b>seppe@vanaken.be</b>, or use the mail link in Settings › About.<br>Website and downloads: <b>seppeva.github.io/panasonic-toolbox</b></p></div>
+  <p class="muted" style="font-size:8.5pt;margin-top:6mm">Panasonic is a trademark of Panasonic Holdings Corporation. Panasonic Toolbox is not made by Panasonic.</p>
+  <div class="foot"><span>Panasonic Toolbox · User guide</span><span>11</span></div>
+</section>
+</body></html>
