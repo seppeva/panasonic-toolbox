@@ -879,6 +879,13 @@ function zoneChips(box, sel, label = 'Zone', allNone = false) {
   const isOn = z => cams(z).length > 0 && cams(z).every(c => sel.get(c));
   const none = state.cameras.filter(c => !c.zone).length;
   const btns = (zs.length ? zs.map(z => [z, z]) : []).concat(zs.length && none ? [['', 'No zone']] : []);
+  if (!btns.length && state.cameras.length) {
+    box.innerHTML = `<span class="muted small">${label === 'Select zone' ? 'Zones' : label}: none yet</span> <button type="button" class="chip mkzones" data-mkzones title="Group cameras in zones (for example Stage, Hall). A click on a zone then selects all its cameras, on every page.">+ Make zones…</button>`
+      + (allNone ? `<label class="check selall-inline"><input type="checkbox" data-selall aria-label="Select all cameras"> Select all</label>` : '');
+    $('[data-mkzones]', box).onclick = () => { $('[role=tab][data-tab=cams]').click(); setTimeout(() => $('#zonesBtn').click(), 100); };
+    const sa0 = $('[data-selall]', box); if (sa0) { selAllState(sa0, state.cameras, sel.get); sa0.onchange = () => { selAllClick(sa0, state.cameras, sel.get, sel.set); sel.done(); }; }
+    return;
+  }
   box.innerHTML = (btns.length ? `<span class="muted small">${label}:</span> ` + btns.map(([z, l]) => `<button type="button" class="chip${isOn(z) ? ' on' : ''}" data-zone="${esc(z)}" aria-pressed="${isOn(z)}" title="${isOn(z) ? 'Deselect' : 'Select'} the cameras in ${esc(l)}">${esc(l)} <span class="muted">${cams(z).length}</span></button>`).join('') : '')
     + (allNone && state.cameras.length ? `<label class="check selall-inline"><input type="checkbox" data-selall aria-label="Select all cameras"> Select all</label>` : '');
   // act on press (before a field loses focus and the bar is redrawn); keyboard presses come in as clicks with detail 0
@@ -1053,6 +1060,8 @@ function updateSel() {
   const items = [...state.cameras, ...foundRows()], isSel = x => x.ip && !x.mac ? !!x.selected : !!x.sel;
   selAllState($('#selAll'), items, isSel); renderZones();
   $('#camSelN').textContent = n + foundRows().filter(r => r.sel).length; selBar($('#camSelBar'), n + foundRows().filter(r => r.sel).length);
+  const nf = foundRows().filter(r => r.sel).length;
+  $('#camAddFound').classList.toggle('hidden', !nf); $('#camAddFound').textContent = nf > 1 ? `Add ${nf} to my list` : 'Add to my list';
   requestAnimationFrame(placeSelWeb);
   $('#expSel').textContent = n ? `${n} camera${n > 1 ? 's' : ''} selected` : 'Select at least one camera';
 }
@@ -3032,7 +3041,8 @@ function renderSetup() {
   const v = setupVal(), w = wbVal();
   $('#setupForm').innerHTML = setupFieldsHtml(SETUP.filter(f => !f.wb), v);
   $('#wbSceneForm').innerHTML = setupFieldsHtml(SETUP.filter(f => f.wb), w);
-  $$('#setupForm [data-k], #wbSceneForm [data-k]').forEach(el => el.onchange = () => {
+  $$('#wbSceneForm [data-k]').forEach(el => el.onchange = () => wbSceneLive(el));
+  $$('#setupForm [data-k]').forEach(el => el.onchange = () => {
     const key = isWbKey(el.dataset.k) ? 'engWbScenes' : 'engSetup', t = store.get(key, {});
     if (el.value.trim()) t[el.dataset.k] = el.value.trim(); else delete t[el.dataset.k];
     store.set(key, t); renderSetup();
@@ -3128,20 +3138,21 @@ $('#setupSaveEng').onclick = async () => {
   toast(`Engineering file saved: ${Object.keys(values).length} settings`);
   log(`Engineering file saved from the setup form: ${Object.keys(values).length} settings`);
 };
-$('#wbSceneApply').onclick = async () => {
-  const w = wbVal(), cams = engCams(), plan = SETUP.filter(f => f.wb && w[f.k]);
-  if (!plan.length) return info('Nothing chosen yet', 'Choose the white balance of at least one scene.');
+// White balance per scene: live like the other tiles. A choice goes straight to the selected cameras
+// (VAR once a colour temperature is filled in); the camera switches to that scene for a moment and back.
+async function wbSceneLive(el) {
+  const k = el.dataset.k, n = k.slice(-1), w = wbVal();
+  if (el.value.trim()) w[k] = el.value.trim(); else delete w[k];
+  store.set('engWbScenes', w); renderSetup();
+  const f = SETUP.find(x => x.wb === n || x.wb === +n);
+  const wb = w['wb' + n]; if (!wb) return;
+  if (wb === 'var' && !validK(+w['k' + n])) { $('#engStatus').textContent = `Scene ${n}: fill in a colour temperature from 2000 to 15000 K`; return; }
+  const cams = engCams();
   if (!cams.length) return info('Choose cameras first', 'Select the cameras at the top of this page, or use a zone.');
-  const badK = plan.find(f => w[f.k] === 'var' && !validK(+w['k' + f.wb]));
-  if (badK) return info('Check the colour temperature', `${esc(badK.l)} is set to VAR: fill in a colour temperature from 2000 to 15000 K.`);
-  if (!await ask({ title: `White balance of ${plan.length} scene${plan.length > 1 ? 's' : ''} on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Apply', danger: true, body: `
-    <p>${plan.map(f => `${esc(f.l)}: ${esc(setupLabel(f, w[f.k]))}`).join('<br>')}</p>
-    <p>Every camera switches to those scenes one by one and then goes back to the scene that was live.</p>
-    <p class="muted small">${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
   if (!state.bridgeOk && !(await checkBridge())) return;
-  const v = {}; plan.forEach(f => { v[f.k] = w[f.k]; if (w[f.k] === 'var') v['k' + f.wb] = w['k' + f.wb]; });
-  await runSetup(cams, v, 'White balance per scene');
-};
+  const v = { ['wb' + n]: wb }; if (wb === 'var') v['k' + n] = w['k' + n];
+  await runSetup(cams, v, `White balance scene ${n}`);
+}
 async function runSetup(cams, v, title) {
   $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = title;
   const progress = t => { $('#setupStatus').textContent = $('#engStatus').textContent = t; };

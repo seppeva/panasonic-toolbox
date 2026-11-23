@@ -59,10 +59,8 @@
     <div class="selbar hidden" id="camSelBar"><span class="seln"><b id="camSelN">0</b> selected</span>
       <span class="selbar-web" id="camSelWeb"></span>
       <button class="ghost small" id="camEditSel" title="Name, IP address, subnet mask and gateway (sent to the cameras), description, zone, port and login of the selected cameras">Edit…</button>
-      <details class="menu"><summary>More</summary><div class="menu-pop">
-        <button type="button" id="camAddFound" title="Puts the selected cameras that were found on the network (not in your list yet) into your camera list">Add found cameras to my list</button>
-        <button type="button" id="camDelSel" class="danger-text">Remove from the list</button>
-      </div></details>
+      <button type="button" class="small hidden" id="camAddFound" title="Puts the selected cameras that were found on the network (not in your list yet) into your camera list">Add to my list</button>
+      <button type="button" class="ghost small danger-text" id="camDelSel" title="Removes the selected cameras from this list (nothing changes on the cameras)">Remove from the list</button>
     </div>
     <datalist id="zoneList"></datalist>
     <table class="tbl" id="camTable">
@@ -307,7 +305,7 @@
       <div class="hold-row"><button data-eng="wb" data-v="k32" title="Fixed 3200 K (tungsten)">3200K</button><button data-eng="wb" data-v="k56" title="Fixed 5600 K (daylight)">5600K</button></div>
       <div class="hold-row"><label class="kfield" title="Colour temperature for VAR, in kelvin"><input type="number" id="engVarK" min="2000" max="15000" step="10" placeholder="5600"><span>K</span></label><button data-eng="varK" title="Switch to VAR with this colour temperature">Set VAR</button><button class="store-btn" id="engWbStore" aria-pressed="false" title="Then click A or B: each camera stores an auto white balance in that memory">Store</button></div>
       <div class="hold-row"><button data-eng="abb" title="Auto black balance">ABB</button></div>
-      <div class="wb-scenes"><h4>White balance per scene</h4><p class="hint small">Choose the white balance of scenes 1 to 4. A dash leaves that scene as it is. Every camera switches to those scenes one by one and then back.</p><div class="setup-grid one" id="wbSceneForm"></div><div class="hold-row"><button id="wbSceneApply">Apply to the selected cameras</button></div></div>
+      <div class="wb-scenes"><h4>White balance per scene</h4><p class="hint small">Goes to the selected cameras as soon as you choose it. The camera switches to that scene for a moment and then back.</p><div class="setup-grid one" id="wbSceneForm"></div></div>
     </div>
   </div>
   <div class="card" id="engResultCard"><div class="row between"><h2 id="engResultTitle">Result</h2><span class="muted small" id="engStatus"></span></div><div id="engResult"><p class="muted small">Choose cameras and an action. The result per camera shows up here.</p></div></div>

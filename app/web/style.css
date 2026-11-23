@@ -545,3 +545,4 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .selbar-web{display:inline-flex;gap:2px;align-self:center}
 #camSelBar{position:relative}
 #camSelBar .selbar-web{position:absolute;top:50%;transform:translateY(-50%);left:0}
+.chip.mkzones{border-style:dashed;background:transparent;color:var(--accent)}
