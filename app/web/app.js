@@ -750,10 +750,10 @@ async function openCamPages(cams, kind) {
   for (const c of cams) { await openCamPage(c, kind, true); await sleep(250); }
   toast(`Opened the ${kind === 'setup' ? 'settings' : 'live'} page of ${cams.length} camera${cams.length > 1 ? 's' : ''}`);
 }
-// Above the web page icons of the rows: the same icons, for every selected camera at once
-$('#camWebHead').insertAdjacentHTML('beforeend', icoBtn('liveSel', 'live', 'Open the live page of every selected camera, each in its own browser tab') + icoBtn('setupSel', 'setup', 'Open the settings page of every selected camera, each in its own browser tab, signed in'));
-$('#camWebHead [data-act=liveSel]').onclick = () => { const s = state.cameras.filter(c => c.selected); if (!s.length) return toast('Select cameras first'); openCamPages(s, 'live'); };
-$('#camWebHead [data-act=setupSel]').onclick = () => { const s = state.cameras.filter(c => c.selected); if (!s.length) return toast('Select cameras first'); openCamPages(s, 'setup'); };
+// In the selection bar: the web page icons of the rows, for every selected camera at once
+$('#camSelWeb').insertAdjacentHTML('beforeend', icoBtn('liveSel', 'live', 'Open the live page of every selected camera, each in its own browser tab') + icoBtn('setupSel', 'setup', 'Open the settings page of every selected camera, each in its own browser tab, signed in'));
+$('#camSelWeb [data-act=liveSel]').onclick = () => { const s = state.cameras.filter(c => c.selected); if (!s.length) return toast('Select cameras first'); openCamPages(s, 'live'); };
+$('#camSelWeb [data-act=setupSel]').onclick = () => { const s = state.cameras.filter(c => c.selected); if (!s.length) return toast('Select cameras first'); openCamPages(s, 'setup'); };
 async function openCamPage(c, kind, quiet = false) {
   if (!quiet && state.localIps.length && !sameRange(c.ip)) {
     if (!await ask({ title: `${esc(camName(c))} is in another IP range`, ok: 'Open anyway', body: `<p>This computer (${state.localIps.map(i => `<span class="mono">${esc(i)}</span>`).join(', ')}) cannot reach <span class="mono">${esc(c.ip)}</span>, so the browser will say the page is not reachable.</p><p>Give the camera an address in your range (type it in its IP column on the Cameras page and choose Apply), or give this computer an address in the camera's range.</p>` })) return;
@@ -1509,7 +1509,7 @@ $('#addJobBtn').onclick = () => {
 function renderImports() {
   renderGrid();
   // step 1: list of opened scenes
-  $('#srcList').innerHTML = srcSorted().filter(x => !x.fromShow && !x.savedEng).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${srcSorted().filter(x => !x.fromShow && !x.savedEng).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' ? `<button class="ghost small" data-enguse="${s.id}" title="Use this file for Initialize on the Engineering page">Use for Initialize</button> ` : ''}<button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $('#srcList').innerHTML = srcSorted().filter(x => !x.fromShow && !x.savedEng).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${srcSorted().filter(x => !x.fromShow && !x.savedEng).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' ? `<button class="ghost small" data-enguse="${s.id}" title="Use this file for Initialize (the Engineering file block on this page)">Use for Initialize</button> ` : ''}<button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
   $$('#srcList [data-enguse]').forEach(b => b.onclick = () => { const sr = srcById(b.dataset.enguse); if (sr) useEngFile(sr.file); });
   $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
   // step 2: jobs
@@ -1846,7 +1846,7 @@ function renderEngfTab() {
   gsel.innerHTML = '<option value="">All groups</option>' + groups.map(x => `<option ${x === g ? 'selected' : ''}>${esc(x)}</option>`).join('');
   const list = rows.filter(r => (!g || r.g === g) && words.every(w => (r.name + ' ' + r.set + ' ' + r.q + ' ' + r.g).toLowerCase().includes(w)));
   $('#engfCount').textContent = list.length;
-  $('#engfInfo').textContent = `${rows.length} settings go into an engineering file: the system setup of a camera, read with Save engineering file and put back with Initialize (Engineering page). White balance per scene is not included; that is part of the scene files. A camera skips whatever its model does not support.`;
+  $('#engfInfo').textContent = `${rows.length} settings go into an engineering file: the system setup of a camera, made on the Engineering page (Read from a camera…, then Save as engineering file) and put on cameras with Initialize on the Restore page. White balance per scene is not included; that is part of the scene files. A camera skips whatever its model does not support.`;
   $('#engfTable tbody').innerHTML = list.map(r => `<tr><td class="grp">${esc(r.g)}</td><td>${esc(r.name)}</td><td class="mono">${esc(r.set)}</td><td class="mono">${esc(r.q)}</td><td class="small muted">${esc(r.vals)}</td></tr>`).join('');
 }
 $('#engfGroup').onchange = renderEngfTab;
@@ -2379,19 +2379,29 @@ async function saveEngFile(cam) {
     log(`Engineering file saved from ${cam.ip}: ${Object.keys(values).length} settings`);
   } catch (e) { $('#engStatus').textContent = ''; info('Could not read the camera', esc(e.message)); }
 }
-async function initializeCams(cams) {
-  if (!cams.length) return;
+// Initialize (Restore page): choose the cameras, then the engineering file goes on them like any restore
+async function initializeCams(pre) {
   const ef = engFile();
-  if (!ef) return info('No engineering file yet', 'Select one camera that is set up the way you want and choose <b>Save engineering file…</b>, or open an engineering file on the Restore page.');
-  const v = engOnly(ef.values);
-  if (!await ask({ title: `Put the engineering file on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Initialize', danger: true, wide: true, body: `
+  if (!ef) return info('No engineering file yet', 'Make one on the Engineering page: <b>Read from a camera…</b>, then <b>Save as engineering file</b>. Or open an engineering file on this page.');
+  const cams = camsOnly(); if (!cams.length) return info('No cameras yet', 'Add cameras on the Cameras page first.');
+  const on = new Set((pre?.length ? pre : cams.filter(c => c.selected)).map(c => c.ip));
+  const opened = ask({ title: 'Initialize: put the engineering file on…', ok: 'Next', wide: true, body: `
     <p>From ${esc(ef.fromName || ef.fromIp || 'a file')}${ef.model ? ` (${esc(ef.model)})` : ''}, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}.</p>
-    <div class="setup-sum">${engSummary(v)}</div>
-    ${v.format ? '<p class="warn-text">A camera that gets another frequency restarts (about a minute without picture).</p>' : ''}
-    <p class="muted small">Only settings that differ are sent; every value is read back afterwards. ${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
-  if (!state.bridgeOk && !(await checkBridge())) return;
-  await runSetup(cams, v, 'Initialize');
+    <div class="setup-sum">${engSummary(engOnly(ef.values))}</div>
+    <div class="row wrap ini-cams" id="iniCams">${cams.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${on.has(c.ip) ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted">${esc(c.ip)}</span></label>`).join('')}</div>
+    ${ef.values.format ? '<p class="warn-text">A camera that gets another frequency restarts (about a minute without picture).</p>' : ''}` });
+  await sleep(0);
+  const box = c => $$('#iniCams label:not(.selall-row) input').find(i => i.value === c.ip);
+  selAllRow($('#iniCams'), cams, c => !!box(c)?.checked, (c, v) => { const i = box(c); if (i) i.checked = v; }, () => {});
+  if (!await opened) return;
+  const ips = $$('#iniCams label:not(.selall-row) input:checked').map(i => i.value);
+  if (!ips.length) return info('Choose cameras first', 'Select at least one camera.');
+  syncSavedEngSource();
+  const src = state.sources.find(x => x.savedEng);
+  const jobs = ips.map(ip => ({ id: ++jobId, srcId: src.id, target: ip, targetScene: '', include: true }));
+  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Initialize ${ips.length} camera${ips.length > 1 ? 's' : ''}?`);
 }
+$('#engInitBtn').onclick = () => initializeCams();
 function renderEngFile() {
   const ef = engFile();
   const txt = ef ? `From ${esc(ef.fromName || '')} <span class="mono muted small">${esc(ef.fromIp || '')}</span>${ef.model ? ' · ' + esc(ef.model) : ''} · ${Object.keys(ef.values || {}).length} settings · saved ${new Date(ef.savedAt).toLocaleString('en-GB')}` : 'No engineering file yet.';
@@ -2401,6 +2411,7 @@ function renderEngFile() {
     $('#engFileDel')?.addEventListener('click', () => { store.set('engFile', null); renderEngFile(); toast('Engineering file deleted'); });
   }
   const st = $('#engFileInfo'); if (st) st.innerHTML = txt;
+  const ii = $('#engInitInfo'); if (ii) ii.innerHTML = txt;
 }
 const renderDefaults = renderEngFile;
 async function exportEngFile() {
@@ -2416,7 +2427,7 @@ async function exportEngFile() {
   $('#expResult').innerHTML = `<div class="note ok"><b>Engineering file</b><br>${Object.keys(ef.values).length} settings saved in ${esc(name)}</div>`;
   log(`Engineering file saved: ${name}`);
 }
-// An opened engineering file becomes the one Initialize uses (Engineering page)
+// An opened engineering file becomes the one Initialize uses (Restore page)
 async function useEngFile(data, quiet) {
   const values = engOnly(data.values || {});
   if (!Object.keys(values).length) return info('Empty engineering file', 'This file holds no settings.');

@@ -542,3 +542,4 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .web-head{white-space:nowrap}
 .web-head .ico{vertical-align:middle}
 .copy-mini{margin-left:6px;vertical-align:middle}
+.selbar-web{display:inline-flex;gap:2px;align-self:center}
