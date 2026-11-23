@@ -279,9 +279,9 @@ button.toggle.on,.hold-row button.toggle.on{background:var(--accent-soft);border
 @media (max-width:1050px){.live-wrap{grid-template-columns:1fr}}
 .live-left{display:flex;flex-direction:column;gap:12px;min-width:0}
 .preset-row{display:flex;gap:12px;align-items:flex-end}
-.live-presets .preset-grid{flex:1;grid-template-columns:repeat(12,1fr)}
+.live-presets .preset-grid{flex:1;grid-template-columns:repeat(10,1fr)}
 .live-presets label.w90{margin:0}
-@media (max-width:1250px){.live-presets .preset-grid{grid-template-columns:repeat(6,1fr)}}
+@media (max-width:1250px){.live-presets .preset-grid{grid-template-columns:repeat(5,1fr)}}
 
 /* ---------- v2.5: zones, multi-select, file names ---------- */
 .zonebar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:4px 0 10px}
@@ -362,11 +362,16 @@ table.grid td{vertical-align:middle}
 .selbar.idle{background:transparent;border-color:var(--rule-soft)}
 .selbar.idle .seln,.selbar.idle button{opacity:.45}
 .selall-row{font-weight:600;border-bottom:1px solid var(--rule-soft);padding-bottom:4px;margin-bottom:2px!important;flex-basis:100%}
-.live-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.live-tiles .t-white{grid-column:span 2}
-.live-tiles .t-scenes{grid-column:1/-1}
+/* Live: no holes. White (three rows) sits next to Day/night and Black stacked; scenes, shooting mode and ND share the last row */
+.live-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"white white day" "white white black" "shoot nd nd" "scenes scenes scenes";gap:10px;align-items:stretch}
+.live-tiles .t-white{grid-area:white}.live-tiles .t-day{grid-area:day}.live-tiles .t-black{grid-area:black}
+.live-tiles .t-scenes{grid-area:scenes}.live-tiles .t-shoot{grid-area:shoot}.live-tiles .t-nd{grid-area:nd}
 .live-tiles .live-block{margin:0}
-@media (max-width:1250px){.live-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.live-tiles .t-white{grid-column:1/-1}}
+.live-tiles .t-scenes .live-scenes{grid-template-columns:repeat(4,minmax(0,1fr))}
+.live-tiles .t-day .hold-row,.live-tiles .t-shoot .hold-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.live-tiles .t-scenes .live-scenes button{padding:0 4px}
+.live-tiles .t-nd .hold-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1250px){.live-tiles{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white white" "day black" "shoot nd" "scenes scenes"}}
 #tab-live.nocam .live-tiles{opacity:.5;pointer-events:none}
 ul.tight{margin:6px 0 0;padding-left:18px}ul.tight li{margin:2px 0}
 .warn-text{color:#e3b04b}
@@ -420,13 +425,13 @@ button.copied{color:#8fd19e}
 .eng-res td{vertical-align:top}
 .eng-res .raw{font-size:11.5px;color:var(--muted);word-break:break-all}
 @media (max-width:1250px){.eng-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:900px){.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles .e-tally,.eng-tiles .e-white{grid-row:auto}}
+@media (max-width:900px){.live-tiles{grid-template-areas:"white" "day" "black" "shoot" "nd" "scenes"}.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles .e-tally,.eng-tiles .e-white{grid-row:auto}}
 .eng-line button{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:32px;padding:0 6px;font-size:13px}
 .eng-line button:hover{background:#353a40}
 .eng-tiles button:active{background:var(--accent);border-color:var(--accent)}
 label.kfield{flex-direction:row}
 .kfield input{height:32px}
-.live-tiles .t-shoot{grid-column:span 2}
+
 
 /* Store: arm, then click the preset or the white memory (A/B) to store into */
 .store-btn.armed,.hold-row button.store-btn.armed{background:rgba(217,161,59,.18);border-color:#d9a13b;color:#ebc77f}
@@ -546,3 +551,6 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 #camSelBar{position:relative}
 #camSelBar .selbar-web{position:absolute;top:50%;transform:translateY(-50%);left:0}
 .chip.mkzones{border-style:dashed;background:transparent;color:var(--accent)}
+
+.preset-grid.deleting button{border-color:var(--err,#e0574d);color:#f0a39c}
+.store-btn.del-btn.armed{border-color:#e0574d;color:#f0a39c}

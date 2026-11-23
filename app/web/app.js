@@ -3777,7 +3777,7 @@ function renderLiveScenes() {
   });
 }
 // presets: 12 per page, click to recall; with Store selected, click saves the current position
-const PRESETS_PER_PAGE = 12;
+const PRESETS_PER_PAGE = 10;
 $('#presetPage').innerHTML = Array.from({ length: Math.ceil(100 / PRESETS_PER_PAGE) }, (_, i) => `<option value="${i}">${i * PRESETS_PER_PAGE + 1}–${Math.min(100, (i + 1) * PRESETS_PER_PAGE)}</option>`).join('');
 $('#presetPage').value = store.get('presetPage', 0);
 $('#presetPage').onchange = () => { store.set('presetPage', +$('#presetPage').value); renderPresets(); };
@@ -3787,8 +3787,10 @@ function armStore(btn, on, target, cls = 'storing') {
   if (target) target.classList.toggle(cls, on);
 }
 const presetArmed = () => $('#presetStore').classList.contains('armed');
-$('#presetStore').onclick = () => armStore($('#presetStore'), !presetArmed(), $('#presetGrid'));
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { armStore($('#presetStore'), false, $('#presetGrid')); armStore($('#liveWbStore'), false, $('.t-white'), 'wb-storing'); armStore($('#engWbStore'), false, $('.e-white'), 'wb-storing'); } });
+const presetDelArmed = () => $('#presetDel').classList.contains('armed');
+$('#presetStore').onclick = () => { armStore($('#presetDel'), false, $('#presetGrid'), 'deleting'); armStore($('#presetStore'), !presetArmed(), $('#presetGrid')); };
+$('#presetDel').onclick = () => { armStore($('#presetStore'), false, $('#presetGrid')); armStore($('#presetDel'), !presetDelArmed(), $('#presetGrid'), 'deleting'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { armStore($('#presetStore'), false, $('#presetGrid')); armStore($('#presetDel'), false, $('#presetGrid'), 'deleting'); armStore($('#liveWbStore'), false, $('.t-white'), 'wb-storing'); armStore($('#engWbStore'), false, $('.e-white'), 'wb-storing'); } });
 function renderPresets() {
   const page = +$('#presetPage').value || 0; const grid = $('#presetGrid');
   grid.innerHTML = Array.from({ length: PRESETS_PER_PAGE }, (_, i) => page * PRESETS_PER_PAGE + i + 1).filter(n => n <= 100).map(n => `<button data-preset="${n}">${n}</button>`).join('');
@@ -3796,6 +3798,14 @@ function renderPresets() {
 }
 async function livePreset(n) {
   if (!live.cam) return;
+  if (presetDelArmed()) { // delete a preset (#C): its position is cleared in the camera
+    armStore($('#presetDel'), false, $('#presetGrid'), 'deleting');
+    if (!await ask({ title: `Delete preset ${n}?`, body: `<p>Preset ${n} of ${esc(live.cam.title || live.cam.ip)} is deleted from the camera. This cannot be undone.</p>`, ok: 'Delete', danger: true })) return;
+    const r = await liveSend('ptz', '#C' + pad2(n - 1));
+    if (r?.ok && !isErr(r.body)) { toast(`Preset ${n} deleted`); $$('#presetGrid button').forEach(x => { if (+x.dataset.preset === n) x.classList.remove('on'); }); }
+    else toast(`Preset ${n} not deleted (${r?.body || r?.error || 'no answer'})`);
+    return;
+  }
   if (presetArmed()) {
     if (!await ask({ title: `Store preset ${n}?`, body: `<p>Preset ${n} of ${esc(live.cam.title || live.cam.ip)} is replaced by the current position.</p>`, ok: 'Store' })) return;
     const r = await liveSend('ptz', '#M' + pad2(n - 1));
