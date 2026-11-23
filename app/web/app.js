@@ -390,7 +390,7 @@ function uniqueNames(files) {
 /* ------------------------------------------------------------------ downloads + zip */
 const IN_APP = TOKEN && !TOKEN.startsWith('__');
 // Where saved files go: <save folder>/<project>/<type folder>. Backups get a folder per day.
-const FOLDERS = { scene: 'Scene files', operator: 'Operator files', defaults: 'Default scenes', show: 'Shows', backup: 'Backups', script: 'Scripts', rp150: 'RP150', params: 'Parameter lists', project: '' };
+const FOLDERS = { scene: 'Scene files', operator: 'Operator files', engineering: 'Engineering files', show: 'Shows', backup: 'Backups', script: 'Scripts', rp150: 'RP150', params: 'Parameter lists', project: '' };
 const today = () => { const d = new Date(), p2 = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`; };
 const projectFolder = () => projectName().replace(/[^A-Za-z0-9._ ()&+-]+/g, '_').replace(/^[ .]+|[ .]+$/g, '') || 'Project';
 const subFor = kind => [projectFolder(), FOLDERS[kind] || '', kind === 'backup' ? today() : ''].filter(Boolean);
@@ -1228,7 +1228,7 @@ async function openBytes(name, u8, path) {
 }
 function openJson(name, data, path) {
   if (data?.format === SHOW_ID) return addShow(data, true, path);
-  if (data?.format === DEFAULTS_ID) return importDefaults(data).catch(e => info('Could not open', esc(e.message)));
+  if (data?.format === ENG_ID) return importEngFile(data).catch(e => info('Could not open', esc(e.message)));
   if (data?.format === CONFIG_ID) return importConfig(data).catch(e => info('Could not import', esc(e.message)));
   if (data?.format === PROJECT_ID) return importProject(data).catch(e => info('Could not open', esc(e.message)));
   return addImportFile(name, data);
@@ -1315,7 +1315,7 @@ async function readCamScenes(cam, mode, picked, status = () => { }) {
   return scenes;
 }
 $('#exportBtn').onclick = async () => {
-  if (expKindNow() === 'defaults') return exportDefaults();
+  if (expKindNow() === 'engineering') return exportEngFile();
   const cams = state.cameras.filter(c => c.selected);
   if (!cams.length) return info('No cameras selected', 'Tick the cameras you want to export.');
   if (!state.bridgeOk && !(await checkBridge())) return;
@@ -1388,13 +1388,13 @@ function showSceneTable(anchor, file) {
 function expKindUi() {
   const k = expKindNow();
   $('#expSceneBox').classList.toggle('disabled', k !== 'scene');
-  $('#expCamOpts').classList.toggle('hidden', k === 'defaults');
-  $('#expDefHint').classList.toggle('hidden', k !== 'defaults');
-  if (k === 'defaults') {
-    const keys = Object.keys(defaults()).sort();
-    $('#expDefHint').innerHTML = keys.length
-      ? `Saves the default scenes of this computer in one file: ${keys.map(esc).join(', ')}. The cameras are not read. Open the file on the Restore page to use them on another computer.`
-      : 'There are no default scenes yet. Make one on the Engineering page with <b>Save as default…</b>.';
+  $('#expCamOpts').classList.toggle('hidden', k === 'engineering');
+  $('#expDefHint').classList.toggle('hidden', k !== 'engineering');
+  if (k === 'engineering') {
+    const ef = engFile();
+    $('#expDefHint').innerHTML = ef
+      ? `Saves the engineering file in a file: the system setup of ${esc(ef.fromName || ef.fromIp || '')} (${Object.keys(ef.values || {}).length} settings, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}). Open that file on the Restore page to put it on cameras, also on another computer.`
+      : 'There is no engineering file yet. Make one on the Engineering page: tick one camera and choose <b>Save engineering file…</b>.';
   }
 }
 $$('input[name=expKind]').forEach(r => r.onchange = expKindUi);
@@ -1406,7 +1406,7 @@ function renderNameFields() {
 }
 function updNamePreview() {
   const k = expKindNow();
-  if (k === 'defaults') return;
+  if (k === 'engineering') return;
   $('#expExt').textContent = k === 'operator' ? '.poper' : '.pscene.json';
   const cam = state.cameras.find(c => c.selected) || state.cameras[0] || { ip: '192.168.0.11', title: 'CAM1', model: 'AW-UE150', zone: 'Stage' };
   const ex = k === 'operator' ? operatorName(cam) : fileName(cam, [{ scene: cam.scene || 1 }]);
@@ -2301,75 +2301,94 @@ function gridItems() {
   return items;
 }
 function gridCount() { const n = gridItems().length; $('#gridCount').textContent = n ? `${n} cell${n === 1 ? '' : 's'} filled` : ''; $('#gridSave').disabled = !n; }
-/* ---- default scenes: one per camera model, put into the live scene by Initialize ---- */
-const defaults = () => store.get('defaultScenes', {});
-const saveDefaults = d => store.set('defaultScenes', d);
-async function saveAsDefault(cam) {
+/* ---- engineering file: the system setup of a camera (format, OSD mix, tally, pan/tilt, presets, fans, IP video),
+   saved on this computer and put on many cameras by Initialize. No white balance per scene: that is in the scene files. */
+const ENG_ID = 'panasonic-toolbox-engineering';
+const engFile = () => store.get('engFile', null);
+const ENG_FIELDS = () => SETUP.filter(f => !f.wb);
+const engOnly = v => Object.fromEntries(ENG_FIELDS().filter(f => v?.[f.k]).map(f => [f.k, v[f.k]]));
+const engSummary = v => [...new Set(ENG_FIELDS().filter(f => v[f.k]).map(f => f.g))].map(g => `<div><b>${esc(g)}</b>: ${ENG_FIELDS().filter(f => f.g === g && v[f.k]).map(f => `${esc(f.l)} ${esc(setupLabel(f, v[f.k]))}`).join(', ')}</div>`).join('');
+async function saveEngFile(cam) {
   if (!state.bridgeOk && !(await checkBridge())) return;
-  try { if (!cam.model) await identify(cam); } catch (e) { return info('Camera not reachable', esc(e.message)); }
-  const n = await getScene(cam).catch(() => null);
-  if (n == null) return info('Camera not reachable', `${esc(camName(cam))} does not answer.`);
-  const old = defaults()[cam.model];
-  if (!await ask({ title: `Save scene ${n} of ${esc(camName(cam))} as the default for ${esc(cam.model)}?`, ok: old ? 'Replace default' : 'Save as default', danger: !!old, body: `
-    <p>Initialize puts this scene into the live scene of every ${esc(cam.model)}.</p>
-    <ul class="tight"><li>Use a camera whose scene was reset to its factory settings in the camera menu, or a scene you want as your own starting point.</li>
-    ${old ? `<li><span class="warn-text">Replaces the default</span> saved ${new Date(old.savedAt).toLocaleString('en-GB')} from ${esc(old.fromName || old.fromIp)}.</li>` : ''}
+  const old = engFile();
+  if (!await ask({ title: `Save the engineering file of ${esc(camName(cam))}?`, ok: old ? 'Replace' : 'Save', danger: !!old, body: `
+    <p>Reads the system setup of this camera: format, OSD mix, tally, pan/tilt, presets, power-on position, fans and IP video. <b>Initialize</b> then puts it on the cameras you tick.</p>
+    <ul class="tight"><li>White balance per scene is not included: that is part of the scene files.</li>
+    ${old ? `<li><span class="warn-text">Replaces the engineering file</span> saved ${new Date(old.savedAt).toLocaleString('en-GB')} from ${esc(old.fromName || old.fromIp)}.</li>` : ''}
     <li>Reading changes nothing on the camera.</li></ul>` })) return;
+  $('#engStatus').textContent = `Reading ${camName(cam)}…`;
   try {
-    const sc = await readSceneFile(cam, n);
-    const d = defaults(); d[cam.model] = { file: makeFile(cam, [sc]), savedAt: new Date().toISOString(), fromIp: cam.ip, fromName: camName(cam), scene: n };
-    saveDefaults(d); renderDefaults(); toast(`Default scene for ${cam.model} saved (${sc.params.length} settings)`);
-  } catch (e) { info('Could not read the scene', esc(e.message)); }
+    if (!cam.model) await identify(cam);
+    const values = engOnly(await readSetup(cam, false));
+    if (!Object.keys(values).length) throw new Error('the camera gave no settings');
+    store.set('engFile', { values, savedAt: new Date().toISOString(), fromIp: cam.ip, fromName: camName(cam), model: cam.model || '' });
+    renderEngFile(); toast(`Engineering file of ${camName(cam)} saved: ${Object.keys(values).length} settings`);
+    $('#engStatus').textContent = `Engineering file saved · ${new Date().toLocaleTimeString('en-GB')}`;
+    log(`Engineering file saved from ${cam.ip}: ${Object.keys(values).length} settings`);
+  } catch (e) { $('#engStatus').textContent = ''; info('Could not read the camera', esc(e.message)); }
 }
 async function initializeCams(cams) {
   if (!cams.length) return;
-  for (const c of cams) if (!c.model) { try { await identify(c); } catch { } }
-  const d = defaults();
-  const have = cams.filter(c => c.model && d[c.model]), missing = cams.filter(c => !(c.model && d[c.model]));
-  if (!have.length) return info('No default scene yet', `There is no default scene for ${[...new Set(missing.map(c => c.model || 'unknown model'))].map(esc).join(', ')}. Save one first with <b>Save as default</b>, from a camera whose scene was reset in the camera menu.`);
-  if (missing.length && !await ask({ title: 'Some cameras have no default scene', ok: 'Initialize the others', body: `<p>No default scene for: ${missing.map(c => `${esc(camName(c))} (${esc(c.model || 'unknown model')})`).join(', ')}. These are skipped.</p>` })) return;
-  const jobs = have.map(c => {
-    const def = d[c.model];
-    const src = { id: ++srcId, fileName: `Default ${c.model} (from ${def.fromName || def.fromIp}, ${new Date(def.savedAt).toLocaleDateString('en-GB')})`, file: def.file, sceneIdx: 0, kind: 'scene' };
-    state.sources.push(src);
-    return { id: ++jobId, srcId: src.id, target: c.ip, targetScene: 'active', include: true };
-  });
-  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false }, `Initialize ${have.length} camera${have.length > 1 ? 's' : ''} with the default scene?`);
-  state.sources = state.sources.filter(s => !jobs.some(j => j.srcId === s.id));
-  renderImports();
+  const ef = engFile();
+  if (!ef) return info('No engineering file yet', 'Tick one camera that is set up the way you want and choose <b>Save engineering file…</b>, or open an engineering file on the Restore page.');
+  const v = engOnly(ef.values);
+  if (!await ask({ title: `Put the engineering file on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Initialize', danger: true, wide: true, body: `
+    <p>From ${esc(ef.fromName || ef.fromIp || 'a file')}${ef.model ? ` (${esc(ef.model)})` : ''}, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}.</p>
+    <div class="setup-sum">${engSummary(v)}</div>
+    ${v.format ? '<p class="warn-text">A camera that gets another frequency restarts (about a minute without picture).</p>' : ''}
+    <p class="muted small">Only settings that differ are sent; every value is read back afterwards. ${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  await runSetup(cams, v, 'Initialize');
 }
-function renderDefaults() {
-  const box = $('#defList'); if (!box) return;
-  const d = defaults(), keys = Object.keys(d).sort();
-  box.innerHTML = keys.length ? `<table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th><th></th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span>, scene ${esc(String(d[m].scene ?? ''))}</td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td><td class="end"><button type="button" class="icon" data-defdel="${esc(m)}" aria-label="Delete default for ${esc(m)}">×</button></td></tr>`).join('')}</tbody></table>` : '<p class="muted small">No default scenes yet.</p>';
-  $$('[data-defdel]', box).forEach(b => b.onclick = () => { const x = defaults(); delete x[b.dataset.defdel]; saveDefaults(x); renderDefaults(); toast(`Default for ${b.dataset.defdel} deleted`); });
+function renderEngFile() {
+  const ef = engFile();
+  const txt = ef ? `From ${esc(ef.fromName || '')} <span class="mono muted small">${esc(ef.fromIp || '')}</span>${ef.model ? ' · ' + esc(ef.model) : ''} · ${Object.keys(ef.values || {}).length} settings · saved ${new Date(ef.savedAt).toLocaleString('en-GB')}` : 'No engineering file yet.';
+  const box = $('#defList');
+  if (box) {
+    box.innerHTML = ef ? `<p class="small">${txt} <button type="button" class="icon" id="engFileDel" aria-label="Delete the engineering file">×</button></p>` : '<p class="muted small">No engineering file yet.</p>';
+    $('#engFileDel')?.addEventListener('click', () => { store.set('engFile', null); renderEngFile(); toast('Engineering file deleted'); });
+  }
+  const st = $('#engFileInfo'); if (st) st.innerHTML = txt;
 }
-const DEFAULTS_ID = 'panasonic-toolbox-defaults';
-async function exportDefaults() {
-  const d = defaults(), keys = Object.keys(d).sort();
-  if (!keys.length) return info('No default scenes yet', 'Make one on the Engineering page with <b>Save as default…</b>: it stores the live scene of one camera as the standard for its model.');
-  const name = `Default scenes ${today()}.json`;
-  if (!await ask({ title: `Back up ${keys.length} default scene${keys.length > 1 ? 's' : ''}?`, ok: 'Back up', body: `
-    <table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>Saved</th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(d[m].fromName || '')} <span class="mono muted small">${esc(d[m].fromIp || '')}</span></td><td class="muted small">${new Date(d[m].savedAt).toLocaleString('en-GB')}</td></tr>`).join('')}</tbody></table>
-    <p>Saved as <span class="mono">${esc(name)}</span> in <span class="mono">${esc([state.saveDir || 'Downloads › Panasonic Toolbox', ...subFor('defaults')].join(' › '))}</span>. Reading changes nothing on the cameras.</p>` })) return;
-  await download(name, JSON.stringify({ format: DEFAULTS_ID, version: 1, savedAt: new Date().toISOString(), defaults: d }, null, 1), undefined, 'defaults');
+const renderDefaults = renderEngFile;
+async function exportEngFile() {
+  const ef = engFile();
+  if (!ef) return info('No engineering file yet', 'Make one on the Engineering page: tick one camera and choose <b>Save engineering file…</b>.');
+  const name = `Engineering file ${ef.fromName ? ef.fromName.replace(/[^A-Za-z0-9._ -]+/g, '_') + ' ' : ''}${today()}.json`;
+  if (!await ask({ title: 'Back up the engineering file?', ok: 'Back up', wide: true, body: `
+    <p>From ${esc(ef.fromName || ef.fromIp || '')}${ef.model ? ` (${esc(ef.model)})` : ''}, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}.</p>
+    <div class="setup-sum">${engSummary(ef.values)}</div>
+    <p>Saved as <span class="mono">${esc(name)}</span> in <span class="mono">${esc([state.saveDir || 'Downloads › Panasonic Toolbox', ...subFor('engineering')].join(' › '))}</span>. Nothing changes on the cameras.</p>` })) return;
+  await download(name, JSON.stringify({ format: ENG_ID, version: 1, ...ef }, null, 1), undefined, 'engineering');
   $('#expResultCard').classList.remove('hidden');
-  $('#expResult').innerHTML = `<div class="note ok"><b>Default scenes</b><br>${keys.map(esc).join(', ')} saved in ${esc(name)}</div>`;
-  log(`Default scenes saved: ${keys.join(', ')}`);
+  $('#expResult').innerHTML = `<div class="note ok"><b>Engineering file</b><br>${Object.keys(ef.values).length} settings saved in ${esc(name)}</div>`;
+  log(`Engineering file saved: ${name}`);
 }
-async function importDefaults(data) {
-  const inFile = data.defaults || {}, keys = Object.keys(inFile).filter(m => inFile[m]?.file?.scenes?.length).sort();
-  if (!keys.length) return info('No default scenes in this file', 'The file holds no default scenes.');
-  const d = defaults();
-  if (!await ask({ title: `Use ${keys.length} default scene${keys.length > 1 ? 's' : ''} from this file?`, ok: 'Use them', danger: keys.some(m => d[m]), body: `
-    <table class="tbl dense"><thead><tr><th>Model</th><th>From</th><th>On this computer now</th></tr></thead><tbody>${keys.map(m => `<tr><td>${esc(m)}</td><td>${esc(inFile[m].fromName || '')}, ${new Date(inFile[m].savedAt).toLocaleDateString('en-GB')}</td><td>${d[m] ? `<span class="warn-text">replaced</span> (${new Date(d[m].savedAt).toLocaleDateString('en-GB')})` : '<span class="muted">none</span>'}</td></tr>`).join('')}</tbody></table>
-    <p>Nothing is sent to the cameras. Use <b>Initialize…</b> on the Engineering page to put a default into the live scene of your cameras.</p>` })) return;
-  const before = JSON.stringify(d);
-  for (const m of keys) d[m] = inFile[m];
-  saveDefaults(d); renderDefaults(); expKindUi();
-  pushHistory({ label: 'Load default scenes', undo: () => { saveDefaults(JSON.parse(before)); renderDefaults(); }, redo: () => { const x = defaults(); for (const m of keys) x[m] = inFile[m]; saveDefaults(x); renderDefaults(); } });
-  toast(`Default scene${keys.length > 1 ? 's' : ''} for ${keys.join(', ')} loaded`);
-  log(`Default scenes loaded: ${keys.join(', ')}`);
+async function importEngFile(data) {
+  const values = engOnly(data.values || {});
+  if (!Object.keys(values).length) return info('Empty engineering file', 'This file holds no settings.');
+  const old = engFile();
+  if (!await ask({ title: 'Use this engineering file?', ok: 'Use it', danger: !!old, wide: true, body: `
+    <p>From ${esc(data.fromName || data.fromIp || 'a file')}${data.model ? ` (${esc(data.model)})` : ''}, saved ${data.savedAt ? new Date(data.savedAt).toLocaleString('en-GB') : '?'}.</p>
+    <div class="setup-sum">${engSummary(values)}</div>
+    ${old ? `<p class="warn-text">Replaces the engineering file from ${esc(old.fromName || old.fromIp || '')}, saved ${new Date(old.savedAt).toLocaleString('en-GB')}.</p>` : ''}
+    <p>Next you can put it on cameras: you are asked which ones.</p>` })) return;
+  const ef = { values, savedAt: data.savedAt || new Date().toISOString(), fromIp: data.fromIp || '', fromName: data.fromName || '', model: data.model || '' };
+  store.set('engFile', ef); renderEngFile(); expKindUi();
+  pushHistory({ label: 'Open engineering file', undo: () => { store.set('engFile', old); renderEngFile(); }, redo: () => { store.set('engFile', ef); renderEngFile(); } });
+  log(`Engineering file opened: ${Object.keys(values).length} settings`);
+  await pickAndInitialize();
+}
+// After opening an engineering file on the Restore page: choose the cameras that get it
+async function pickAndInitialize() {
+  if (!state.cameras.length) return toast('Engineering file loaded');
+  const ok = await ask({ title: 'Put the engineering file on cameras now?', ok: 'Next', cancel: 'Not now', body: `<p>Tick the cameras that should get it.</p><div class="checklist-cams">${state.cameras.map(c => `<label class="check"><input type="checkbox" data-ini="${esc(c.ip)}" ${c.selected ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></label>`).join('')}</div>` });
+  if (!ok) return toast('Engineering file loaded. Use Initialize on the Engineering page.');
+  const ips = new Set($$('#askDlg [data-ini]:checked').map(i => i.dataset.ini));
+  const cams = state.cameras.filter(c => ips.has(c.ip));
+  if (!cams.length) return;
+  $('[role=tab][data-tab=eng]').click();
+  return initializeCams(cams);
 }
 
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
@@ -2866,7 +2885,7 @@ async function engClick(btn) {
   }
   const cams = engCams();
   if (kind === 'init') { if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page.'); return initializeCams(cams); }
-  if (kind === 'defsave') { if (cams.length !== 1) return info('Choose one camera', 'Save as default reads the live scene of one camera. Tick only that camera.'); return saveAsDefault(cams[0]); }
+  if (kind === 'defsave') { if (cams.length !== 1) return info('Choose one camera', 'Save engineering file reads the setup of one camera. Tick only that camera.'); return saveEngFile(cams[0]); }
   const a = ENG[kind]; if (!a) return;
   if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
   if (!state.bridgeOk && !(await checkBridge())) return;
@@ -3011,18 +3030,22 @@ $('#setupApply').onclick = async () => {
       ${scenes.length ? '<p>For the white balance every camera switches to those scenes one by one and then goes back to the scene that was live.</p>' : ''}
       <p class="muted small">Only settings that differ are sent; every value is read back afterwards. ${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
   if (!state.bridgeOk && !(await checkBridge())) return;
-  $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = 'Setup';
+  await runSetup(cams, v, 'Setup');
+};
+async function runSetup(cams, v, title) {
+  $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = title;
   const progress = t => { $('#setupStatus').textContent = $('#engStatus').textContent = t; };
-  progress(`Setting up ${cams.length} camera${cams.length > 1 ? 's' : ''}…`);
+  progress(`${title}: ${cams.length} camera${cams.length > 1 ? 's' : ''}…`);
   const rows = await applySetup(cams, v, progress);
   $('#tab-eng').classList.remove('busy');
   const ok = rows.filter(r => !r.bad).length;
-  progress(`${ok} of ${rows.length} camera${rows.length > 1 ? 's' : ''} done · ${new Date().toLocaleTimeString('en-GB')}`);
+  progress(`${title}: ${ok} of ${rows.length} camera${rows.length > 1 ? 's' : ''} done · ${new Date().toLocaleTimeString('en-GB')}`);
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td>${r.out.map(o => `<div class="${o.bad ? 'warn-text' : 'ok-text'}">${esc(o.t)}</div>`).join('')}</td><td class="mono small muted"><details><summary>${r.raw.length} commands</summary>${r.raw.map(esc).join('<br>')}</details></td></tr>`).join('')}</tbody></table>`;
   $('#engResultCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  log(`Engineering: setup: ${ok}/${rows.length} ok`);
+  log(`Engineering: ${title}: ${ok}/${rows.length} ok`);
   if (live.cam && cams.includes(live.cam)) liveRead();
-};
+  return rows;
+}
 // Put the setup v on every camera; returns per camera what was done ({ c, out: [{ t, bad }], raw })
 async function applySetup(cams, v, progress = () => {}) {
   const plan = SETUP.filter(f => v[f.k]), scenes = plan.filter(f => f.wb);
@@ -3683,7 +3706,7 @@ document.addEventListener('keyup', e => {
 });
 
 /* ------------------------------------------------------------------ init */
-renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo();
+renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo(); renderEngFile();
 checkBridge().then(() => loadSaveDir());
 
 
