@@ -559,3 +559,12 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .ini-act{border-top:1px solid var(--rule-soft);margin-top:14px;padding-top:12px}
 .ini-act h3{margin:0;font-size:15px}
 .ini-act .row{gap:8px}
+/* Engineering: camera menu */
+.menu-wrap{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:18px;align-items:start;margin-top:8px}
+@media (max-width:900px){.menu-wrap{grid-template-columns:1fr}}
+.menu-pad{display:grid;grid-template-columns:repeat(3,64px);grid-auto-rows:52px;gap:6px;justify-content:center}
+.menu-pad button{font-size:18px;padding:0}
+.menu-pad .menu-ok{font-size:13px;font-weight:600}
+.menu-row{gap:10px;margin:12px 0 4px;justify-content:center}
+.menu-ctl.off .menu-pad button,.menu-ctl.off [data-menu]{opacity:.45;pointer-events:none}
+#menuToggle.on{background:var(--accent);color:#fff}

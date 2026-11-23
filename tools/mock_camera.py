@@ -92,6 +92,11 @@ class H(BaseHTTPRequestHandler):
                     if c.startswith(k): extra[k] = c[len(k):]; return k[1:].lower() + c[len(k):]
                 return "eR1"
             if c == "QID": return "OID:" + MODEL
+            # camera menu (OSD): open/close, arrows (1 or A steps), enter, cancel
+            if re.match(r"DUS:[01]$", c): cur["menu"] = c[-1]; return c
+            if c == "QUS": return "DUS:" + cur.get("menu", "0")
+            if re.match(r"D(UP|DW|LT|RT):[1A]$", c) or c in ("DIT:1", "DPG:1"):
+                return c if cur.get("menu") == "1" else "ER2:" + c[:3]
             if c == "QSF": return f"OSF:{cur['scene'] - 1}"
             m = re.match(r"XSF:(\d)$", c)
             if m:

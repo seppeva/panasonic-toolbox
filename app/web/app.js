@@ -526,6 +526,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tab === 'eng') { renderEng(); renderSetup(); }
   if (b.dataset.tab === 'cams' && Date.now() - (state.eipAt || 0) > 60000 && !$('#eipSearch').disabled) { state.eipAt = Date.now(); eipDiscover(); }
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
+  if (b.dataset.tab === 'eng') renderMenuCams(); else menuClose();
   $('.content').scrollTop = 0;
 }));
 $$('.subtabs button').forEach(b => b.addEventListener('click', () => {
@@ -3058,6 +3059,81 @@ async function engClick(btn) {
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
+/* ---- Engineering: camera menu (OSD) with the IP picture. DUS:1/0 opens and closes the menu; DUP/DDW/DLT/DRT move
+   (1 = one step, A = 10 steps), DIT is Enter, DPG is Cancel. An AW-UE160 takes CUP/CDW/CLT/CRT for the arrows.
+   The menu shows on the IP picture only with OSD mix IP on (OSE:7B bit 0x10): switched on for as long as the menu is open. */
+const menu = { cam: null, sid: null, on: false, osdBack: null };
+function renderMenuCams() {
+  const sel = $('#menuCam'); if (!sel) return;
+  const cams = camsOnly(), cur = menu.cam?.ip || store.get('menuCam') || engCams()[0]?.ip;
+  sel.innerHTML = cams.length ? cams.map(c => `<option value="${esc(c.ip)}" ${c.ip === cur ? 'selected' : ''}>${esc(camName(c))} – ${esc(c.ip)}</option>`).join('') : '<option value="">No cameras yet</option>';
+  menuUi();
+}
+function menuUi() {
+  $('#menuToggle').textContent = menu.on ? 'Menu off' : 'Menu on'; $('#menuToggle').classList.toggle('on', menu.on);
+  $('#menuCtl').classList.toggle('off', !menu.on); $('#menuCam').disabled = menu.on;
+}
+const menuMsg = t => { $('#menuMsg').textContent = t || ''; $('#menuMsg').classList.toggle('hidden', !t); };
+async function menuSend(cmd) { const [r] = await batch(menu.cam, [{ cmd }], { delayMs: 0 }); return r; }
+async function menuStream(cam) {
+  if (menu.sid) { const old = menu.sid; menu.sid = null; $('#menuImg').removeAttribute('src'); try { await bridgeFetch('/api/stream/close', { id: old }); } catch { } }
+  if (!cam) return;
+  menuMsg('Connecting to the picture…');
+  try {
+    const a = camAuth(cam);
+    const j = await bridgeFetch('/api/stream/open', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, res: store.get('liveRes', '640x360') });
+    menu.sid = j.id; const img = $('#menuImg'), sid = j.id, t0 = Date.now();
+    img.src = `/api/stream/${encodeURIComponent(sid)}`;
+    const wait = () => { if (menu.sid !== sid) return; if (img.naturalWidth > 0) return menuMsg(''); if (Date.now() - t0 > 8000) return menuMsg('No picture. Check that JPEG streaming is on in the camera (Video over IP). The menu buttons still work.'); setTimeout(wait, 300); };
+    img.onerror = () => { if (menu.sid === sid) menuMsg('No picture from this camera. The menu buttons still work.'); };
+    wait();
+  } catch (e) { menuMsg('Picture failed: ' + e.message); }
+}
+async function menuOpen() {
+  const cam = state.cameras.find(c => c.ip === $('#menuCam').value);
+  if (!cam) return info('Choose a camera first', 'Add cameras on the Cameras page first.');
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  menu.cam = cam; store.set('menuCam', cam.ip); $('#menuStatus').textContent = 'Opening the menu…';
+  try {
+    menu.osdBack = null;
+    const m = parseInt(/OSE:7B:([0-9A-F]+)/i.exec((await menuSend('QSE:7B'))?.body || '')?.[1], 16);
+    if (!isNaN(m) && !(m & 0x10)) { const r = await menuSend('OSE:7B:' + (m | 0x10).toString(16).toUpperCase().padStart(2, '0')); if (r?.ok && !isErr(r.body)) menu.osdBack = m; }
+    const r = await menuSend('DUS:1');
+    if (!r?.ok || isErr(r.body)) { await menuRestoreOsd(); $('#menuStatus').textContent = `The camera did not open its menu (${r?.body || r?.error || 'no answer'}).`; return; }
+    menu.on = true; menuUi(); menuStream(cam);
+    $('#menuStatus').textContent = `Menu open on ${camName(cam)}${menu.osdBack != null ? ' · menu on the IP picture switched on for now' : ''}`;
+    log(`${cam.ip}: camera menu open`);
+  } catch (e) { $('#menuStatus').textContent = 'Failed: ' + e.message; }
+}
+async function menuRestoreOsd() {
+  if (menu.osdBack == null || !menu.cam) return;
+  const v = menu.osdBack; menu.osdBack = null;
+  try { await menuSend('OSE:7B:' + v.toString(16).toUpperCase().padStart(2, '0')); } catch { }
+}
+async function menuClose() {
+  if (!menu.on && !menu.sid) return;
+  const was = menu.on; menu.on = false; menuUi();
+  if (was && menu.cam) { try { await menuSend('DUS:0'); await menuRestoreOsd(); log(`${menu.cam.ip}: camera menu closed`); } catch { } }
+  await menuStream(null); menuMsg('Choose a camera and choose Menu on.'); $('#menuStatus').textContent = '';
+}
+const MENU_CMD = { up: 'DUP', down: 'DDW', left: 'DLT', right: 'DRT', enter: 'DIT:1', cancel: 'DPG:1' };
+const MENU_UE160 = { up: 'CUP', down: 'CDW', left: 'CLT', right: 'CRT' };
+async function menuKey(k, ten) {
+  if (!menu.on || !menu.cam) return;
+  const arrow = ['up', 'down', 'left', 'right'].includes(k), step = ten || $('#menuTen').checked ? 'A' : '1';
+  const cmd = arrow ? `${MENU_CMD[k]}:${step}` : MENU_CMD[k];
+  let r = await menuSend(cmd);
+  if (arrow && /^er1/i.test(r?.body || '')) r = await menuSend(`${MENU_UE160[k]}:1`); // AW-UE160
+  $('#menuStatus').textContent = r?.ok ? (isErr(r.body) ? `${cmd}: not accepted (${r.body})` : '') : `${cmd}: ${r?.error || 'no answer'}`;
+}
+$('#menuToggle').onclick = () => menu.on ? menuClose() : menuOpen();
+$$('#menuCtl [data-menu]').forEach(b => b.onclick = e => menuKey(b.dataset.menu, e.shiftKey));
+document.addEventListener('keydown', e => {
+  if (!menu.on || !$('#tab-eng').classList.contains('active') || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName || '') || document.querySelector('dialog[open]')) return;
+  const k = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'enter', Escape: 'cancel' }[e.key];
+  if (!k) return; e.preventDefault(); menuKey(k, e.shiftKey);
+});
+window.addEventListener('beforeunload', () => { if (menu.on) menuClose(); });
 /* ---- Engineering: setup for many cameras (system settings, OSD mix, tally, pan/tilt, white balance per scene) ---- */
 // Commands as the camera's own web page uses them (System page of an AW-UE150 V3.20). cam: set prefix + value, the
 // query answers with the same prefix; ptz: '#XXX' + value, the query answers e.g. 'tAE1'.
@@ -3917,7 +3993,7 @@ document.addEventListener('keyup', e => {
 });
 
 /* ------------------------------------------------------------------ init */
-renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo(); renderEngFile(); renderEngfTab(); renderBase(); renderIniCams();
+renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo(); renderEngFile(); renderEngfTab(); renderBase(); renderIniCams(); renderMenuCams();
 // found cameras stay addable: the last search is remembered, and a new one runs right away
 { const last = store.get('eipLast', []); if (Array.isArray(last) && last.length && !state.eip.length) eipTake(last); }
 checkBridge().then(ok => { loadSaveDir(); if (state.bridgeOk) { state.eipAt = Date.now(); eipDiscover(); } });

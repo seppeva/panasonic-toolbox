@@ -319,6 +319,23 @@
       <div class="wb-scenes"><h4>White balance per scene</h4><p class="hint small">Goes to the selected cameras as soon as you choose it. The camera switches to that scene for a moment and then back.</p><div class="setup-grid one" id="wbSceneForm"></div></div>
     </div>
   </div>
+  <div class="card" id="menuCard">
+    <div class="row between wrap"><h2>Camera menu</h2><span class="row"><select id="menuCam" aria-label="Camera"></select><button id="menuToggle" title="Show or hide the camera menu (OSD) on the picture">Menu on</button></span></div>
+    <p class="hint">Opens the menu of one camera and shows it on the IP picture, so you can go through it from here. If the camera does not mix the menu into its IP picture, that is switched on while the menu is open and put back when you close it.</p>
+    <div class="menu-wrap">
+      <div class="live-video menu-video"><img id="menuImg" alt="Picture of the camera with its menu"><div class="live-msg" id="menuMsg">Choose a camera and choose Menu on.</div></div>
+      <div class="menu-ctl" id="menuCtl">
+        <div class="menu-pad">
+          <span></span><button data-menu="up" aria-label="Up" title="Up (arrow key)">↑</button><span></span>
+          <button data-menu="left" aria-label="Left" title="Left: change a value (arrow key)">←</button><button data-menu="enter" class="menu-ok" title="Enter (Enter key)">Enter</button><button data-menu="right" aria-label="Right" title="Right: change a value (arrow key)">→</button>
+          <span></span><button data-menu="down" aria-label="Down" title="Down (arrow key)">↓</button><span></span>
+        </div>
+        <div class="row wrap menu-row"><button class="ghost" data-menu="cancel" title="Back one level (Esc)">Cancel</button><label class="check small"><input type="checkbox" id="menuTen"> 10 steps at a time</label></div>
+        <p class="hint small">Keys: arrows, Enter, Esc. Shift with an arrow goes 10 steps.</p>
+        <p class="muted small" id="menuStatus"></p>
+      </div>
+    </div>
+  </div>
   <div class="card" id="engResultCard"><div class="row between"><h2 id="engResultTitle">Result</h2><span class="muted small" id="engStatus"></span></div><div id="engResult"><p class="muted small">Choose cameras and an action. The result per camera shows up here.</p></div></div>
 </section>
 
