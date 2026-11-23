@@ -161,7 +161,7 @@ td:first-child{color:var(--text)}
   <ol>
     <li><span class="btn">Read from a camera…</span> fills the form from one camera, or fill it in yourself. A dash leaves that setting as it is.</li>
     <li><span class="btn p">Apply to the selected cameras</span>. Only what differs is sent; every value is read back afterwards.</li>
-    <li><span class="btn">Save as engineering file</span> keeps the form as the engineering file, for Initialize and Back up.</li>
+    <li><span class="btn">Save as engineering file</span> keeps the form as the engineering file, to put on cameras from the Restore page and to back up.</li>
   </ol>
   <div class="tip warn">A new frequency (for example 50 Hz to 59.94 Hz) restarts the cameras. The app waits for them and then sends the rest: about 45 seconds.</div>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>6</span></div>
@@ -192,8 +192,12 @@ td:first-child{color:var(--text)}
     <li>Click <span class="btn p">Restore</span>. You first see what changes per camera.</li>
   </ol>
   <p>By default the current settings are saved first and every setting is read back afterwards. Undo takes a restore back. <b>Save as show</b> turns the rows into a show.</p>
-  <h3>Initialize: the engineering file on many cameras</h3>
-  <p>The <b>Engineering file</b> block shows which engineering file is in use. <span class="btn">Initialize…</span> asks which cameras get it, then runs like a restore: what changes first, a back-up, and a check afterwards. To take an engineering file to another computer, back it up and open the file here; <b>Use for Initialize</b> makes it the one Initialize uses.</p>
+  <h3>Initialize and engineering file</h3>
+  <p>This block on the Restore page starts with the cameras: tick them, use <b>Select all</b>, or click a zone. Then choose one of the two actions. Both run like a restore: what changes first, a back-up, and a check afterwards.</p>
+  <ul>
+    <li><span class="btn">Initialize…</span> puts the <b>base scene</b> on scenes 1 to 4 of the chosen cameras: their shading (gain, detail, matrix, gamma, white balance…) starts from the same point. <span class="btn">Save base scene…</span> reads one scene of a camera that is set up well; or open a scene file above and choose <b>Use as base scene</b>.</li>
+    <li><span class="btn">Put on cameras…</span> puts the <b>engineering file</b> (the system setup) on the chosen cameras. To take an engineering file to another computer, back it up and open the file here; <b>Use as engineering file</b> makes it the one in use.</li>
+  </ul>
   <div class="tip">Shutter values depend on the frequency. A scene file from a camera at 50 Hz put on a camera at 59.94 Hz gets the nearest shutter value; the result explains it.</div>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>8</span></div>
 </section>

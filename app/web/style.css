@@ -554,3 +554,8 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 
 .preset-grid.deleting button{border-color:var(--err,#e0574d);color:#f0a39c}
 .store-btn.del-btn.armed{border-color:#e0574d;color:#f0a39c}
+/* Restore: Initialize and engineering file card */
+.ini-cams{gap:6px 18px;margin:6px 0 4px}
+.ini-act{border-top:1px solid var(--rule-soft);margin-top:14px;padding-top:12px}
+.ini-act h3{margin:0;font-size:15px}
+.ini-act .row{gap:8px}
