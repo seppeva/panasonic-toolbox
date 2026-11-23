@@ -879,13 +879,6 @@ function zoneChips(box, sel, label = 'Zone', allNone = false) {
   const isOn = z => cams(z).length > 0 && cams(z).every(c => sel.get(c));
   const none = state.cameras.filter(c => !c.zone).length;
   const btns = (zs.length ? zs.map(z => [z, z]) : []).concat(zs.length && none ? [['', 'No zone']] : []);
-  if (!btns.length && state.cameras.length) {
-    box.innerHTML = `<span class="muted small">${label === 'Select zone' ? 'Zones' : label}: none yet</span> <button type="button" class="chip mkzones" data-mkzones title="Group cameras in zones (for example Stage, Hall). A click on a zone then selects all its cameras, on every page.">+ Make zones…</button>`
-      + (allNone ? `<label class="check selall-inline"><input type="checkbox" data-selall aria-label="Select all cameras"> Select all</label>` : '');
-    $('[data-mkzones]', box).onclick = () => { $('[role=tab][data-tab=cams]').click(); setTimeout(() => $('#zonesBtn').click(), 100); };
-    const sa0 = $('[data-selall]', box); if (sa0) { selAllState(sa0, state.cameras, sel.get); sa0.onchange = () => { selAllClick(sa0, state.cameras, sel.get, sel.set); sel.done(); }; }
-    return;
-  }
   box.innerHTML = (btns.length ? `<span class="muted small">${label}:</span> ` + btns.map(([z, l]) => `<button type="button" class="chip${isOn(z) ? ' on' : ''}" data-zone="${esc(z)}" aria-pressed="${isOn(z)}" title="${isOn(z) ? 'Deselect' : 'Select'} the cameras in ${esc(l)}">${esc(l)} <span class="muted">${cams(z).length}</span></button>`).join('') : '')
     + (allNone && state.cameras.length ? `<label class="check selall-inline"><input type="checkbox" data-selall aria-label="Select all cameras"> Select all</label>` : '');
   // act on press (before a field loses focus and the bar is redrawn); keyboard presses come in as clicks with detail 0
