@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.29.1"
+VERSION = "2.30.0"
 DEFAULT_PORT = 8765
 
 
@@ -746,6 +746,15 @@ def api_batch(req):
                 if r.get("ok"):
                     r["body"] = title_from_basic(r["body"])  # only the title goes back to the page
                 r["cmd"] = "get_basic"
+                results.append(r)
+                continue
+            if it.get("type") == "ping":  # a remote controller (AW-RP…): is its web server there?
+                try:
+                    socket.create_connection((ip, port), timeout=min(timeout, 2.0)).close()
+                    r = {"ok": True, "status": 200, "body": "open"}
+                except Exception as e:
+                    r = {"ok": False, "status": 0, "error": str(e), "unreachable": True}
+                r["cmd"] = "ping"
                 results.append(r)
                 continue
             if it.get("type") == "cgi":

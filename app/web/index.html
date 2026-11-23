@@ -57,10 +57,7 @@
     <div class="zonebar" id="camZoneBar"></div>
     <div class="note hidden" id="scanOther"></div>
     <div class="selbar hidden" id="camSelBar"><span class="seln"><b id="camSelN">0</b> selected</span>
-      <button class="ghost small" id="camLiveSel" title="Open the live page of every selected camera, each in its own browser tab">Live view</button>
-      <button class="ghost small" id="camSetupSel" title="Open the settings page of every selected camera, each in its own browser tab, signed in">Settings</button>
-      <button class="ghost small" id="camIpSel" title="Name, IP address, subnet mask and gateway of the selected cameras, sent to the cameras with Easy IP">Edit IP settings…</button>
-      <button class="ghost small" id="camEditSel" title="Description, zone, port and login of the selected cameras (in this app only)">Edit…</button>
+      <button class="ghost small" id="camEditSel" title="Name, IP address, subnet mask and gateway (sent to the cameras), description, zone, port and login of the selected cameras">Edit…</button>
       <details class="menu"><summary>More</summary><div class="menu-pop">
         <button type="button" id="camAddFound" title="Puts the selected cameras that were found on the network (not in your list yet) into your camera list">Add found cameras to my list</button>
         <button type="button" id="camDelSel" class="danger-text">Remove from the list</button>
@@ -68,7 +65,7 @@
     </div>
     <datalist id="zoneList"></datalist>
     <table class="tbl" id="camTable">
-      <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>Name</th><th>IP address</th><th>Description</th><th>Model</th><th>Zone</th><th>Scene</th><th>Status</th><th>Web pages</th><th><span class="sr">Remove</span></th></tr></thead>
+      <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>Name</th><th>IP address</th><th>Description</th><th>Model</th><th>Zone</th><th>Scene</th><th>Status</th><th class="nowrap web-head" id="camWebHead"><span class="sr">Web pages</span></th><th><span class="sr">Remove</span></th></tr></thead>
       <tbody></tbody>
     </table>
     <p class="empty muted" id="camEmpty">No cameras yet. Choose Search to find the cameras on the network, or Add… to add one by IP address.</p>
@@ -93,7 +90,7 @@
   <header class="page-head"><h1>Back up</h1><p>Save how your cameras look (colours, exposure, detail) in a file, so you can always put it back.</p></header>
   <div class="grid2">
     <div class="card">
-      <div class="row between"><h2>Cameras</h2><span class="row"><button class="ghost small" id="expAll">All</button><button class="ghost small" id="expNone">None</button></span></div>
+      <div class="row between"><h2>Cameras</h2></div>
       <div class="zonebar" id="expZones"></div>
       <div id="expCams" class="checklist-cams"></div>
       <p class="empty muted hidden" id="expCamsEmpty">No cameras yet. Find them on the Cameras page first.</p>
@@ -237,6 +234,10 @@
           <h3>Shooting mode</h3>
           <div class="hold-row"><button class="toggle" id="liveShoot0" title="Shooting mode: normal">Normal</button><button class="toggle" id="liveShoot1" title="Shooting mode: high sensitivity (Low Light on the AW-UE160)">High Sens.</button></div>
         </div>
+        <div class="live-block t-nd">
+          <h3>ND filter</h3>
+          <div class="hold-row" id="liveNd"><button class="toggle" data-nd="0" title="No ND filter">Clear</button><button class="toggle" data-nd="1" title="ND filter 1/4 (2 stops)">1/4</button><button class="toggle" data-nd="2" title="ND filter 1/16 (4 stops)">1/16</button><button class="toggle" data-nd="3" title="ND filter 1/64 (6 stops)">1/64</button></div>
+        </div>
         <div class="live-block t-scenes">
         <h3>Scenes</h3>
         <div class="live-scenes" id="liveScenes" role="group" aria-label="Scene files"></div>
@@ -278,14 +279,14 @@
 <section id="tab-eng" class="tab">
   <header class="page-head"><h1>Engineering</h1><p>Do something on many cameras at once: switch them on, pick a scene, white balance, tally, or set them all up the same way.</p></header>
   <div class="card">
-    <div class="row between wrap"><h2>Cameras</h2><span class="row wrap"><button class="ghost small" id="engAll" title="Select every camera">All</button><button class="ghost small" id="engNone" title="Select no camera">None</button><span class="zonebar inline" id="engZones"></span></span></div>
+    <div class="row between wrap"><h2>Cameras</h2><span class="row wrap"><span class="zonebar inline" id="engZones"></span></span></div>
     <div class="row wrap" id="engCams"></div>
   </div>
   <div class="card" id="setupCard">
     <div class="row between wrap"><h2>Setup for many cameras</h2><span class="row"><button class="ghost small" id="setupRead" title="Fill this form with the settings of one camera, to copy them to the others">Read from a camera…</button><button class="ico" id="setupClear" title="Clear the form (every setting back to –)" aria-label="Clear the form"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/></svg></button></span></div>
     <p class="hint">Choose what every selected camera should get. A dash leaves that setting as it is. <b>Read from a camera…</b> fills the form from one camera, so you can copy its setup to all the others. The form is kept with the project.</p>
     <div class="setup-grid" id="setupForm"></div>
-    <div class="card-foot"><button id="setupApply">Apply to the selected cameras</button><span class="muted small" id="setupStatus"></span></div>
+    <div class="card-foot"><button id="setupApply">Apply to the selected cameras</button><button class="ghost" id="setupSaveEng" title="Keep what is in this form as the engineering file, for Initialize and Back up">Save as engineering file</button><span class="muted small" id="setupStatus"></span></div>
   </div>
   <div class="eng-tiles">
     <div class="live-block e-power"><h3>Power</h3><div class="hold-row"><button data-eng="power" data-v="1">On</button><button data-eng="power" data-v="0">Standby</button></div></div>
@@ -409,7 +410,7 @@
       <div class="row between wrap"><h2><span id="scriptTitle">Script</span> <span class="count" id="scriptCount">0</span></h2><button class="ghost small" id="scriptClear">Close</button></div>
       <p class="hint">Runs the commands below on every selected camera. In Companion add the internal action <b>System: Run shell path</b> with <span class="mono">powershell -ExecutionPolicy Bypass -File "path\to\script.ps1"</span> (Windows) or <span class="mono">bash "/path/to/script.sh"</span> (Mac).</p>
       <ol id="scriptList" class="script-list"></ol>
-      <div class="row between wrap"><span class="muted small">Run on these cameras</span><span class="row"><span class="zonebar inline" id="scriptZones"></span><button class="ghost small" id="scriptAll">Select all</button><button class="ghost small" id="scriptNone">None</button></span></div>
+      <div class="row between wrap"><span class="muted small">Run on these cameras</span><span class="row"><span class="zonebar inline" id="scriptZones"></span></span></div>
       <div class="row wrap" id="scriptCams"></div>
       <label class="check"><input type="checkbox" id="scriptLogin"><span><b>Put the camera login in the script.</b> <span class="muted">Only needed when User Auth is on in the cameras. Leave it off to keep the password out of the file: the script then uses the environment variables <span class="mono">PANASONIC_USER</span> and <span class="mono">PANASONIC_PASS</span> if they are set on the Companion computer.</span></span></label>
       <div class="row wrap"><label class="grow">Script name <input id="scriptName" value="panasonic-action"></label><button class="secondary" id="scriptSave">Save in list</button><details class="menu primary"><summary>Save script file</summary><div class="menu-pop"><button type="button" id="scriptPs1">PowerShell file (Windows)</button><button type="button" id="scriptSh">Shell file (Mac / Linux)</button></div></details></div>
@@ -513,14 +514,7 @@
       </div>
       <p class="hint">Raise these when a camera misses settings during an import or export. Saved with the project.</p>
     </section>
-    <section class="setsec">
-      <h4>Camera web pages</h4>
-      <div class="row wrap">
-        <label class="grow">Live page <input id="setLivePath" value="/live/index.html" class="mono"></label>
-        <label class="grow">Settings page <input id="setSetupPath" value="/admin/index.html" class="mono"></label>
-      </div>
-      <p class="hint">The pages that open with Live view and Settings on the Cameras page. Saved with the project.</p>
-    </section>
+    <input type="hidden" id="setLivePath" value="/live/index.html"><input type="hidden" id="setSetupPath" value="/admin/index.html">
     <section class="setsec">
       <h4>Details for technicians</h4>
       <label class="check"><input type="checkbox" id="setExpert"> Show the raw answers of the cameras <span class="muted">(the commands sent and what each camera answered, in the result tables)</span></label>

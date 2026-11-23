@@ -538,3 +538,7 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .setup-grid.one{display:block;margin:8px 0}
 .setup-grid.one label.setup-row{flex-wrap:wrap}
 .setup-grid.one label.setup-row select{width:130px}
+.selall-inline{margin:0 0 0 auto;white-space:nowrap}
+.web-head{white-space:nowrap}
+.web-head .ico{vertical-align:middle}
+.copy-mini{margin-left:6px;vertical-align:middle}
