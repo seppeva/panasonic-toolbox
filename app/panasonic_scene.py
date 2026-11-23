@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.31.3"
+VERSION = "2.32.0"
 DEFAULT_PORT = 8765
 
 
@@ -735,6 +735,24 @@ def api_batch(req):
     # Movements (pan/tilt, zoom, focus, iris from the Live page) skip the per-camera queue and are never retried:
     # a move that comes late is worse than one that does not come, because the page already sends the next one.
     motion = bool(items) and all(it.get("motion") for it in items)
+    # Reading many settings (scene files, setup): several connections at once, no pause. Only for plain queries;
+    # anything that failed is asked again one by one, so a camera that wants one connection still gets its answers.
+    par = max(1, min(4, int(req.get("parallel") or 1)))
+    plain = all(not it.get("sleepMs") and it.get("type") in (None, "", "cam", "ptz") for it in items)
+    if par > 1 and plain and len(items) > 1 and not motion:
+        def one(it):
+            r = send_command(ip, port, "ptz" if it.get("type") == "ptz" else "cam", str(it.get("cmd", "")), user, pw, timeout)
+            r["cmd"] = it.get("cmd")
+            return r
+        with cam_lock(ip):
+            with ThreadPoolExecutor(max_workers=par) as ex:
+                results = list(ex.map(one, items))
+            if not any(r.get("status") == 401 for r in results) and not all(r.get("unreachable") for r in results):
+                for i, r in enumerate(results):
+                    if not r.get("ok") or str(r.get("body", "")).strip().lower().startswith("er2"):
+                        time.sleep(0.05)
+                        results[i] = one(items[i])
+        return {"ok": True, "ip": ip, "results": results}
     with (contextlib.nullcontext() if motion else cam_lock(ip)):
         for i, it in enumerate(items):
             if it.get("sleepMs"):

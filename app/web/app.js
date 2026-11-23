@@ -249,13 +249,14 @@ function camAuth(cam) {
 async function batch(cam, items, opts = {}) {
   const a = camAuth(cam);
   const out = [];
-  for (let i = 0; i < items.length; i += 20) {
-    const part = items.slice(i, i + 20);
-    const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, items: part }, Math.max(120000, part.length * 8000));
+  const step = opts.parallel ? 200 : 20;
+  for (let i = 0; i < items.length; i += step) {
+    const part = items.slice(i, i + step);
+    const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, parallel: opts.parallel || 1, items: part }, Math.max(120000, part.length * 8000));
     out.push(...j.results);
     if (j.results.some(r => /Errno 65|No route to host/i.test(r.error || ''))) localNetworkBlocked(cam);
     const stop = j.results.find(r => r.unreachable || r.status === 401);
-    if (stop && i + 20 < items.length) { out.push(...items.slice(i + 20).map(x => ({ ok: false, status: stop.status, cmd: x.cmd, error: stop.error, unreachable: stop.unreachable }))); break; }
+    if (stop && i + step < items.length) { out.push(...items.slice(i + step).map(x => ({ ok: false, status: stop.status, cmd: x.cmd, error: stop.error, unreachable: stop.unreachable }))); break; }
   }
   return out;
 }
@@ -316,8 +317,14 @@ async function getScene(cam) {
 }
 async function switchScene(cam, n) {
   log(`${cam.ip}: switching to scene ${n}`);
-  const r = await batch(cam, [{ cmd: 'XSF:' + n }, { sleepMs: state.sceneWait }]);
+  const r = await batch(cam, [{ cmd: 'XSF:' + n }]);
   if (!r[0].ok || isErr(r[0].body)) throw new Error(`Switching to scene ${n} failed (${r[0].body || r[0].error})`);
+  // go on as soon as the camera reports the new scene (usually within 0.1 s); the wait setting is the longest wait
+  const end = Date.now() + state.sceneWait;
+  while (Date.now() < end) {
+    try { if (+(await getScene(cam)) === +n) { await sleep(200); return; } } catch { }
+    await sleep(100);
+  }
 }
 // White balance mode: the camera answers QAW with other numbers than OAW takes (query 2 = AWB A, 3 = AWB B;
 // set 1 = A, 2 = B). Scene files keep the numbers to send. Files from before 2.21.1 (no wbSet mark) hold the
@@ -338,7 +345,8 @@ function parseRead(p, res) {
   return { err: 'unexpected: ' + b.slice(0, 40) };
 }
 async function readParams(cam, params) {
-  const res = await batch(cam, params.map(p => ({ type: p.t, cmd: p.q })));
+  // queries only: no pause and 4 connections at once (the bridge asks failed ones again one by one)
+  const res = await batch(cam, params.map(p => ({ type: p.t, cmd: p.q })), { delayMs: 0, parallel: 4 });
   return params.map((p, i) => ({ p, ...parseRead(p, res[i]) }));
 }
 async function readSceneFile(cam, sceneNo) {
@@ -879,11 +887,19 @@ function zoneChips(box, sel, label = 'Zone', allNone = false) {
   const isOn = z => cams(z).length > 0 && cams(z).every(c => sel.get(c));
   const none = state.cameras.filter(c => !c.zone).length;
   const btns = (zs.length ? zs.map(z => [z, z]) : []).concat(zs.length && none ? [['', 'No zone']] : []);
-  box.innerHTML = (btns.length ? `<span class="muted small">${label}:</span> ` + btns.map(([z, l]) => `<button type="button" class="chip${isOn(z) ? ' on' : ''}" data-zone="${esc(z)}" aria-pressed="${isOn(z)}" title="${isOn(z) ? 'Deselect' : 'Select'} the cameras in ${esc(l)}">${esc(l)} <span class="muted">${cams(z).length}</span></button>`).join('') : '')
+  box.innerHTML = (btns.length ? `<span class="muted small">${label}:</span> ` + btns.map(([z, l]) => `<button type="button" class="chip${isOn(z) ? ' on' : ''}" data-zone="${esc(z)}" aria-pressed="${isOn(z)}" title="Select only the cameras in ${esc(l)}. Shift-click to add or remove this zone.">${esc(l)} <span class="muted">${cams(z).length}</span></button>`).join('') : '')
     + (allNone && state.cameras.length ? `<label class="check selall-inline"><input type="checkbox" data-selall aria-label="Select all cameras"> Select all</label>` : '');
   // act on press (before a field loses focus and the bar is redrawn); keyboard presses come in as clicks with detail 0
-  const act = (el, fn) => { if (!el) return; el.addEventListener('pointerdown', e => { if (e.button === 0) { e.preventDefault(); fn(); } }); el.addEventListener('click', e => { if (e.detail === 0) fn(); }); };
-  $$('[data-zone]', box).forEach(b => act(b, () => { const z = b.dataset.zone, on = !isOn(z); cams(z).forEach(c => sel.set(c, on)); sel.done(); }));
+  const act = (el, fn) => { if (!el) return; el.addEventListener('pointerdown', e => { if (e.button === 0) { e.preventDefault(); fn(e); } }); el.addEventListener('click', e => { if (e.detail === 0) fn(e); }); };
+  // A click selects only that zone (a second click on the only selected zone clears it);
+  // Shift/Ctrl/Cmd-click adds or removes the zone and keeps the rest of the selection.
+  $$('[data-zone]', box).forEach(b => act(b, e => {
+    const z = b.dataset.zone;
+    if (e.shiftKey || e.ctrlKey || e.metaKey) { const on = !isOn(z); cams(z).forEach(c => sel.set(c, on)); return sel.done(); }
+    const only = isOn(z) && state.cameras.every(c => inZone(c, z) || !sel.get(c));
+    state.cameras.forEach(c => sel.set(c, !only && inZone(c, z)));
+    sel.done();
+  }));
   const sa = $('[data-selall]', box);
   if (sa) { selAllState(sa, state.cameras, sel.get); sa.onchange = () => { selAllClick(sa, state.cameras, sel.get, sel.set); sel.done(); }; }
 }
@@ -1464,29 +1480,34 @@ async function exportOperator(cams) {
 /* ------------------------------------------------------------------ import: sources and jobs */
 state.sources = []; state.jobs = [];
 let srcId = 0, jobId = 0;
+// One row per camera and file: the back-up or file opened last for the same camera (same scene, operator or
+// engineering file) replaces the earlier row instead of adding a duplicate. Files without a camera match on file name.
+const srcKey = s => [srcIp(s) || 'file:' + s.fileName, s.kind, s.kind === 'scene' ? s.file.scenes[s.sceneIdx].scene : ''].join('|');
+function pushSource(src, job) {
+  const k = srcKey(src), old = state.sources.filter(x => srcKey(x) === k);
+  if (old.length) { const ids = new Set(old.map(x => x.id)); state.sources = state.sources.filter(x => !ids.has(x.id)); state.jobs = state.jobs.filter(j => !ids.has(j.srcId)); }
+  state.sources.push(src); state.jobs.push(job); return true;
+}
 function addImportFile(name, file) {
   const target = state.cameras.find(c => c.ip === (file?.camera?.ip || file?.fromIp))?.ip || '';
   if (file?.format === ENG_ID && file.values) {
     track('Open engineering file', () => {
       const src = { id: ++srcId, fileName: name, file: { ...file, values: engOnly(file.values) }, sceneIdx: null, kind: 'engineering' };
-      state.sources.push(src);
-      state.jobs.push({ id: ++jobId, srcId: src.id, target, targetScene: '', include: true });
+      pushSource(src, { id: ++jobId, srcId: src.id, target, targetScene: '', include: true });
     });
     return renderImports();
   }
   if (file?.format === OPERATOR_ID && Array.isArray(file.settings)) {
     track('Open operator file', () => {
       const src = { id: ++srcId, fileName: name, file, sceneIdx: null, kind: 'operator' };
-      state.sources.push(src);
-      state.jobs.push({ id: ++jobId, srcId: src.id, target, targetScene: '', include: true });
+      pushSource(src, { id: ++jobId, srcId: src.id, target, targetScene: '', include: true });
     });
     return renderImports();
   }
   if (!file || file.format !== FORMAT_ID || !Array.isArray(file.scenes)) throw new Error('Not a Panasonic Toolbox file');
   track('Open scene file', () => file.scenes.forEach((s, i) => {
     const src = { id: ++srcId, fileName: name, file, sceneIdx: i, kind: 'scene' };
-    state.sources.push(src);
-    state.jobs.push({ id: ++jobId, srcId: src.id, target, targetScene: String(s.scene), include: true });
+    pushSource(src, { id: ++jobId, srcId: src.id, target, targetScene: String(s.scene), include: true });
   }));
   renderImports();
 }
@@ -2623,10 +2644,25 @@ $('#showOpen').onclick = async () => {
 /* ------------------------------------------------------------------ send a command (with undo) */
 // Turns a query response into the set command that restores it: OSD:A4:1 stays, d61 becomes #D61.
 const restoreCmd = (t, body) => (!body || isErr(body)) ? null : (t === 'ptz' ? '#' + body.toUpperCase() : body);
+// Commands from Parameters that move the camera, change presets or stop the picture ask first.
+function sendRisk(t, cmd) {
+  const c = (cmd || '').trim().toUpperCase();
+  if (t === 'ptz') {
+    if (/^#R\d{2}$/.test(c)) return `The camera moves to preset ${+c.slice(2) + 1}.`;
+    if (/^#M\d{2}$/.test(c)) return `Preset ${+c.slice(2) + 1} is overwritten with the current position.`;
+    if (/^#C\d{2}$/.test(c)) return `Preset ${+c.slice(2) + 1} is deleted.`;
+    if (/^#O0$/.test(c)) return 'The camera goes to standby and stops sending a picture.';
+    if (/^#(APC|APS|AXZ|AXF|AXI|P\d|T\d|PTS|Z\d)/.test(c) && !/^#(P|T|Z)50$/.test(c) && c !== '#PTS5050') return 'The camera moves.';
+  } else if (/^OSE:77:/.test(c) || /^OSA:87:/.test(c)) return 'The camera restarts with another frequency or format.';
+  else if (/^XSF:/.test(c)) return 'The camera switches to another scene file.';
+  return '';
+}
 async function sendCmd(t, cmd, outEl, c) {
   const tg = httpTarget();
   if (!validIp(tg.ip)) return info('Invalid IP address', 'Choose a camera or fill in a valid IP address.');
   if (/\[Data/.test(cmd)) return info('Fill in a value first', 'This command needs a value before it can be sent.');
+  const risk = sendRisk(t, cmd);
+  if (risk && !await ask({ title: `Send ${cmd} to ${tg.ip}?`, ok: 'Send', danger: true, body: `<p>${esc(risk)}</p>` })) return;
   outEl.textContent = 'Sending…';
   const cam = { ip: tg.ip, port: tg.port };
   try {
