@@ -2036,14 +2036,13 @@ function cmdRow(c) {
   const pills = (c.common ? ' <span class="pill ok">Common</span>' : '') + (c.rp ? ' <span class="pill info">Controller</span>' : '');
   tr.innerHTML = `<td class="fn"><div>${esc(c.n)}${pills}</div><div class="muted small">${esc(c.c)}${c.common ? '' : ' · ' + esc(c.m.join(', '))}</div>${valueHint(c) && !c.preset ? `<div class="muted small hintline">${esc(valueHint(c))}</div>` : ''}</td>
     <td class="valcell">${inputs || '<span class="muted">–</span>'}</td>
-    <td class="linkcell"><code class="url"></code><button type="button" class="ghost small copy-mini" data-act="copy" title="Copy this link">Copy</button>${c.q ? '<div class="small muted qline">Query: <code class="qurl"></code><button type="button" class="ghost small copy-mini" data-act="copyq" title="Copy the query link">Copy</button></div>' : ''}</td>
-    <td class="end nowrap acts"><button class="ghost small" data-act="send">Send</button><button class="ghost small" data-act="script" title="Add to a script for Companion">+ Script</button><div class="small muted out"></div></td>`;
+    <td class="linkcell"><code class="url"></code>${c.q ? '<div class="small muted qline">Query: <code class="qurl"></code></div>' : ''}</td>
+    <td class="end nowrap acts"><button class="ghost small" data-act="copy" title="Copy the link">Copy</button><button class="ghost small" data-act="send">Send</button><button class="ghost small" data-act="script" title="Add to a script for Companion">+ Script</button><div class="small muted out"></div></td>`;
   const val = el => c.preset ? pad2(Math.max(1, Math.min(100, +el.value || 1)) - 1) : (el?.value || '').trim();
   const build = () => { if (ro) return c.q; let i = 0; return c.c.replace(/\[Data\d*\]/g, () => val($(`[data-i="${i++}"]`, tr))); };
   tr.update = () => { $('code.url', tr).textContent = cmdUrl(c.t, build()); if (c.q) $('code.qurl', tr).textContent = cmdUrl(c.t, c.q); };
   $$('[data-i]', tr).forEach(el => el.addEventListener('input', tr.update));
   $('[data-act=copy]', tr).onclick = e => copyText(cmdUrl(c.t, build()), e.target);
-  $('[data-act=copyq]', tr)?.addEventListener('click', e => copyText(cmdUrl(c.t, c.q), e.target));
   $('[data-act=send]', tr).onclick = () => sendCmd(c.t, build(), $('.out', tr), ro ? null : c);
   $('[data-act=script]', tr).onclick = () => addToScript(c.preset ? `${c.n} ${$('[data-i="0"]', tr).value}` : c.n, c.t, build());
   tr.update();
