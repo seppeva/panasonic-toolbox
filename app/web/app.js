@@ -2813,7 +2813,9 @@ async function applyNet(list, opts = {}) {
   if (badName) return info('Check the name', `“${esc(badName.edit.name)}” is not a valid camera name. Use at most 15 letters, digits, spaces, hyphens, underscores or dots.`);
   // Two cameras in this change with the same new address: never.
   const dup = list.find(r => list.some(o => o !== r && o.edit.ip === r.edit.ip));
-  if (dup) return info('Duplicate IP address', `${esc(dup.edit.ip)} is used more than once.`);
+  // a refused change is not kept: the rows go back to what the cameras have, so the next Edit starts clean
+  const undoEdits = () => { list.forEach(r => { r.edit = { ...r.orig }; }); renderCams(); };
+  if (dup) { const ip = dup.edit.ip; undoEdits(); return info('Duplicate IP address', `${esc(ip)} is used more than once. Nothing was changed.`); }
   // A new address that another camera in the list or in the last search had: only a problem if something still
   // answers there. A broken camera that was replaced (switched off, unplugged) does not block its address.
   const taken = [];
@@ -2826,7 +2828,7 @@ async function applyNet(list, opts = {}) {
     const [q] = await batch({ ip, port: 80 }, [{ type: 'cam', cmd: 'QID' }]);
     eipProgress('');
     const names = [...new Set([...listed.map(c => camName(c)), ...found.map(o => o.orig.name || o.model)].filter(Boolean))].join(', ') || ip;
-    if (q?.ok || q?.status > 0) return info('IP address in use', `${esc(ip)} still answers on the network (${esc(names)}). Switch that camera off or give it another address first. Nothing was changed.`);
+    if (q?.ok || q?.status > 0) { undoEdits(); return info('IP address in use', `${esc(ip)} still answers on the network (${esc(names)}). Switch that camera off or give it another address first. Nothing was changed.`); }
     taken.push({ r, ip, names, listed });
   }
   const ok = opts.confirmed || await ask({
