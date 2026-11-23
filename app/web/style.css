@@ -532,3 +532,9 @@ details.more-opts.inline{margin:0 0 6px}
 button.big.ghost-big{background:var(--raised);color:var(--text);border:1px solid var(--rule)}
 button.big.ghost-big:hover{background:#33373d}
 body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-child(7){display:none}
+/* white balance per scene, inside the White balance tile on Engineering */
+.wb-scenes{margin-top:12px;padding-top:10px;border-top:1px solid var(--rule-soft)}
+.wb-scenes h4{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.setup-grid.one{display:block;margin:8px 0}
+.setup-grid.one label.setup-row{flex-wrap:wrap}
+.setup-grid.one label.setup-row select{width:130px}

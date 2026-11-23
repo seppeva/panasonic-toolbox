@@ -26,7 +26,7 @@ const icoBtn = (act, icon, title, extra = '') => `<button type="button" class="i
 // Projects: cameras, shows, RP150 rows, scripts, file names and the camera login belong to a project;
 // timing, page paths and the update check are for the whole app. The first project ('default') keeps the
 // keys of earlier versions, so nothing is lost when updating.
-const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath|sceneSet|engSetup)$/;
+const PROJECT_KEYS = /^(cameras|shows|rpRows|script|scripts|scriptEdit|scriptCams|engCams|gridCams|liveCam|login|expZip|name_.*|delayMs|sceneWait|livePath|setupPath|sceneSet|engSetup|engWbScenes)$/;
 // settings that moved into projects in 2.14: a project without its own value uses the value from before
 const PROJECT_FALLBACK = /^(delayMs|sceneWait|livePath|setupPath)$/;
 // The app's data lives in state.json, kept by the app itself and handed to this page when it loads (#psState).
@@ -833,7 +833,6 @@ function renderCams() {
   $('#camCount').textContent = state.cameras.length;
   $('#camFoundN').textContent = nf ? `+ ${nf} found on the network` : '';
   $('#camEmpty').classList.toggle('hidden', state.cameras.length + nf > 0);
-  $('#camWelcome').classList.toggle('hidden', state.cameras.length + nf > 0);
   const pend = allNetRows().filter(netPending).length;
   $('#camPending').classList.toggle('hidden', !pend);
   $('#camPendingN').textContent = `${pend} camera${pend > 1 ? 's' : ''} changed, not sent yet`;
@@ -841,7 +840,7 @@ function renderCams() {
 }
 $('#camTable').addEventListener('focusout', () => setTimeout(() => { if (state.camRedraw && !$('#camTable').contains(document.activeElement)) renderCams(); }, 0));
 function addFound(list) {
-  if (!list.length) return info('Nothing to add', 'Choose Search first, or tick the found cameras you want to add.');
+  if (!list.length) return info('Nothing to add', 'Choose Search first, or select the found cameras you want to add.');
   track(`Add ${list.length} camera(s) from the network`, () => list.forEach(r => { upsertCam(r.orig.ip, r.orig.port, { model: r.model, title: r.orig.name }); r.sel = false; }));
   saveCams(); renderCams(); refreshAll(state.cameras.filter(c => list.some(r => r.orig.ip === c.ip)));
   const far = list.filter(r => state.localIps.length && !sameRange(r.orig.ip, r.orig.mask));
@@ -859,10 +858,10 @@ async function camSearch() {
   finally { $('#camSearch').disabled = false; }
 }
 $('#camSearch').onclick = camSearch;
-// Edit IP settings…: name, IP address, subnet mask and gateway of the ticked cameras in one table, sent with Easy IP
+// Edit IP settings…: name, IP address, subnet mask and gateway of the selected cameras in one table, sent with Easy IP
 $('#camIpSel').onclick = async () => {
   const rows = [...state.cameras.filter(c => c.selected).map(netRow), ...foundRows().filter(r => r.sel)];
-  if (!rows.length) return info('Select cameras first', 'Tick the cameras you want to change.');
+  if (!rows.length) return info('Select cameras first', 'Select the cameras you want to change.');
   const first = rows.find(r => !r.local)?.edit;
   const opened = ask({ title: `IP settings of ${rows.length} camera${rows.length > 1 ? 's' : ''}`, ok: 'Send to the cameras', wide: true, danger: true, body: `
     <div class="row wrap"><label class="w140">First IP address <input id="ipFirst" class="mono" value="${esc(first?.ip || '')}"></label>
@@ -910,7 +909,7 @@ function zoneChips(box, sel, label = 'Zone', allNone = false) {
 }
 const inZone = (c, z) => (c.zone || '') === z;
 // Zones…: one place to rename zones, choose which cameras are in each zone, add and remove zones.
-// A camera is in one zone at a time: ticking it in a zone takes it out of the other one.
+// A camera is in one zone at a time: selecting it in a zone takes it out of the other one.
 $('#zonesBtn').onclick = async () => {
   if (!state.cameras.length) return info('No cameras yet', 'Add cameras first.');
   const rows = zoneNames().map(z => ({ orig: z, name: z }));
@@ -928,7 +927,7 @@ $('#zonesBtn').onclick = async () => {
     $$('[data-del]', box).forEach(b => b.onclick = () => { const r = rows[+b.dataset.del]; for (const [ip, z] of member) if (z === r.orig) member.set(ip, ''); rows.splice(+b.dataset.del, 1); draw(); });
   };
   const opened = ask({ title: 'Zones', ok: 'Save', wide: true, body: `
-    <p class="muted small">Rename a zone in its field. Tick the cameras that belong to it; a camera is in one zone at a time.</p>
+    <p class="muted small">Rename a zone in its field. Select the cameras that belong to it; a camera is in one zone at a time.</p>
     <div id="zoneEd"></div>
     <div class="row"><input id="zoneNew" placeholder="New zone, e.g. Stage" aria-label="New zone name"><button type="button" class="ghost small" id="zoneAdd">Add zone</button></div>` });
   await sleep(0); draw();
@@ -951,7 +950,7 @@ function renderZones() {
 }
 // The bar with actions for the selected rows always keeps its place (no jumping rows); without a selection its controls are off.
 function selBar(bar, n) {
-  // the bar with actions for the ticked rows only shows when something is ticked
+  // the bar with actions for the selected rows only shows when something is selected
   bar.classList.toggle('hidden', !n); bar.classList.toggle('idle', !n);
   $$('button, input, select', bar).forEach(x => { x.disabled = !n; });
 }
@@ -1228,7 +1227,7 @@ async function openBytes(name, u8, path) {
 }
 function openJson(name, data, path) {
   if (data?.format === SHOW_ID) return addShow(data, true, path);
-  if (data?.format === ENG_ID) return importEngFile(data).catch(e => info('Could not open', esc(e.message)));
+  if (data?.format === ENG_ID) { addImportFile(name, data); if (!engFile()) useEngFile(data, true); return; }
   if (data?.format === CONFIG_ID) return importConfig(data).catch(e => info('Could not import', esc(e.message)));
   if (data?.format === PROJECT_ID) return importProject(data).catch(e => info('Could not open', esc(e.message)));
   return addImportFile(name, data);
@@ -1317,12 +1316,12 @@ async function readCamScenes(cam, mode, picked, status = () => { }) {
 $('#exportBtn').onclick = async () => {
   if (expKindNow() === 'engineering') return exportEngFile();
   const cams = state.cameras.filter(c => c.selected);
-  if (!cams.length) return info('No cameras selected', 'Tick the cameras you want to export.');
+  if (!cams.length) return info('No cameras selected', 'Select the cameras you want to export.');
   if (!state.bridgeOk && !(await checkBridge())) return;
   const kind = $('input[name=expKind]:checked').value;
   const mode = $('input[name=expMode]:checked').value;
   const picked = $$('#expScenes input:checked').map(i => +i.value);
-  if (kind === 'scene' && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Tick the scenes you want to export.');
+  if (kind === 'scene' && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Select the scenes you want to export.');
   // read the live scene first, so the confirmation shows the real scene numbers (and which cameras do not answer)
   const offline = new Set();
   $('#exportBtn').disabled = true; $('#expSel').textContent = 'Checking the cameras…';
@@ -1394,7 +1393,7 @@ function expKindUi() {
     const ef = engFile();
     $('#expDefHint').innerHTML = ef
       ? `Saves the engineering file in a file: the system setup of ${esc(ef.fromName || ef.fromIp || '')} (${Object.keys(ef.values || {}).length} settings, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}). Open that file on the Restore page to put it on cameras, also on another computer.`
-      : 'There is no engineering file yet. Make one on the Engineering page: tick one camera and choose <b>Save engineering file…</b>.';
+      : 'There is no engineering file yet. Make one on the Engineering page: select one camera and choose <b>Save engineering file…</b>.';
   }
 }
 $$('input[name=expKind]').forEach(r => r.onchange = expKindUi);
@@ -1454,7 +1453,15 @@ async function exportOperator(cams) {
 state.sources = []; state.jobs = [];
 let srcId = 0, jobId = 0;
 function addImportFile(name, file) {
-  const target = state.cameras.find(c => c.ip === file?.camera?.ip)?.ip || '';
+  const target = state.cameras.find(c => c.ip === (file?.camera?.ip || file?.fromIp))?.ip || '';
+  if (file?.format === ENG_ID && file.values) {
+    track('Open engineering file', () => {
+      const src = { id: ++srcId, fileName: name, file: { ...file, values: engOnly(file.values) }, sceneIdx: null, kind: 'engineering' };
+      state.sources.push(src);
+      state.jobs.push({ id: ++jobId, srcId: src.id, target, targetScene: '', include: true });
+    });
+    return renderImports();
+  }
   if (file?.format === OPERATOR_ID && Array.isArray(file.settings)) {
     track('Open operator file', () => {
       const src = { id: ++srcId, fileName: name, file, sceneIdx: null, kind: 'operator' };
@@ -1472,9 +1479,10 @@ function addImportFile(name, file) {
   renderImports();
 }
 const OPERATOR_CMDS = new Set(OPERATOR_PARAMS.map(p => p.cmd));
-const srcParams = s => s.kind === 'operator' ? s.file.settings.filter(x => OPERATOR_CMDS.has(x.cmd)).length : s.file.scenes[s.sceneIdx].params.length;
+const srcParams = s => s.kind === 'operator' ? s.file.settings.filter(x => OPERATOR_CMDS.has(x.cmd)).length : s.kind === 'engineering' ? Object.keys(s.file.values || {}).length : s.file.scenes[s.sceneIdx].params.length;
 const srcById = id => state.sources.find(s => s.id === +id);
-const srcLabel = s => `${s.file.camera?.title || s.file.camera?.model || s.fileName}, ${s.kind === 'operator' ? 'operator file' : 'scene ' + s.file.scenes[s.sceneIdx].scene}`;
+const KIND_NAME = { operator: 'Operator file', engineering: 'Engineering file' };
+const srcLabel = s => s.kind === 'engineering' ? `${s.file.fromName || s.file.model || s.fileName}, engineering file` : `${s.file.camera?.title || s.file.camera?.model || s.fileName}, ${s.kind === 'operator' ? 'operator file' : 'scene ' + s.file.scenes[s.sceneIdx].scene}`;
 async function handleFiles(list) {
   for (const f of list) {
     try {
@@ -1498,7 +1506,8 @@ $('#addJobBtn').onclick = () => {
 function renderImports() {
   renderGrid();
   // step 1: list of opened scenes
-  $('#srcList').innerHTML = state.sources.filter(x => !x.fromShow).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.filter(x => !x.fromShow).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || '')} <span class="mono muted">${esc(s.file.camera?.ip || '')}</span> <span class="muted small">${esc(s.file.camera?.model || '')}</span></td><td>${s.kind === 'operator' ? 'Operator file' : 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end"><button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $('#srcList').innerHTML = state.sources.filter(x => !x.fromShow && !x.savedEng).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${state.sources.filter(x => !x.fromShow && !x.savedEng).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' ? `<button class="ghost small" data-enguse="${s.id}" title="Use this file for Initialize on the Engineering page">Use for Initialize</button> ` : ''}<button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $$('#srcList [data-enguse]').forEach(b => b.onclick = () => { const sr = srcById(b.dataset.enguse); if (sr) useEngFile(sr.file); });
   $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
   // step 2: jobs
   const tb = $('#impTable tbody'); tb.innerHTML = '';
@@ -1510,7 +1519,7 @@ function renderImports() {
     tr.innerHTML = `<td><input type="checkbox" ${j.include ? 'checked' : ''} aria-label="Include"></td>
       <td><select data-k="srcId">${state.sources.map(s => `<option value="${s.id}" ${s.id === j.srcId ? 'selected' : ''}>${esc(srcLabel(s))}</option>`).join('')}</select></td>
       <td><select data-k="target"><option value="">Choose a camera</option>${state.cameras.map(c => `<option value="${esc(c.ip)}" ${j.target === c.ip ? 'selected' : ''}>${esc(c.ip)} ${esc(c.title || c.model || '')}</option>`).join('')}</select></td>
-      <td>${src.kind === 'operator' ? '<span class="muted">Not scene-related</span>' : `<select data-k="targetScene"><option value="active" ${j.targetScene === 'active' ? 'selected' : ''}>Live scene${tcam?.scene ? ' (' + tcam.scene + ')' : ''}</option>${Array.from({ length: nsc }, (_, i) => `<option value="${i + 1}" ${j.targetScene === String(i + 1) ? 'selected' : ''}>Scene ${i + 1}</option>`).join('')}</select>`}</td>
+      <td>${src.kind !== 'scene' ? '<span class="muted">Not scene-related</span>' : `<select data-k="targetScene"><option value="active" ${j.targetScene === 'active' ? 'selected' : ''}>Live scene${tcam?.scene ? ' (' + tcam.scene + ')' : ''}</option>${Array.from({ length: nsc }, (_, i) => `<option value="${i + 1}" ${j.targetScene === String(i + 1) ? 'selected' : ''}>Scene ${i + 1}</option>`).join('')}</select>`}</td>
       <td>${srcParams(src)}</td>
       <td class="end nowrap">${icoBtn('cmp', 'compare', 'Compare with what is on the camera now')} <button class="icon" data-act="del" aria-label="Remove">×</button></td>`;
     $('input', tr).onchange = e => { j.include = e.target.checked; updImpSel(); };
@@ -1533,7 +1542,7 @@ $('#impSelAll').onchange = () => { selAllClick($('#impSelAll'), state.jobs, j =>
 $('#impSelApply').onclick = () => {
   const cam = $('#impSelCam').value, sc = $('#impSelScene').value; if (!cam && !sc) return;
   const js = state.jobs.filter(j => j.include);
-  track(`Change ${js.length} destination(s)`, () => js.forEach(j => { if (cam) j.target = cam; if (sc && srcById(j.srcId)?.kind !== 'operator') j.targetScene = sc; }));
+  track(`Change ${js.length} destination(s)`, () => js.forEach(j => { if (cam) j.target = cam; if (sc && srcById(j.srcId)?.kind === 'scene') j.targetScene = sc; }));
   renderImports();
 };
 $('#impDelSel').onclick = () => {
@@ -1577,7 +1586,7 @@ async function runImport(jobs, opts, title = 'Restore these cameras?') {
   const ok = await ask({
     title,
     wide: true,
-    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Gets</th><th>Into</th><th>Settings</th></tr></thead><tbody>${[...byCam].map(([c, js]) => js.map((j, k) => { const sr = srcById(j.srcId); const into = sr.kind === 'operator' ? 'the camera (operator settings)' : j.targetScene === 'active' ? `the live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : `scene ${j.targetScene}${c.scene && +j.targetScene !== c.scene ? ' <span class="muted">(camera switches to it, then back)</span>' : ''}`;
+    body: `<table class="tbl dense"><thead><tr><th>Camera</th><th>Gets</th><th>Into</th><th>Settings</th></tr></thead><tbody>${[...byCam].map(([c, js]) => js.map((j, k) => { const sr = srcById(j.srcId); const into = sr.kind === 'operator' ? 'the camera (operator settings)' : sr.kind === 'engineering' ? 'the camera (system setup)' : j.targetScene === 'active' ? `the live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : `scene ${j.targetScene}${c.scene && +j.targetScene !== c.scene ? ' <span class="muted">(camera switches to it, then back)</span>' : ''}`;
         return `<tr><td>${k ? '' : `${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span>`}</td><td>${esc(srcLabel(sr))}<div class="muted small mono">${esc(sr.fileName)}</div></td><td>${into}</td><td>${srcParams(sr)}</td></tr>`; }).join('')).join('')}</tbody></table>
       <ul class="tight">${opts.backup !== false ? '<li>The current settings of every destination are saved first as a backup file.</li>' : ''}${opts.verify ? '<li>Afterwards every value is read back to check it.</li>' : ''}<li>The picture of these cameras changes immediately. You can undo this afterwards.</li></ul>`,
     ok: 'Restore', danger: true,
@@ -1600,7 +1609,7 @@ async function runImport(jobs, opts, title = 'Restore these cameras?') {
         undos.push({ undo, redo });
         if (r.backup) backups.push(r.backup);
         const bad = r.failed.length + r.mismatch.length;
-        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${r.applied} settings changed${r.unchanged ? `, ${r.unchanged} already right` : ''}` +
+        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${src.kind === 'engineering' ? `${r.applied} settings right after checking` : `${r.applied} settings changed${r.unchanged ? `, ${r.unchanged} already right` : ''}`}` +
           (r.skipped.length ? `, ${r.skipped.length} skipped (not supported by ${esc(profileFor(cam.model).fam)})` : '') +
           (r.failed.length ? `<br>Not accepted by the camera: ${r.failed.map(f => esc(f.name) + ' (' + esc(f.err) + ')').join(', ')}` : '') +
           (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}` : '') +
@@ -1753,6 +1762,16 @@ async function importOperator(cam, data, opts, progress) {
 }
 // Run one import job (scene or operator) and return its result plus how to undo/redo it.
 async function runJob(cam, src, targetScene, opts, progress) {
+  if (src.kind === 'engineering') {
+    const v = engOnly(src.file.values);
+    progress('reading the current setup…');
+    const before = engOnly(await readSetup(cam, false));
+    const backup = opts.backup ? { name: `${camName(cam).replace(/[^A-Za-z0-9._ -]+/g, '_')}_${cam.ip}_ENGINEERING_BACKUP.json`, text: JSON.stringify({ format: ENG_ID, version: 1, values: before, savedAt: new Date().toISOString(), fromIp: cam.ip, fromName: camName(cam), model: cam.model || '' }, null, 1) } : null;
+    const [row] = await applySetup([cam], v, progress);
+    const split = t => { const i = t.indexOf(': '); return i > 0 ? { name: t.slice(0, i), err: t.slice(i + 2) } : { name: t, err: 'not set' }; };
+    const r = { scene: null, applied: row.out.filter(o => !o.bad).length, unchanged: 0, skipped: [], failed: row.out.filter(o => o.bad).map(o => split(o.t)), mismatch: [], stored: false, backup, before };
+    return { r, undo: () => applySetup([cam], before), redo: () => applySetup([cam], v) };
+  }
   if (src.kind === 'operator') {
     const r = await importOperator(cam, src.file, opts, progress);
     return { r, undo: () => importOperator(cam, r.before, { backup: false }, () => { }), redo: () => importOperator(cam, src.file, { backup: false }, () => { }) };
@@ -1811,6 +1830,27 @@ function renderOperatorTab() {
   $('#operTable tbody').innerHTML = list.map(p => `<tr><td class="grp">${esc(p.g)}</td><td>${esc(p.name)}</td><td class="mono">${esc(p.src.c)}</td><td class="mono">${esc(p.q)}</td><td class="small muted">${esc(operatorValues(p.src))}</td><td class="small muted">${esc(p.src.m.join(', '))}</td></tr>`).join('');
 }
 $('#operGroup').onchange = renderOperatorTab;
+// What an engineering file holds: the system setup (Engineering page), one row per setting
+const engfRows = () => SETUP.filter(f => !f.wb).map(f => {
+  const vals = f.format ? FREQS.map(([fr, fl, list]) => `${fl}: ${list.map(x => x[1]).join(', ')}`).join(' · ') : f.o.map(([k, l]) => `${k} = ${l}`).join(', ');
+  const set = f.format ? 'OSE:77:[freq] then OSA:87:[format]' : f.ipv ? 'POST /cgi-bin/set_h264 (…_2, _3, _4) h264_transmit=0|1' : f.bit ? `OSE:7B:[byte], bit 0x${f.bit.toString(16).toUpperCase().padStart(2, '0')}` : f.ptz ? f.ptz + '[Data]' : f.set + '[Data]';
+  const q = f.format ? 'QSE:77, QSA:87' : f.ipv ? '/cgi-bin/setdata (H264…)' : f.bit ? 'QSE:7B' : f.ptz || f.q;
+  return { g: f.g, name: f.l, set, q, vals };
+});
+function renderEngfTab() {
+  const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const rows = engfRows(), gsel = $('#engfGroup'), groups = [...new Set(rows.map(r => r.g))], g = groups.includes(gsel.value) ? gsel.value : '';
+  gsel.innerHTML = '<option value="">All groups</option>' + groups.map(x => `<option ${x === g ? 'selected' : ''}>${esc(x)}</option>`).join('');
+  const list = rows.filter(r => (!g || r.g === g) && words.every(w => (r.name + ' ' + r.set + ' ' + r.q + ' ' + r.g).toLowerCase().includes(w)));
+  $('#engfCount').textContent = list.length;
+  $('#engfInfo').textContent = `${rows.length} settings go into an engineering file: the system setup of a camera, read with Save engineering file and put back with Initialize (Engineering page). White balance per scene is not included; that is part of the scene files. A camera skips whatever its model does not support.`;
+  $('#engfTable tbody').innerHTML = list.map(r => `<tr><td class="grp">${esc(r.g)}</td><td>${esc(r.name)}</td><td class="mono">${esc(r.set)}</td><td class="mono">${esc(r.q)}</td><td class="small muted">${esc(r.vals)}</td></tr>`).join('');
+}
+$('#engfGroup').onchange = renderEngfTab;
+$('#engfCsv').onclick = () => {
+  const csv = ['Group;Setting;Set command;Query command;Values'].concat(engfRows().map(r => [r.g, r.name, r.set, r.q, r.vals].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
+  download('panasonic_engineering_parameters.csv', '\ufeff' + csv, 'text/csv', 'params');
+};
 $('#operCsv').onclick = () => {
   const csv = ['Group;Setting;Set command;Query command;Values;Models'].concat(OPERATOR_PARAMS.map(p => [p.g, p.name, p.src.c, p.q, operatorValues(p.src), p.src.m.join(', ')].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))).join('\r\n');
   download('panasonic_operator_parameters.csv', '\ufeff' + csv, 'text/csv', 'params');
@@ -1991,7 +2031,7 @@ function cmdRow(c) {
   tr.update();
   return tr;
 }
-$('#paramSearch').addEventListener('input', () => { renderCmds(); renderParamTab(); renderOperatorTab(); });
+$('#paramSearch').addEventListener('input', () => { renderCmds(); renderParamTab(); renderOperatorTab(); renderEngfTab(); });
 $('#cmdModel').addEventListener('change', renderCmds);
 $('#cmdType').addEventListener('change', renderCmds);
 $('#cmdCat').addEventListener('change', renderCmds);
@@ -2023,7 +2063,7 @@ function renderScript() {
   });
   renderSavedScripts();
   const prev = new Set(store.get('scriptCams', []));
-  $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span>${c.zone ? ` <span class="pill">${esc(c.zone)}</span>` : ''}</label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you tick here.</span>';
+  $('#scriptCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${prev.has(c.ip) ? 'checked' : ''}> ${esc(c.title || c.model || '')} <span class="mono muted">${esc(c.ip)}</span>${c.zone ? ` <span class="pill">${esc(c.zone)}</span>` : ''}</label>`).join('') : '<span class="muted">Find cameras first; the script runs on the cameras you select here.</span>';
   $$('#scriptCams label:not(.selall-row) input').forEach(i => i.onchange = () => { store.set('scriptCams', $$('#scriptCams label:not(.selall-row) input:checked').map(x => x.value)); renderScript(); });
   { const on = new Set(store.get('scriptCams', []));
     selAllRow($('#scriptCams'), state.cameras, c => on.has(c.ip), (c, v) => v ? on.add(c.ip) : on.delete(c.ip), () => { store.set('scriptCams', [...on]); renderScript(); }); }
@@ -2108,7 +2148,7 @@ function scriptTargets() {
 }
 function scriptName(ext) { return ($('#scriptName').value.trim() || 'panasonic-action').replace(/[^\w.-]+/g, '_') + ext; }
 $('#scriptPs1').onclick = async () => {
-  const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
+  const cams = scriptTargets(); if (!cams.length) return info('Select at least one camera', 'Choose on which cameras the script runs.');
   if (!await storeScript(false)) return;
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
   const withLogin = $('#scriptLogin').checked && !!user;
@@ -2136,7 +2176,7 @@ $('#scriptPs1').onclick = async () => {
   if (withLogin) toast('Note: the camera login is stored in the script as plain text.');
 };
 $('#scriptSh').onclick = async () => {
-  const cams = scriptTargets(); if (!cams.length) return info('Tick at least one camera', 'Choose on which cameras the script runs.');
+  const cams = scriptTargets(); if (!cams.length) return info('Select at least one camera', 'Choose on which cameras the script runs.');
   if (!await storeScript(false)) return;
   const user = $('#authUser').value.trim(), pass = $('#authPass').value;
   const withLogin = $('#scriptLogin').checked && !!user;
@@ -2159,6 +2199,8 @@ $('#scriptSh').onclick = async () => {
 /* ------------------------------------------------------------------ shows */
 // A show: which file goes to which camera and scene, with the file contents embedded, recallable in one go.
 const SHOW_ID = 'panasonic-toolbox-show';
+// order per camera: engineering first (a frequency change restarts the camera), then scenes, then the operator file
+const kindRank = it => ({ engineering: 0, scene: 1, operator: 2 })[it.kind] ?? 1;
 state.shows = store.get('shows', []);
 const saveShows = () => store.set('shows', state.shows);
 const showFile = sh => `${sh.name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'Show'}.pshow`;
@@ -2200,7 +2242,7 @@ function renderShows() {
   const tb = $('#showTable tbody'); tb.innerHTML = '';
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
+    tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : i.kind === 'engineering' ? 'engineering file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
       <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> ${icoBtn('edit', 'edit', 'Edit this show')}${icoBtn('file', 'save', 'Save the show file')} <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
     $('input[type=checkbox]', tr).onchange = e => { sh.sel = e.target.checked; updShowSel(); };
     $('[data-act=recall]', tr).onclick = () => recallShow(sh);
@@ -2242,7 +2284,7 @@ $('#showDelSel').onclick = async () => {
 async function recallShow(sh) {
   // make sure every camera of the show is in the list, then run it like an import
   for (const it of sh.items) if (!state.cameras.some(c => c.ip === it.target)) upsertCam(it.target, it.port, { title: it.targetTitle });
-  const jobs = sh.items.map(it => {
+  const jobs = [...sh.items].sort((a, b) => kindRank(a) - kindRank(b)).map(it => {
     const src = { id: ++srcId, fileName: it.fileName, file: it.file, sceneIdx: it.sceneIdx, kind: it.kind };
     state.sources.push(src);
     return { id: ++jobId, srcId: src.id, target: it.target, targetScene: it.targetScene, include: true };
@@ -2259,8 +2301,9 @@ state.grid = {}; // ip -> { '1': srcId, ..., op: srcId }
 const saveGridCams = () => store.set('gridCams', [...state.gridCams]);
 function renderGrid() {
   if (!$('#gridTable') || !state.gridCams) return;
-  const scenes = state.sources.filter(x => x.kind === 'scene'), opers = state.sources.filter(x => x.kind === 'operator');
-  $('#gridFiles').textContent = state.sources.length ? `Opened: ${scenes.length} scene${scenes.length === 1 ? '' : 's'}${opers.length ? ` and ${opers.length} operator file${opers.length === 1 ? '' : 's'}` : ''}.` : 'No files opened yet. Use Open files… or export from the cameras first.';
+  syncSavedEngSource();
+  const scenes = state.sources.filter(x => x.kind === 'scene'), opers = state.sources.filter(x => x.kind === 'operator'), engs = state.sources.filter(x => x.kind === 'engineering');
+  $('#gridFiles').textContent = state.sources.length ? `Opened: ${[[scenes.length, 'scene'], [opers.length, 'operator file'], [engs.length, 'engineering file']].filter(([n]) => n).map(([n, t]) => `${n} ${t}${n === 1 ? '' : 's'}`).join(', ')}.` : 'No files opened yet. Use Open files… or back up the cameras first.';
   zoneChips($('#gridZones'), { get: c => state.gridCams.has(c.ip), set: (c, on) => on ? state.gridCams.add(c.ip) : state.gridCams.delete(c.ip), done: () => { saveGridCams(); renderGrid(); } }, 'Cameras', true);
   $('#gridCams').innerHTML = state.cameras.length ? state.cameras.map(c => `<label class="check"><input type="checkbox" value="${esc(c.ip)}" ${state.gridCams.has(c.ip) ? 'checked' : ''}><span>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></span></label>`).join('') : '<span class="muted">Find or add cameras on the Cameras page first.</span>';
   $$('#gridCams input').forEach(i => i.onchange = () => { i.checked ? state.gridCams.add(i.value) : state.gridCams.delete(i.value); saveGridCams(); renderGrid(); });
@@ -2272,13 +2315,13 @@ function renderGrid() {
   const byFile = list => { const m = new Map(); list.forEach(x => { if (!m.has(x.fileName)) m.set(x.fileName, []); m.get(x.fileName).push(x); }); return m; };
   const opts = (list, cur) => `<option value="">–</option>` + [...byFile(list)].map(([f, xs]) => `<optgroup label="${esc(f)}">${xs.map(x => `<option value="${x.id}" ${+cur === x.id ? 'selected' : ''}>${esc(srcLabel(x))}</option>`).join('')}</optgroup>`).join('');
   const t = $('#gridTable');
-  if (!cams.length) { t.innerHTML = `<tbody><tr><td class="muted">Tick the cameras for this show above.</td></tr></tbody>`; }
+  if (!cams.length) { t.innerHTML = `<tbody><tr><td class="muted">Select the cameras for this show above.</td></tr></tbody>`; }
   else {
-    t.innerHTML = `<thead><tr><th>Camera</th>${Array.from({ length: n }, (_, i) => `<th>Scene ${i + 1}</th>`).join('')}<th>Operator file</th></tr></thead><tbody>${cams.map(c => {
+    t.innerHTML = `<thead><tr><th>Camera</th>${Array.from({ length: n }, (_, i) => `<th>Scene ${i + 1}</th>`).join('')}<th>Operator file</th><th>Engineering file</th></tr></thead><tbody>${cams.map(c => {
       const g = state.grid[c.ip] || {}, max = c.model ? profileFor(c.model).scenes : 4;
       return `<tr data-ip="${esc(c.ip)}"><td class="nowrap"><b>${esc(camName(c))}</b><div class="mono muted small">${esc(c.ip)}${c.desc && c.title ? ' · ' + esc(c.desc) : ''}${c.model ? ' · ' + esc(c.model) : ''}</div></td>${Array.from({ length: n }, (_, i) => i < max
         ? `<td><select data-col="${i + 1}" class="${g[i + 1] ? 'set' : ''}" aria-label="Scene ${i + 1} of ${esc(c.ip)}">${opts(scenes, g[i + 1])}</select></td>`
-        : '<td class="muted">–</td>').join('')}<td><select data-col="op" class="${g.op ? 'set' : ''}" aria-label="Operator file for ${esc(c.ip)}">${opts(opers, g.op)}</select></td></tr>`;
+        : '<td class="muted">–</td>').join('')}<td><select data-col="op" class="${g.op ? 'set' : ''}" aria-label="Operator file for ${esc(c.ip)}">${opts(opers, g.op)}</select></td><td><select data-col="eng" class="${g.eng ? 'set' : ''}" aria-label="Engineering file for ${esc(c.ip)}">${opts(engs, g.eng)}</select></td></tr>`;
     }).join('')}</tbody>`;
     $$('#gridTable select').forEach(sel => sel.onchange = () => {
       const ip = sel.closest('tr').dataset.ip, k = sel.dataset.col;
@@ -2289,13 +2332,20 @@ function renderGrid() {
   }
   gridCount();
 }
+// The engineering file saved on the Engineering page can go into a show without opening a file
+function syncSavedEngSource() {
+  const ef = engFile(), cur = state.sources.find(x => x.savedEng);
+  const file = ef ? { format: ENG_ID, version: 1, ...ef } : null;
+  if (cur && (!ef || cur.file.savedAt !== ef.savedAt)) { state.sources = state.sources.filter(x => x !== cur); for (const ip in state.grid) for (const k in state.grid[ip]) if (state.grid[ip][k] === cur.id) delete state.grid[ip][k]; }
+  if (ef && !state.sources.some(x => x.savedEng)) state.sources.push({ id: ++srcId, fileName: 'Saved on the Engineering page', file, sceneIdx: null, kind: 'engineering', savedEng: true });
+}
 function gridItems() {
   const items = [];
   for (const c of state.cameras.filter(x => state.gridCams.has(x.ip))) {
     const g = state.grid[c.ip] || {};
     for (const [k, id] of Object.entries(g)) {
       const src = srcById(id); if (!src) continue;
-      items.push({ target: c.ip, port: c.port || 80, targetTitle: c.title || c.model || '', targetScene: k === 'op' ? null : String(k), kind: src.kind, sceneIdx: src.sceneIdx, fileName: src.fileName, file: src.file });
+      items.push({ target: c.ip, port: c.port || 80, targetTitle: c.title || c.model || '', targetScene: k === 'op' || k === 'eng' ? null : String(k), kind: src.kind, sceneIdx: src.sceneIdx, fileName: src.fileName, file: src.file });
     }
   }
   return items;
@@ -2312,7 +2362,7 @@ async function saveEngFile(cam) {
   if (!state.bridgeOk && !(await checkBridge())) return;
   const old = engFile();
   if (!await ask({ title: `Save the engineering file of ${esc(camName(cam))}?`, ok: old ? 'Replace' : 'Save', danger: !!old, body: `
-    <p>Reads the system setup of this camera: format, OSD mix, tally, pan/tilt, presets, power-on position, fans and IP video. <b>Initialize</b> then puts it on the cameras you tick.</p>
+    <p>Reads the system setup of this camera: format, OSD mix, tally, pan/tilt, presets, power-on position, fans and IP video. <b>Initialize</b> then puts it on the cameras you select.</p>
     <ul class="tight"><li>White balance per scene is not included: that is part of the scene files.</li>
     ${old ? `<li><span class="warn-text">Replaces the engineering file</span> saved ${new Date(old.savedAt).toLocaleString('en-GB')} from ${esc(old.fromName || old.fromIp)}.</li>` : ''}
     <li>Reading changes nothing on the camera.</li></ul>` })) return;
@@ -2330,7 +2380,7 @@ async function saveEngFile(cam) {
 async function initializeCams(cams) {
   if (!cams.length) return;
   const ef = engFile();
-  if (!ef) return info('No engineering file yet', 'Tick one camera that is set up the way you want and choose <b>Save engineering file…</b>, or open an engineering file on the Restore page.');
+  if (!ef) return info('No engineering file yet', 'Select one camera that is set up the way you want and choose <b>Save engineering file…</b>, or open an engineering file on the Restore page.');
   const v = engOnly(ef.values);
   if (!await ask({ title: `Put the engineering file on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Initialize', danger: true, wide: true, body: `
     <p>From ${esc(ef.fromName || ef.fromIp || 'a file')}${ef.model ? ` (${esc(ef.model)})` : ''}, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}.</p>
@@ -2353,7 +2403,7 @@ function renderEngFile() {
 const renderDefaults = renderEngFile;
 async function exportEngFile() {
   const ef = engFile();
-  if (!ef) return info('No engineering file yet', 'Make one on the Engineering page: tick one camera and choose <b>Save engineering file…</b>.');
+  if (!ef) return info('No engineering file yet', 'Make one on the Engineering page: select one camera and choose <b>Save engineering file…</b>.');
   const name = `Engineering file ${ef.fromName ? ef.fromName.replace(/[^A-Za-z0-9._ -]+/g, '_') + ' ' : ''}${today()}.json`;
   if (!await ask({ title: 'Back up the engineering file?', ok: 'Back up', wide: true, body: `
     <p>From ${esc(ef.fromName || ef.fromIp || '')}${ef.model ? ` (${esc(ef.model)})` : ''}, saved ${new Date(ef.savedAt).toLocaleString('en-GB')}.</p>
@@ -2364,36 +2414,23 @@ async function exportEngFile() {
   $('#expResult').innerHTML = `<div class="note ok"><b>Engineering file</b><br>${Object.keys(ef.values).length} settings saved in ${esc(name)}</div>`;
   log(`Engineering file saved: ${name}`);
 }
-async function importEngFile(data) {
+// An opened engineering file becomes the one Initialize uses (Engineering page)
+async function useEngFile(data, quiet) {
   const values = engOnly(data.values || {});
   if (!Object.keys(values).length) return info('Empty engineering file', 'This file holds no settings.');
   const old = engFile();
-  if (!await ask({ title: 'Use this engineering file?', ok: 'Use it', danger: !!old, wide: true, body: `
-    <p>From ${esc(data.fromName || data.fromIp || 'a file')}${data.model ? ` (${esc(data.model)})` : ''}, saved ${data.savedAt ? new Date(data.savedAt).toLocaleString('en-GB') : '?'}.</p>
+  if (!quiet && old && !await ask({ title: 'Use this file for Initialize?', ok: 'Use it', danger: true, wide: true, body: `
     <div class="setup-sum">${engSummary(values)}</div>
-    ${old ? `<p class="warn-text">Replaces the engineering file from ${esc(old.fromName || old.fromIp || '')}, saved ${new Date(old.savedAt).toLocaleString('en-GB')}.</p>` : ''}
-    <p>Next you can put it on cameras: you are asked which ones.</p>` })) return;
+    <p class="warn-text">Replaces the engineering file from ${esc(old.fromName || old.fromIp || '')}, saved ${new Date(old.savedAt).toLocaleString('en-GB')}.</p>` })) return;
   const ef = { values, savedAt: data.savedAt || new Date().toISOString(), fromIp: data.fromIp || '', fromName: data.fromName || '', model: data.model || '' };
   store.set('engFile', ef); renderEngFile(); expKindUi();
-  pushHistory({ label: 'Open engineering file', undo: () => { store.set('engFile', old); renderEngFile(); }, redo: () => { store.set('engFile', ef); renderEngFile(); } });
-  log(`Engineering file opened: ${Object.keys(values).length} settings`);
-  await pickAndInitialize();
-}
-// After opening an engineering file on the Restore page: choose the cameras that get it
-async function pickAndInitialize() {
-  if (!state.cameras.length) return toast('Engineering file loaded');
-  const ok = await ask({ title: 'Put the engineering file on cameras now?', ok: 'Next', cancel: 'Not now', body: `<p>Tick the cameras that should get it.</p><div class="checklist-cams">${state.cameras.map(c => `<label class="check"><input type="checkbox" data-ini="${esc(c.ip)}" ${c.selected ? 'checked' : ''}> ${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></label>`).join('')}</div>` });
-  if (!ok) return toast('Engineering file loaded. Use Initialize on the Engineering page.');
-  const ips = new Set($$('#askDlg [data-ini]:checked').map(i => i.dataset.ini));
-  const cams = state.cameras.filter(c => ips.has(c.ip));
-  if (!cams.length) return;
-  $('[role=tab][data-tab=eng]').click();
-  return initializeCams(cams);
+  pushHistory({ label: 'Use engineering file', undo: () => { store.set('engFile', old); renderEngFile(); }, redo: () => { store.set('engFile', ef); renderEngFile(); } });
+  toast(`Engineering file from ${ef.fromName || ef.fromIp || 'the file'} is used for Initialize`);
 }
 
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 $('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
-// Edit a saved show: its scenes go back into the grid (as opened files), its cameras are ticked.
+// Edit a saved show: its scenes go back into the grid (as opened files), its cameras are selected.
 function editShow(sh) {
   for (const it of sh.items) if (!state.cameras.some(c => c.ip === it.target)) upsertCam(it.target, it.port, { title: it.targetTitle });
   state.sources = state.sources.filter(x => !x.fromShow);
@@ -2403,7 +2440,7 @@ function editShow(sh) {
     const src = { id: ++srcId, fileName: it.fileName || sh.name, file: it.file, sceneIdx: it.sceneIdx, kind: it.kind, fromShow: true };
     state.sources.push(src);
     const cam = state.cameras.find(c => c.ip === it.target);
-    const col = it.kind === 'operator' ? 'op' : it.targetScene === 'active' ? (cam?.scene ? String(cam.scene) : null) : String(it.targetScene);
+    const col = it.kind === 'operator' ? 'op' : it.kind === 'engineering' ? 'eng' : it.targetScene === 'active' ? (cam?.scene ? String(cam.scene) : null) : String(it.targetScene);
     if (!col) { skipped.push(it); continue; }
     (state.grid[it.target] = state.grid[it.target] || {})[col] = src.id;
   }
@@ -2425,9 +2462,9 @@ function endGridEdit() {
 $('#gridAuto').onclick = () => {
   let n = 0;
   for (const c of state.cameras.filter(x => state.gridCams.has(x.ip))) for (const src of state.sources) {
-    if (src.file.camera?.ip !== c.ip) continue;
-    const k = src.kind === 'operator' ? 'op' : String(src.file.scenes[src.sceneIdx].scene);
-    if (k !== 'op' && +k > (c.model ? profileFor(c.model).scenes : 4)) continue;
+    if ((src.file.camera?.ip || src.file.fromIp) !== c.ip) continue;
+    const k = src.kind === 'operator' ? 'op' : src.kind === 'engineering' ? 'eng' : String(src.file.scenes[src.sceneIdx].scene);
+    if (src.kind === 'scene' && +k > (c.model ? profileFor(c.model).scenes : 4)) continue;
     state.grid[c.ip] = state.grid[c.ip] || {}; state.grid[c.ip][k] = src.id; n++;
   }
   renderGrid(); toast(n ? `${n} cell${n === 1 ? '' : 's'} filled` : 'No opened file comes from these cameras');
@@ -2436,19 +2473,19 @@ $('#gridSave').onclick = async () => {
   const items = gridItems();
   if (!items.length) return info('Nothing chosen', 'Choose a scene in at least one cell.');
   const name = $('#gridName').value.trim() || `Show ${new Date().toLocaleDateString('en-GB')}`;
-  items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || (a.kind === 'operator') - (b.kind === 'operator') || String(a.targetScene).localeCompare(String(b.targetScene), 'en', { numeric: true }));
+  items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || kindRank(a) - kindRank(b) || String(a.targetScene).localeCompare(String(b.targetScene), 'en', { numeric: true }));
   const ed = state.gridEdit && state.shows.includes(state.gridEdit) ? state.gridEdit : null;
   if (ed) {
     // what changes: per camera and scene, the old and the new content
-    const key = it => `${it.target}|${it.kind === 'operator' ? 'op' : it.targetScene}`;
-    const what = it => it ? `${it.kind === 'operator' ? 'operator file' : 'scene ' + (it.file.scenes?.[it.sceneIdx]?.scene ?? '?')} from ${it.file.camera?.title || it.file.camera?.model || it.file.camera?.ip || 'file'}` : '';
+    const key = it => `${it.target}|${it.kind === 'operator' ? 'op' : it.kind === 'engineering' ? 'eng' : it.targetScene}`;
+    const what = it => it ? `${it.kind === 'operator' ? 'operator file' : it.kind === 'engineering' ? 'engineering file' : 'scene ' + (it.file.scenes?.[it.sceneIdx]?.scene ?? '?')} from ${it.file.camera?.title || it.file.camera?.model || it.file.camera?.ip || it.file.fromName || 'file'}` : '';
     const olds = new Map(ed.items.map(it => [key(it), it])), news = new Map(items.map(it => [key(it), it]));
     const rows = [];
     for (const k of new Set([...olds.keys(), ...news.keys()])) {
       const o = olds.get(k), n = news.get(k);
       if (o && n && o.file === n.file && o.sceneIdx === n.sceneIdx) continue;
       const [ip, col] = k.split('|'), c = state.cameras.find(x => x.ip === ip);
-      rows.push(`<tr><td>${esc(c ? camName(c) : (o || n).targetTitle || ip)} <span class="mono muted small">${esc(ip)}</span></td><td>${col === 'op' ? 'Operator file' : 'Scene ' + esc(col)}</td><td>${o ? esc(what(o)) : '<span class="muted">empty</span>'}</td><td>${n ? esc(what(n)) : '<span class="muted">removed</span>'}</td></tr>`);
+      rows.push(`<tr><td>${esc(c ? camName(c) : (o || n).targetTitle || ip)} <span class="mono muted small">${esc(ip)}</span></td><td>${col === 'op' ? 'Operator file' : col === 'eng' ? 'Engineering file' : 'Scene ' + esc(col)}</td><td>${o ? esc(what(o)) : '<span class="muted">empty</span>'}</td><td>${n ? esc(what(n)) : '<span class="muted">removed</span>'}</td></tr>`);
     }
     const renamed = name !== ed.name;
     if (!rows.length && !renamed) { info('Nothing changed', 'The show is the same as before.'); return; }
@@ -2490,7 +2527,7 @@ $('#showNew').onclick = async () => {
         <div class="ns-scenes" id="nsScenes">${Array.from({ length: maxSc }, (_, i) => `<label class="check"><input type="checkbox" value="${i + 1}"> Scene ${i + 1}</label>`).join('')}</div>
       </div>
       <label class="check"><input type="checkbox" id="nsOper"> Operator files</label></div>
-    <p class="hint">The app reads the current settings of these cameras now and stores them in the show. Recalling the show later puts each scene back in the same scene number on the same camera.</p>` });
+    <p class="hint">The app reads the current settings of these cameras now and stores them in the show. Recalling the show later puts each scene back in the same scene number on the same camera. To add an engineering file, edit the show afterwards: the grid has a column for it.</p>` });
   const nsBox = c => $(`[data-ns="${state.cameras.indexOf(c)}"]`);
   const nsSel = { get: c => !!nsBox(c)?.checked, set: (c, on) => { nsBox(c).checked = on; }, done: () => nsRender() };
   let nsAllCb = null;
@@ -2504,9 +2541,9 @@ $('#showNew').onclick = async () => {
   const cams = $$('[data-ns]').filter(x => x.checked).map(x => state.cameras[+x.dataset.ns]);
   const wantScene = $('#nsScene').checked, wantOper = $('#nsOper').checked;
   const mode = $('input[name=nsMode]:checked').value, picked = $$('#nsScenes input:checked').map(x => +x.value);
-  if (!cams.length) return info('No cameras chosen', 'Tick at least one camera.');
-  if (!wantScene && !wantOper) return info('Nothing to save', 'Tick scene files, operator files or both.');
-  if (wantScene && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Tick the scenes to put in the show.');
+  if (!cams.length) return info('No cameras chosen', 'Select at least one camera.');
+  if (!wantScene && !wantOper) return info('Nothing to save', 'Select scene files, operator files or both.');
+  if (wantScene && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Select the scenes to put in the show.');
   if (wantScene && mode === 'pick' && !await ask({ title: 'The picture will change', danger: true, ok: 'Switch scenes and read',
     body: `<p>To read scene ${picked.join(', ')} the cameras have to switch to ${picked.length > 1 ? 'each of those scenes' : 'that scene'}. Afterwards every camera returns to the scene it was on. Do not do this while a camera is on air.</p>` })) return;
   if (!state.bridgeOk && !(await checkBridge())) return;
@@ -2537,7 +2574,7 @@ $('#showNew').onclick = async () => {
     cam.busy = false; renderCams();
   }));
   if (!items.length) return info('Show not saved', 'No camera could be read.');
-  items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || (a.kind === 'operator') - (b.kind === 'operator') || String(a.targetScene).localeCompare(String(b.targetScene)));
+  items.sort((a, b) => ipNum(a.target) - ipNum(b.target) || kindRank(a) - kindRank(b) || String(a.targetScene).localeCompare(String(b.targetScene)));
   const show = { format: SHOW_ID, version: 1, name, created: new Date().toISOString(), items };
   addShow(show);
   if (!fails.length) setTimeout(() => out.classList.add('hidden'), 6000);
@@ -2630,7 +2667,7 @@ $('#eipSearch').onclick = eipDiscover;
 $('#eipSelAll').onchange = () => { selAllClick($('#eipSelAll'), state.eip, r => r.sel, (r, v) => r.sel = v); renderEip(); };
 $('#eipFill').onclick = () => {
   const sel = state.eip.filter(r => r.sel);
-  if (!sel.length) return info('Select cameras first', 'Tick the cameras you want to give new settings.');
+  if (!sel.length) return info('Select cameras first', 'Select the cameras you want to give new settings.');
   const start = $('#eipStart').value.trim(), mask = $('#eipMask').value.trim(), gw = $('#eipGw').value.trim();
   if (start && !validIp(start, true)) return info('Invalid first IP address', esc(start));
   let n = start ? ipNum(start) : null;
@@ -2777,7 +2814,7 @@ async function applyNet(list, opts = {}) {
 }
 $('#eipDelSel').onclick = () => {
   const n = state.eip.filter(r => r.sel).length;
-  if (!n) return info('Select cameras first', 'Tick the cameras you want to remove from this list. Search again to bring them back.');
+  if (!n) return info('Select cameras first', 'Select the cameras you want to remove from this list. Search again to bring them back.');
   state.eip = state.eip.filter(r => !r.sel); renderEip();
 };
 $('#eipToList').onclick = () => {
@@ -2884,10 +2921,10 @@ async function engClick(btn) {
     kind = 'awbMem';
   }
   const cams = engCams();
-  if (kind === 'init') { if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page.'); return initializeCams(cams); }
-  if (kind === 'defsave') { if (cams.length !== 1) return info('Choose one camera', 'Save engineering file reads the setup of one camera. Tick only that camera.'); return saveEngFile(cams[0]); }
+  if (kind === 'init') { if (!cams.length) return info('Choose cameras first', 'Select the cameras at the top of this page.'); return initializeCams(cams); }
+  if (kind === 'defsave') { if (cams.length !== 1) return info('Choose one camera', 'Save engineering file reads the setup of one camera. Select only that camera.'); return saveEngFile(cams[0]); }
   const a = ENG[kind]; if (!a) return;
-  if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
+  if (!cams.length) return info('Choose cameras first', 'Select the cameras at the top of this page, or use a zone.');
   if (!state.bridgeOk && !(await checkBridge())) return;
   const chk = a.check?.(); if (chk && chk !== true) return info('Check the value', esc(chk));
   const label = a.label(v, btn);
@@ -2947,16 +2984,29 @@ const SETUP = [
   ...[1, 2, 3, 4].map(n => ({ g: 'White balance per scene', k: 'wb' + n, l: `Scene ${n}`, wb: n, o: SCENE_WB_OPTS.slice(1) })),
 ];
 const setupVal = () => store.get('engSetup', {});
-const setupLabel = (f, v) => f.format ? (() => { const [fr, fm] = v.split('|'); const F = FREQS.find(x => x[0] === fr); return `${F?.[1]} ${F?.[2].find(x => x[0] === fm)?.[1] || ''}`; })() : f.wb && v === 'var' ? `VAR ${setupVal()['k' + f.wb] || ''} K` : (f.o.find(x => x[0] === v)?.[1] || v);
-function renderSetup() {
-  const v = setupVal();
-  const groups = [...new Set(SETUP.map(f => f.g))];
+const setupLabel = (f, v) => f.format ? (() => { const [fr, fm] = v.split('|'); const F = FREQS.find(x => x[0] === fr); return `${F?.[1]} ${F?.[2].find(x => x[0] === fm)?.[1] || ''}`; })() : f.wb && v === 'var' ? `VAR ${wbVal()['k' + f.wb] || ''} K` : (f.o.find(x => x[0] === v)?.[1] || v);
+const wbVal = () => store.get('engWbScenes', {});
+const isWbKey = k => /^(wb|k)\d$/.test(k);
+// earlier versions kept the white balance per scene in the setup form: move it to its own place
+(() => { const v = setupVal(), w = wbVal(), moved = Object.keys(v).filter(isWbKey); if (moved.length) { moved.forEach(k => { if (!(k in w)) w[k] = v[k]; delete v[k]; }); store.set('engSetup', v); store.set('engWbScenes', w); } })();
+function setupFieldsHtml(fields, v) {
+  const groups = [...new Set(fields.map(f => f.g))];
   const sel = f => f.format
     ? `<select data-k="${f.k}" aria-label="${esc(f.l)}"><option value="">–</option>${FREQS.map(([fr, fl, list]) => `<optgroup label="${fl}">${list.map(([fm, l]) => `<option value="${fr}|${fm}" ${v[f.k] === fr + '|' + fm ? 'selected' : ''}>${fl} · ${l}</option>`).join('')}</optgroup>`).join('')}</select>`
     : `<select data-k="${f.k}" aria-label="${esc(f.l)}"><option value="">–</option>${f.o.map(([k, l]) => `<option value="${k}" ${v[f.k] === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-  $('#setupForm').innerHTML = groups.map(g => `<div class="setup-group"><h3>${esc(g)}</h3>${SETUP.filter(f => f.g === g).map(f => `<label class="setup-row${v[f.k] ? ' set' : ''}"><span>${esc(f.l)}</span>${sel(f)}${f.wb ? `<span class="kfield${v[f.k] === 'var' ? '' : ' hidden'}"><input type="number" data-k="k${f.wb}" min="2000" max="15000" step="10" value="${esc(v['k' + f.wb] || '')}" placeholder="5600" aria-label="VAR colour temperature of scene ${f.wb}"><span>K</span></span>` : ''}</label>`).join('')}</div>`).join('');
-  $$('#setupForm [data-k]').forEach(el => el.onchange = () => { const t = setupVal(); if (el.value.trim()) t[el.dataset.k] = el.value.trim(); else delete t[el.dataset.k]; store.set('engSetup', t); renderSetup(); });
-  const n = SETUP.filter(f => v[f.k]).length;
+  const row = f => `<label class="setup-row${v[f.k] ? ' set' : ''}"><span>${esc(f.l)}</span>${sel(f)}${f.wb ? `<span class="kfield${v[f.k] === 'var' ? '' : ' hidden'}"><input type="number" data-k="k${f.wb}" min="2000" max="15000" step="10" value="${esc(v['k' + f.wb] || '')}" placeholder="5600" aria-label="VAR colour temperature of scene ${f.wb}"><span>K</span></span>` : ''}</label>`;
+  return groups.length === 1 && fields[0].wb ? fields.map(row).join('') : groups.map(g => `<div class="setup-group"><h3>${esc(g)}</h3>${fields.filter(f => f.g === g).map(row).join('')}</div>`).join('');
+}
+function renderSetup() {
+  const v = setupVal(), w = wbVal();
+  $('#setupForm').innerHTML = setupFieldsHtml(SETUP.filter(f => !f.wb), v);
+  $('#wbSceneForm').innerHTML = setupFieldsHtml(SETUP.filter(f => f.wb), w);
+  $$('#setupForm [data-k], #wbSceneForm [data-k]').forEach(el => el.onchange = () => {
+    const key = isWbKey(el.dataset.k) ? 'engWbScenes' : 'engSetup', t = store.get(key, {});
+    if (el.value.trim()) t[el.dataset.k] = el.value.trim(); else delete t[el.dataset.k];
+    store.set(key, t); renderSetup();
+  });
+  const n = SETUP.filter(f => !f.wb && v[f.k]).length;
   $('#setupStatus').textContent = n ? `${n} setting${n > 1 ? 's' : ''} chosen` : 'Nothing chosen yet';
 }
 $('#setupClear').onclick = () => { store.set('engSetup', {}); renderSetup(); };
@@ -2995,13 +3045,13 @@ $('#setupRead').onclick = async () => {
   if (!state.cameras.length) return info('No cameras yet', 'Add cameras on the Cameras page first.');
   const first = engCams()[0] || state.cameras[0];
   const ok = await ask({ title: 'Read the setup of a camera', ok: 'Read', body: `<label>Camera <select id="srCam">${state.cameras.map(c => `<option value="${esc(c.ip)}" ${c === first ? 'selected' : ''}>${esc(camName(c))} – ${esc(c.ip)}</option>`).join('')}</select></label>
-    <label class="check"><input type="checkbox" id="srScenes" checked> Also read the white balance of scenes 1 to 4 <span class="muted">(the camera switches to each scene for a moment, then back)</span></label>
-    <p class="hint">The form gets the camera's current values; nothing changes on the camera${''}. Then tick the cameras that should get the same and choose Apply.</p>` });
+    <label class="check"><input type="checkbox" id="srScenes"> Also read the white balance of scenes 1 to 4 into <b>White balance per scene</b> <span class="muted">(the camera switches to each scene for a moment, then back)</span></label>
+    <p class="hint">The form gets the camera's current values; nothing changes on the camera${''}. Then select the cameras that should get the same and choose Apply.</p>` });
   if (!ok) return;
   const c = state.cameras.find(x => x.ip === $('#srCam').value), withScenes = $('#srScenes').checked;
   if (!state.bridgeOk && !(await checkBridge())) return;
   $('#setupStatus').textContent = `Reading ${camName(c)}…`;
-  try { const got = await readSetup(c, withScenes); store.set('engSetup', got); renderSetup(); toast(`Setup of ${camName(c)} read: ${Object.keys(got).filter(k => !/^k\d$/.test(k)).length} settings`); }
+  try { const got = await readSetup(c, withScenes); store.set('engSetup', Object.fromEntries(Object.entries(got).filter(([k]) => !isWbKey(k)))); if (withScenes) store.set('engWbScenes', Object.fromEntries(Object.entries(got).filter(([k]) => isWbKey(k)))); renderSetup(); toast(`Setup of ${camName(c)} read: ${Object.keys(got).filter(k => !/^k\d$/.test(k)).length} settings`); }
   catch (e) { info('Could not read the camera', esc(e.message)); renderSetup(); }
 };
 // Frequency changes make the camera restart: wait until it is gone and back with the new frequency
@@ -3016,10 +3066,10 @@ async function waitRestart(c, check, progress) {
   return false;
 }
 $('#setupApply').onclick = async () => {
-  const v = setupVal(), cams = engCams();
+  const v = Object.fromEntries(Object.entries(setupVal()).filter(([k]) => !isWbKey(k))), cams = engCams();
   const plan = SETUP.filter(f => v[f.k]);
   if (!plan.length) return info('Nothing chosen yet', 'Choose at least one setting, or read the setup of a camera first.');
-  if (!cams.length) return info('Choose cameras first', 'Tick the cameras at the top of this page, or use a zone.');
+  if (!cams.length) return info('Choose cameras first', 'Select the cameras at the top of this page, or use a zone.');
   const badK = plan.find(f => f.wb && v[f.k] === 'var' && !validK(+v['k' + f.wb]));
   if (badK) return info('Check the colour temperature', `${esc(badK.l)} is set to VAR: fill in a colour temperature from 2000 to 15000 K.`);
   const freq = v.format?.split('|')[0];
@@ -3031,6 +3081,20 @@ $('#setupApply').onclick = async () => {
       <p class="muted small">Only settings that differ are sent; every value is read back afterwards. ${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
   if (!state.bridgeOk && !(await checkBridge())) return;
   await runSetup(cams, v, 'Setup');
+};
+$('#wbSceneApply').onclick = async () => {
+  const w = wbVal(), cams = engCams(), plan = SETUP.filter(f => f.wb && w[f.k]);
+  if (!plan.length) return info('Nothing chosen yet', 'Choose the white balance of at least one scene.');
+  if (!cams.length) return info('Choose cameras first', 'Select the cameras at the top of this page, or use a zone.');
+  const badK = plan.find(f => w[f.k] === 'var' && !validK(+w['k' + f.wb]));
+  if (badK) return info('Check the colour temperature', `${esc(badK.l)} is set to VAR: fill in a colour temperature from 2000 to 15000 K.`);
+  if (!await ask({ title: `White balance of ${plan.length} scene${plan.length > 1 ? 's' : ''} on ${cams.length} camera${cams.length > 1 ? 's' : ''}?`, ok: 'Apply', danger: true, body: `
+    <p>${plan.map(f => `${esc(f.l)}: ${esc(setupLabel(f, w[f.k]))}`).join('<br>')}</p>
+    <p>Every camera switches to those scenes one by one and then goes back to the scene that was live.</p>
+    <p class="muted small">${cams.map(c => esc(camName(c))).join(', ')}</p>` })) return;
+  if (!state.bridgeOk && !(await checkBridge())) return;
+  const v = {}; plan.forEach(f => { v[f.k] = w[f.k]; if (w[f.k] === 'var') v['k' + f.wb] = w['k' + f.wb]; });
+  await runSetup(cams, v, 'White balance per scene');
 };
 async function runSetup(cams, v, title) {
   $('#tab-eng').classList.add('busy'); $('#engResultTitle').textContent = title;
@@ -3213,13 +3277,13 @@ $('#rpBulkPaste').onclick = async () => {
 };
 $('#rpDelSel').onclick = () => {
   const n = state.rp.filter(r => r.sel).length;
-  if (!n) return info('Select rows first', 'Tick the rows you want to remove.');
+  if (!n) return info('Select rows first', 'Select the rows you want to remove.');
   track(`Remove ${n} row(s)`, () => { state.rp = state.rp.filter(r => !r.sel); });
   saveRp(); renderRp(); if (s15.a) analyzeS15();
 };
 $('#rpEditSel').onclick = async () => {
   const sel = state.rp.filter(r => r.sel);
-  if (!sel.length) return info('Select rows first', 'Tick the rows you want to edit.');
+  if (!sel.length) return info('Select rows first', 'Select the rows you want to edit.');
   const ok = await ask({ title: `Edit ${sel.length} row${sel.length > 1 ? 's' : ''}`, ok: 'Apply', body: `<div class="row wrap">
     <label class="w140">First CAM number <input id="edCam" type="number" min="1" max="200" placeholder="keep"></label>
     <label class="w90">Port <input id="edPort" type="number" placeholder="keep"></label>
@@ -3653,7 +3717,7 @@ function renderLiveScenes() {
     if (r?.ok && !isErr(r.body)) { cam.scene = +b.dataset.scene; $$('button', box).forEach(x => x.classList.toggle('on', x === b)); renderCams(); }
   });
 }
-// presets: 12 per page, click to recall; with Store ticked, click saves the current position
+// presets: 12 per page, click to recall; with Store selected, click saves the current position
 const PRESETS_PER_PAGE = 12;
 $('#presetPage').innerHTML = Array.from({ length: Math.ceil(100 / PRESETS_PER_PAGE) }, (_, i) => `<option value="${i}">${i * PRESETS_PER_PAGE + 1}–${Math.min(100, (i + 1) * PRESETS_PER_PAGE)}</option>`).join('');
 $('#presetPage').value = store.get('presetPage', 0);
@@ -3706,7 +3770,7 @@ document.addEventListener('keyup', e => {
 });
 
 /* ------------------------------------------------------------------ init */
-renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo(); renderEngFile();
+renderCams(); renderRp(); renderParamTab(); renderOperatorTab(); renderExport(); renderImports(); renderShows(); renderScript(); renderEip(); updUndo(); renderEngFile(); renderEngfTab();
 checkBridge().then(() => loadSaveDir());
 
 
@@ -3758,7 +3822,6 @@ function applyExpert() {
   document.body.classList.toggle('expert', on);
 }
 applyExpert();
-$('#camWelcomeBtn').onclick = () => camSearch();
 
 // Settings > About: the mail link opens the mail app through the app (a mailto link does nothing inside the app window)
 document.addEventListener('click', e => { const a = e.target.closest('a[href^="mailto:"]'); if (!a) return; e.preventDefault(); bridgeFetch('/api/mail_developer', {}).catch(() => toast('Mail to seppe@vanaken.be')); });
