@@ -1548,9 +1548,11 @@ $('#addJobBtn').onclick = () => {
 };
 
 function renderImports() {
+  syncSavedEngSource();
   renderGrid();
   // step 1: list of opened scenes
-  $('#srcList').innerHTML = srcSorted().filter(x => !x.fromShow && !x.savedEng && !x.savedBase).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${srcSorted().filter(x => !x.fromShow && !x.savedEng && !x.savedBase).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' ? `<button class="ghost small" data-enguse="${s.id}" title="Use this file as the engineering file (the card below)">Use as engineering file</button> ` : ''}<button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $('#srcList').innerHTML = srcSorted().filter(x => !x.fromShow && !x.savedBase).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${srcSorted().filter(x => !x.fromShow && !x.savedBase).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' && !s.savedEng ? `<button class="ghost small" data-enguse="${s.id}" title="Make this the engineering file on the Engineering page (to back it up, or to start from in the setup form)">Use as engineering file</button> ` : ''}${s.savedEng ? `<button class="ghost small" data-engadd="${s.id}" title="Add a row below to put it on a camera">Add to the list</button>` : `<button class="icon" data-src="${s.id}" aria-label="Remove">×</button>`}</td></tr>`).join('')}</tbody></table>` : '';
+  $$('#srcList [data-engadd]').forEach(b => b.onclick = () => { const id = +b.dataset.engadd; track('Add engineering file', () => { state.jobs.push({ id: ++jobId, srcId: id, target: '', targetScene: '', include: true }); }); renderImports(); });
   $$('#srcList [data-enguse]').forEach(b => b.onclick = () => { const sr = srcById(b.dataset.enguse); if (sr) useEngFile(sr.file); });
   renderIniCams();
   $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
@@ -1892,7 +1894,7 @@ function renderEngfTab() {
   gsel.innerHTML = '<option value="">All groups</option>' + groups.map(x => `<option ${x === g ? 'selected' : ''}>${esc(x)}</option>`).join('');
   const list = rows.filter(r => (!g || r.g === g) && words.every(w => (r.name + ' ' + r.set + ' ' + r.q + ' ' + r.g).toLowerCase().includes(w)));
   $('#engfCount').textContent = list.length;
-  $('#engfInfo').textContent = `${rows.length} settings go into an engineering file: the system setup of a camera, made on the Engineering page (Read from a camera…, then Save as engineering file) and put on cameras with Put on cameras… on the Restore page. White balance per scene is not included; that is part of the scene files. A camera skips whatever its model does not support.`;
+  $('#engfInfo').textContent = `${rows.length} settings go into an engineering file: the system setup of a camera, made on the Engineering page (Read from a camera…, then Save as engineering file) and put on cameras from the Restore page, like a scene or operator file. White balance per scene is not included; that is part of the scene files. A camera skips whatever its model does not support.`;
   $('#engfTable tbody').innerHTML = list.map(r => `<tr><td class="grp">${esc(r.g)}</td><td>${esc(r.name)}</td><td class="mono">${esc(r.set)}</td><td class="mono">${esc(r.q)}</td><td class="small muted">${esc(r.vals)}</td></tr>`).join('');
 }
 $('#engfGroup').onchange = renderEngfTab;
@@ -2409,7 +2411,7 @@ async function saveEngFile(cam) {
   if (!state.bridgeOk && !(await checkBridge())) return;
   const old = engFile();
   if (!await ask({ title: `Save the engineering file of ${esc(camName(cam))}?`, ok: old ? 'Replace' : 'Save', danger: !!old, body: `
-    <p>Reads the system setup of this camera: format, OSD mix, tally, pan/tilt, presets, power-on position, fans and IP video. On the Restore page, <b>Put on cameras…</b> then puts it on the cameras you choose.</p>
+    <p>Reads the system setup of this camera: format, OSD mix, tally, pan/tilt, presets, power-on position, fans and IP video. On the Restore page it then goes on the cameras you choose, like a scene or operator file.</p>
     <ul class="tight"><li>White balance per scene is not included: that is part of the scene files.</li>
     ${old ? `<li><span class="warn-text">Replaces the engineering file</span> saved ${new Date(old.savedAt).toLocaleString('en-GB')} from ${esc(old.fromName || old.fromIp)}.</li>` : ''}
     <li>Reading changes nothing on the camera.</li></ul>` })) return;
@@ -2424,8 +2426,8 @@ async function saveEngFile(cam) {
     log(`Engineering file saved from ${cam.ip}: ${Object.keys(values).length} settings`);
   } catch (e) { $('#engStatus').textContent = ''; info('Could not read the camera', esc(e.message)); }
 }
-// Restore page, "Initialize and engineering file": the cameras are chosen on the card itself (zones, Select all),
-// then Initialize puts the base scene on scenes 1-4, or the engineering file goes on them. Both run like any restore.
+// Restore page, Initialize: the cameras are chosen on the card itself (zones, Select all), then the standard scene
+// files go on scenes 1-4. An engineering file goes on cameras through the list below it, like a scene or operator file.
 const iniSet = () => new Set(store.get('iniCams', []));
 function renderIniCams() {
   const box = $('#iniCams'); if (!box) return;
@@ -2440,16 +2442,6 @@ function renderIniCams() {
   zoneChips($('#iniZones'), sel, 'Zone');
 }
 const iniChosen = () => { const on = iniSet(); return camsOnly().filter(c => on.has(c.ip)); };
-async function initializeCams() { // engineering file on the chosen cameras
-  const ef = engFile();
-  if (!ef) return info('No engineering file yet', 'Make one on the Engineering page: <b>Read from a camera…</b>, then <b>Save as engineering file</b>. Or open an engineering file on this page.');
-  const cams = iniChosen(); if (!cams.length) return info('Choose cameras first', 'Tick the cameras on this card, or click a zone.');
-  syncSavedEngSource();
-  const src = state.sources.find(x => x.savedEng);
-  const jobs = cams.map(c => ({ id: ++jobId, srcId: src.id, target: c.ip, targetScene: '', include: true }));
-  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false, okLabel: 'Put on cameras' }, `Put the engineering file on ${cams.length} camera${cams.length > 1 ? 's' : ''}?${ef.values.format ? ' A camera that gets another frequency restarts.' : ''}`);
-}
-$('#engInitBtn').onclick = () => initializeCams();
 // Initialize: the standard scene files built into the app (base-scenes.js), per family and scene number
 const baseFor = c => (window.BASE_SCENES || {})[profileFor(c.model).fam] || null;
 function renderBase() {

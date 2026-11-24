@@ -143,23 +143,13 @@
     <div id="srcList"></div>
   </div>
   <div class="card" id="engInitCard">
-    <h2>Initialize and engineering file</h2>
-    <p class="hint">Choose the cameras here, then one of the two actions below.</p>
+    <div class="row between wrap"><h2>Initialize</h2><button id="iniBtn" title="Put the standard scene files on scenes 1 to 4 of the chosen cameras">Initialize…</button></div>
+    <p class="hint">Puts the standard shading (gain, detail, matrix, gamma, white balance…) on scenes 1 to 4 of the chosen cameras, the same on every camera. Everything else (engineering and operator settings) stays as it is. <span id="baseInfo"></span></p>
     <div class="zonebar" id="iniZones"></div>
     <div class="row wrap ini-cams" id="iniCams"></div>
-    <div class="ini-act">
-      <div class="row between wrap"><h3>Initialize</h3><button id="iniBtn" title="Put the standard scene files on scenes 1 to 4 of the chosen cameras">Initialize…</button></div>
-      <p class="small" id="baseInfo"></p>
-      <p class="hint">Puts the standard shading (gain, detail, matrix, gamma, white balance…) on scenes 1 to 4 of the chosen cameras, the same on every camera. Everything else (engineering and operator settings) stays as it is.</p>
-    </div>
-    <div class="ini-act">
-      <div class="row between wrap"><h3>Engineering file</h3><button id="engInitBtn" title="Put the engineering file on the chosen cameras">Put on cameras…</button></div>
-      <p class="small" id="engInitInfo"></p>
-      <p class="hint">The system setup of a camera: format, OIS, OSD mix, tally, pan/tilt, presets, fans and IP video. Make one on the Engineering page (<b>Read from a camera…</b>, then <b>Save as engineering file</b>), or open one above.</p>
-    </div>
   </div>
   <div class="card">
-    <div class="row between"><h2>What goes where <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ico" id="clearFilesBtn" title="Clear all: empty the list of files and destinations" aria-label="Clear all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/></svg></button></span></div>
+    <div class="row between"><h2>Scene, operator and engineering files <span class="count" id="impCount">0</span></h2><span class="row"><button class="ghost small" id="addJobBtn">Add destination</button><button class="ghost small" id="saveShowBtn">Save as show</button><button class="ico" id="clearFilesBtn" title="Clear all: empty the list of files and destinations" aria-label="Clear all"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l.8 10.5h7.4L14.5 6"/></svg></button></span></div>
     <div class="zonebar" id="impZones"></div>
     <div class="selbar hidden" id="impSelBar"><span class="seln"><b id="impSelN">0</b> selected</span>
       <span class="selgroup"><select id="impSelCam" aria-label="Camera"></select><select id="impSelScene" aria-label="Into scene"><option value="">Scene: keep</option><option value="active">Live scene</option><option value="1">Scene 1</option><option value="2">Scene 2</option><option value="3">Scene 3</option><option value="4">Scene 4</option><option value="5">Scene 5</option><option value="6">Scene 6</option><option value="7">Scene 7</option><option value="8">Scene 8</option></select><button class="ghost small" id="impSelApply">Apply</button></span>
@@ -524,7 +514,7 @@
     </section>
     <section class="setsec">
       <h4>Engineering file</h4>
-      <p class="hint">The system setup that the Restore page puts on your cameras (Put on cameras…). It is kept on this computer, not in a project. To take it to another computer, save it on the Back up page (Engineering file) and open that file on the Restore page.</p>
+      <p class="hint">The system setup that goes on your cameras from the Restore page (Scene, operator and engineering files). It is kept on this computer, not in a project. To take it to another computer, save it on the Back up page (Engineering file) and open that file on the Restore page.</p>
       <div id="defList"></div>
     </section>
     <section class="setsec">

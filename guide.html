@@ -190,16 +190,13 @@ td:first-child{color:var(--text)}
   <h3>Restore</h3>
   <ol>
     <li>Drop a back-up on the page or choose <span class="btn">Open files…</span>. Back-ups from this session are already listed.</li>
-    <li>Check <b>What goes where</b>: each file goes to the camera with the same IP address and into the same scene. Change the camera and scene per row; the zones select rows quickly.</li>
+    <li>Check <b>Scene, operator and engineering files</b>: each file goes to the camera with the same IP address and into the same scene. Change the camera and scene per row; the zones select rows quickly.</li>
     <li>Click <span class="btn p">Restore</span>. You first see what changes per camera.</li>
   </ol>
   <p>By default the current settings are saved first and every setting is read back afterwards. Undo takes a restore back. <b>Save as show</b> turns the rows into a show.</p>
-  <h3>Initialize and engineering file</h3>
-  <p>This block on the Restore page starts with the cameras: tick them, use <b>Select all</b>, or click a zone. Then choose one of the two actions. Both run like a restore: what changes first, a back-up, and a check afterwards.</p>
-  <ul>
-    <li><span class="btn">Initialize…</span> puts the <b>standard scene files</b> on scenes 1 to 4 of the chosen cameras: their shading (gain, detail, matrix, gamma, white balance…) is the same again on every camera. The engineering and operator settings stay as they are.</li>
-    <li><span class="btn">Put on cameras…</span> puts the <b>engineering file</b> (the system setup) on the chosen cameras. To take an engineering file to another computer, back it up and open the file here; <b>Use as engineering file</b> makes it the one in use.</li>
-  </ul>
+  <h3>Initialize</h3>
+  <p>The <b>Initialize</b> block starts with the cameras: tick them, use <b>Select all</b>, or click a zone. <span class="btn">Initialize…</span> then puts the <b>standard scene files</b> on scenes 1 to 4: their shading (gain, detail, matrix, gamma, white balance…) is the same again on every camera. The engineering and operator settings stay as they are. It runs like a restore: what changes first, a back-up, and a check afterwards.</p>
+  <p>The <b>engineering file</b> saved on the Engineering page is in the file list as well: <b>Add to the list</b> adds a row, then choose the cameras like for any other file.</p>
   <div class="tip">Shutter values depend on the frequency. A scene file from a camera at 50 Hz put on a camera at 59.94 Hz gets the nearest shutter value; the result explains it.</div>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>8</span></div>
 </section>
