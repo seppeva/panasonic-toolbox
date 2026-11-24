@@ -414,8 +414,8 @@ button.copied{color:#8fd19e}
 .kfield input{width:100%;min-width:0}
 .kfield span{color:var(--muted);font-size:12px}
 /* engineering */
-.eng-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white power" "white ois" "white tally";grid-template-rows:auto auto 1fr;gap:10px;margin-bottom:16px}
-.eng-tiles .e-white{grid-area:white}.eng-tiles .e-power{grid-area:power}.eng-tiles .e-ois{grid-area:ois}.eng-tiles .e-tally{grid-area:tally}
+.eng-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white power" "white ois" "white bars" "white tally" "status status";grid-template-rows:auto auto auto 1fr auto;gap:10px;margin-bottom:16px}
+.eng-tiles .e-white{grid-area:white}.eng-tiles .e-power{grid-area:power}.eng-tiles .e-ois{grid-area:ois}.eng-tiles .e-bars{grid-area:bars}.eng-tiles .e-status{grid-area:status}.eng-tiles .e-tally{grid-area:tally}
 .eng-tiles .live-block{margin:0}
 .eng-line{display:grid;grid-template-columns:80px repeat(3,minmax(0,1fr));gap:6px;align-items:center;margin-bottom:6px;font-size:12.5px;color:var(--muted)}
 .eng-tiles .hold-row{flex-wrap:wrap}
@@ -425,7 +425,7 @@ button.copied{color:#8fd19e}
 .eng-res td{vertical-align:top}
 .eng-res .raw{font-size:11.5px;color:var(--muted);word-break:break-all}
 
-@media (max-width:900px){.live-tiles{grid-template-areas:"white" "day" "black" "ois" "shoot" "nd" "scenes"}.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles{grid-template-areas:"power" "ois" "tally" "white";grid-template-rows:none}}
+@media (max-width:900px){.live-tiles{grid-template-areas:"white" "day" "black" "ois" "shoot" "nd" "scenes"}.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles{grid-template-areas:"power" "ois" "bars" "tally" "white" "status";grid-template-rows:none}}
 .eng-line button{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:32px;padding:0 6px;font-size:13px}
 .eng-line button:hover{background:#353a40}
 .eng-tiles button:active{background:var(--accent);border-color:var(--accent)}
@@ -579,3 +579,9 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .offline-cams{margin:12px 0 4px;border:1px solid var(--rule-soft);border-radius:8px;padding:8px 12px}
 .offline-cams summary{cursor:pointer;color:var(--muted);font-weight:600}
 .offline-cams[open] summary{margin-bottom:8px}
+
+.e-status .tbl td,.e-status .tbl th{padding:4px 8px}
+.e-status .bad{color:#e0574d;font-weight:600}
+/* Parameters: commands the chosen camera does not know */
+#cmdTable tr.nosup .fn>div:first-child{opacity:.55}
+#cmdTable tr.nosup [data-act=send]{opacity:.45}

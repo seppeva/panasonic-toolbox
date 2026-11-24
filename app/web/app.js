@@ -526,7 +526,7 @@ $$('.tabs button').forEach(b => b.addEventListener('click', () => {
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
   if (b.dataset.tab === 'export') renderExport();
   if (b.dataset.tab === 'import') renderImports();
-  if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); }
+  if (b.dataset.tab === 'params') { renderHttpTargets(); renderCmds(); renderParamTab(); renderOperatorTab(); probeSupport(); }
   if (b.dataset.tab === 'eng') { renderEng(); renderSetup(); }
   if (b.dataset.tab === 'cams' && Date.now() - (state.eipAt || 0) > 60000 && !$('#eipSearch').disabled) { state.eipAt = Date.now(); eipDiscover(); }
   if (b.dataset.tab === 'live') liveEnter(); else liveLeave();
@@ -1998,6 +1998,7 @@ const COMMON = [
   ['Power on', 'ptz', '#O1'], ['Standby', 'ptz', '#O0'],
   ['Red tally on', 'cam', 'TLR:1'], ['Red tally off', 'cam', 'TLR:0'], ['Green tally on', 'cam', 'TLG:1'], ['Green tally off', 'cam', 'TLG:0'],
 ].map(([n, t, c, p]) => ({ n, t, c, q: queryFor(t, c), d: p ? ['1', '-', '100'] : ['-'], v: p ? ['Preset 1', '-', 'Preset 100'] : [''], m: ['Most models'], common: 1, preset: !!p }));
+$('#httpCam').addEventListener('change', () => { renderCmds(); probeSupport(); });
 ['#httpCam', '#httpIp', '#httpPort'].forEach(s => $(s).addEventListener('input', () => { $('#httpIpWrap').classList.toggle('hidden', !!$('#httpCam').value); $$('#cmdTable tr').forEach(r => r.update && r.update()); }));
 
 // Value lists can have a part per model, e.g. d = [0, 1, 'UE160', 0, 1], v = [Normal, High Sens., 'UE160', Normal, Low Light].
@@ -2064,6 +2065,25 @@ function matchType(c, type) {
   if (type === 'rp') return !!c.rp;
   return !c.common && !c.rp && c.t === type;
 }
+// Which commands the chosen camera knows: every query (without a value) is asked once; ER1 = not on this camera.
+// Kept per model and firmware, so it is asked again after a firmware update.
+const cmdSup = { probing: '' };
+const supKey = c => c && c.model && c.fw ? `${c.model}|${c.fw}` : '';
+function supFor() { const c = state.cameras.find(x => x.ip === $('#httpCam')?.value); return (store.get('cmdSupport', {}))[supKey(c)] || null; }
+async function probeSupport() {
+  const c = state.cameras.find(x => x.ip === $('#httpCam')?.value); if (!c || isCtrl(c) || !state.bridgeOk) return;
+  try {
+    if (!c.fw) { const [v] = await batch(c, [{ cmd: 'QSV' }], { delayMs: 0 }); if (!v?.ok || !/^OSV:/i.test(v.body)) return; c.fw = v.body.slice(4).trim(); }
+    if (!c.model) await identify(c);
+    const key = supKey(c), all = store.get('cmdSupport', {}); if (all[key] || cmdSup.probing === key) return;
+    cmdSup.probing = key;
+    const qs = [...new Map(COMMANDS.filter(x => x.q && !/\[/.test(x.q)).map(x => [x.t + '|' + x.q, x])).values()];
+    const r = await batch(c, qs.map(x => ({ type: x.t === 'ptz' ? 'ptz' : 'cam', cmd: x.q })), { delayMs: 0, parallel: 4 });
+    const map = {}; qs.forEach((x, i) => { if (r[i]?.ok) map[x.t + '|' + x.q] = !/^er1/i.test((r[i].body || '').trim()); });
+    all[key] = map; store.set('cmdSupport', all); log(`${c.ip}: ${Object.values(map).filter(v => !v).length} of ${qs.length} commands not on this camera (${c.model} ${c.fw})`);
+    renderCmds();
+  } catch { } finally { cmdSup.probing = ''; }
+}
 function renderCmds() {
   const words = $('#paramSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const m = $('#cmdModel').value, type = $('#cmdType').value, cat = $('#cmdCat').value, kind = $('#cmdKind').value;
@@ -2090,7 +2110,9 @@ function cmdRow(c) {
     ? `<input data-i="${i}" type="number" min="1" max="100" value="1" class="num" aria-label="Preset number" title="Preset number 1-100">`
     : opts ? `<select data-i="${i}" aria-label="Value">${opts.map(o => `<option value="${esc(o.val)}">${esc(o.label)}</option>`).join('')}</select>`
     : `<input data-i="${i}" class="mono val" placeholder="${esc(holders.length > 1 ? h.replace(/[[\]]/g, '') : 'value')}" title="${esc(valueHint(c))}">`).join(' ');
-  const pills = (c.common ? ' <span class="pill ok">Common</span>' : '') + (c.rp ? ' <span class="pill info">Controller</span>' : '');
+  const sup = c.q && !/\[/.test(c.q) ? supFor()?.[c.t + '|' + c.q] : undefined, nosup = sup === false;
+  const pills = (c.common ? ' <span class="pill ok">Common</span>' : '') + (c.rp ? ' <span class="pill info">Controller</span>' : '') + (nosup ? ' <span class="pill" title="The camera chosen above answered ER1 (unknown command) to this query">Not on this camera</span>' : '');
+  if (nosup) tr.classList.add('nosup');
   tr.innerHTML = `<td class="fn"><div>${esc(c.n)}${pills}</div><div class="muted small">${esc(c.c)}${c.common ? '' : ' · ' + esc(c.m.join(', '))}</div>${valueHint(c) && !c.preset ? `<div class="muted small hintline">${esc(valueHint(c))}</div>` : ''}</td>
     <td class="valcell">${inputs || '<span class="muted">–</span>'}</td>
     <td class="linkcell"><code class="url"></code>${c.q ? '<div class="small muted qline">Query: <code class="qurl"></code></div>' : ''}</td>
@@ -2981,6 +3003,8 @@ const ENG = {
       if (b.dataset.c === 'R' && r?.ok && isErr(r.body)) r = await send('ptz', '#DA' + v);
       return engVerdict(r, v === '1' ? 'On' : 'Off');
     } },
+  bars: { label: v => `Color bars ${v === '1' ? 'on' : 'off'}`, // DCB sets, QBR reads (OBR:x)
+    run: async (send, c, v) => engVerdict(await send('cam', 'DCB:' + v), v === '1' ? 'On' : 'Off') },
   ois: { label: v => `Image stabilizer ${v === '1' ? 'on' : 'off'}`, // a quick action only; OIS is kept in the operator file
     run: async (send, c, v) => engVerdict(await send('cam', 'OIS:' + v), v === '1' ? 'On' : 'Off') },
   tallyBr: { label: v => `Tally brightness ${['Low', 'Mid', 'High'][v]}`,
@@ -3069,13 +3093,15 @@ async function engReadState() {
   const cams = engCams().filter(c => !isCtrl(c));
   engFb.reading = true;
   try {
-    const res = await Promise.all(cams.map(c => batch(c, [{ type: 'ptz', cmd: '#O' }, { type: 'cam', cmd: 'QIS' }, { type: 'cam', cmd: 'QAW' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }], { delayMs: 0 }).catch(() => null)));
+    const res = await Promise.all(cams.map(c => batch(c, [{ type: 'ptz', cmd: '#O' }, { type: 'cam', cmd: 'QIS' }, { type: 'cam', cmd: 'QAW' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' },
+      { type: 'cam', cmd: 'QBR' }, { type: 'cam', cmd: 'QSV' }, { type: 'ptz', cmd: '#FS1' }, { type: 'ptz', cmd: '#FS2' }, { type: 'ptz', cmd: '#RER' }, { type: 'cam', cmd: 'QUS' }], { delayMs: 0, parallel: 4 }).catch(() => null)));
+    renderEngStatus(cams, res);
     if ($('#tab-eng').classList.contains('busy')) return; // an action started meanwhile: its own read follows
     const vals = res.filter(r => r && r[0]?.ok).map(r => {
       const b = i => (r[i]?.ok ? (r[i].body || '').trim() : '');
       const p = b(0).toLowerCase(), ois = /^OIS:(\d)$/i.exec(b(1))?.[1];
       return { power: p === 'p1' ? '1' : p === 'p0' ? '0' : '', ois: ois == null ? '' : ois === '0' ? '0' : '1',
-        wb: ENG_WB_Q[/^OAW:(\w)$/i.exec(b(2))?.[1]] || '', R: /^OLR:([01])$/i.exec(b(3))?.[1] || '', G: /^OLG:([01])$/i.exec(b(4))?.[1] || '' };
+        wb: ENG_WB_Q[/^OAW:(\w)$/i.exec(b(2))?.[1]] || '', R: /^OLR:([01])$/i.exec(b(3))?.[1] || '', G: /^OLG:([01])$/i.exec(b(4))?.[1] || '', bars: /^OBR:([01])$/i.exec(b(5))?.[1] || '' };
     });
     const mark = (btn, key, want) => {
       const n = vals.filter(x => x[key] === want).length, all = vals.length > 0 && n === vals.length;
@@ -3083,9 +3109,24 @@ async function engReadState() {
     };
     $$('#tab-eng [data-eng=power]').forEach(b => mark(b, 'power', b.dataset.v));
     $$('#tab-eng [data-eng=ois]').forEach(b => mark(b, 'ois', b.dataset.v));
+    $$('#tab-eng [data-eng=bars]').forEach(b => mark(b, 'bars', b.dataset.v));
     $$('#tab-eng [data-eng=wb]').forEach(b => mark(b, 'wb', b.dataset.v));
     $$('#tab-eng [data-eng=tally]').forEach(b => mark(b, b.dataset.c, b.dataset.v));
   } finally { engFb.reading = false; }
+}
+// Status tile: firmware, fans, last error and whether the camera menu is open, per selected camera (read only)
+function renderEngStatus(cams, res) {
+  const tb = $('#engStatusTable tbody'); if (!tb) return;
+  $('#engStatusEmpty').classList.toggle('hidden', cams.length > 0); $('#engStatusTable').classList.toggle('hidden', !cams.length);
+  tb.innerHTML = cams.map((c, i) => {
+    const r = res[i]; const b = k => (r?.[k]?.ok ? (r[k].body || '').trim() : '');
+    if (!r || !r[0]?.ok) return `<tr><td>${esc(camName(c))}</td><td colspan="5" class="bad">Not reachable</td></tr>`;
+    const fan = v => { const m = /^fS[12](\d)$/i.exec(v); return !m ? '<span class="muted">–</span>' : m[1] === '1' ? 'OK' : `<span class="bad" title="${esc(v)}">Check</span>`; };
+    const er = /^rER(\w+)$/i.exec(b(9))?.[1];
+    const err = er == null ? '<span class="muted">–</span>' : /^0+$/.test(er) ? 'None' : `<span class="bad">Code ${esc(er)}</span>`;
+    const fw = /^OSV:(.+)$/i.exec(b(6))?.[1] || '–', menu = /^OUS:1$/i.test(b(10)) ? '<span class="bad">Open</span>' : /^OUS:0$/i.test(b(10)) ? 'Closed' : '–';
+    return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td class="mono">${esc(fw)}</td><td>${fan(b(7))}</td><td>${fan(b(8))}</td><td>${err}</td><td>${menu}</td></tr>`;
+  }).join('');
 }
 setInterval(engReadState, 3000);
 /* ---- Engineering: camera menu (OSD) with the IP picture. DUS:1/0 opens and closes the menu; DUP/DDW/DLT/DRT move
