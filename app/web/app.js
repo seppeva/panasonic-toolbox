@@ -1660,7 +1660,7 @@ async function runImport(jobs, opts, title = 'Restore these cameras?') {
         undos.push({ undo, redo });
         if (r.backup) backups.push(r.backup);
         const bad = r.failed.length + r.mismatch.length;
-        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${src.kind === 'engineering' ? `${r.applied} settings right after checking` : `${r.applied} settings changed${r.unchanged ? `, ${r.unchanged} already right` : ''}`}` +
+        setRow(bad ? 'warn' : 'ok', `<b>${esc(cam.title || cam.model)}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}${r.scene ? ` into scene ${r.scene}` : ''}: ${r.applied} settings changed${r.unchanged ? `, ${r.unchanged} already right` : ''}` +
           (r.skipped.length ? `, ${r.skipped.length} skipped (not supported by ${esc(profileFor(cam.model).fam)})` : '') +
           (r.failed.length ? `<br>Not accepted by the camera: ${r.failed.map(f => esc(f.name) + ' (' + esc(f.err) + ')').join(', ')}` : '') +
           (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}${r.mismatch.some(m => /shutter/i.test(m.name)) ? ' <span class="muted">(shutter values depend on the frequency: a file from a camera at another frequency, for example 50 Hz into 59.94 Hz, gets the nearest value)</span>' : ''}` : '') +
