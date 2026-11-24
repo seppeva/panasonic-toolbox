@@ -536,9 +536,9 @@
       <h4>Camera communication</h4>
       <div class="row wrap">
         <label class="w180">Pause between commands <span class="row nowrap"><input id="setDelay" type="number" min="0" max="500" value="20"><span class="muted small">ms</span></span></label>
-        <label class="w180">Wait after a scene change <span class="row nowrap"><input id="setSceneWait" type="number" min="2500" max="8000" value="2500"><span class="muted small">ms</span></span></label>
+        <label class="w180">Wait after a scene change <span class="row nowrap"><input id="setSceneWait" type="number" min="4000" max="10000" value="4000"><span class="muted small">ms</span></span></label>
       </div>
-      <p class="hint">The pause is used when settings are sent. After a scene change the camera needs about 2 seconds before all its settings follow, so the wait is at least 2.5 seconds. Raise these when a camera misses settings during a restore or back-up. Saved with the project.</p>
+      <p class="hint">The pause is used when settings are sent. After a scene change the camera needs up to about 3 seconds before all its settings follow, so the wait is at least 4 seconds. Raise these when a camera misses settings during a restore or back-up. Saved with the project.</p>
     </section>
     <input type="hidden" id="setLivePath" value="/live/index.html"><input type="hidden" id="setSetupPath" value="/admin/index.html">
     <section class="setsec">

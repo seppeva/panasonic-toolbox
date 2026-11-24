@@ -92,7 +92,7 @@ const state = {
   bridgeUrl: location.protocol.startsWith('http') ? location.origin : 'http://127.0.0.1:8765',
   version: '',
   delayMs: store.get('delayMs', 20),
-  sceneWait: store.get('sceneWait', 2500),
+  sceneWait: Math.max(4000, store.get('sceneWait', 4000)),
   bridgeOk: false,
   localIps: [],
   cameras: store.get('cameras', []).map(c => ({ ...c, status: '', busy: false })),
@@ -315,14 +315,14 @@ async function getScene(cam) {
   const [r] = await batch(cam, [{ cmd: 'QSF' }]);
   return parseSceneResp(r, cam);
 }
-const SCENE_SETTLE_MS = 2500; // measured on an AW-UE150: matrix values change about 2.0 s after XSF
+const SCENE_SETTLE_MS = 4000; // measured on an AW-UE150: matrix values follow 2.0 s after XSF, 3.1-3.2 s when the matrix type differs
 async function switchScene(cam, n) {
   log(`${cam.ip}: switching to scene ${n}`);
   const r = await batch(cam, [{ cmd: 'XSF:' + n }]);
   if (!r[0].ok || isErr(r[0].body)) throw new Error(`Switching to scene ${n} failed (${r[0].body || r[0].error})`);
-  // The camera reports the new scene within about 0.5 s, but some settings (the matrix, for example) only follow after
-  // about 2 s. Reading or writing before that sees the previous scene's values, so always wait the full time (at least
-  // 2.5 s, longer if Settings says so), then check that the camera is really in the new scene.
+  // The camera reports the new scene within about 0.1 s, but some settings (the matrix, for example) only follow after
+  // 2 to 3.2 s. Reading or writing before that sees the previous scene's values, so always wait the full time (at least
+  // 4 s, longer if Settings says so), then check that the camera is really in the new scene.
   const t0 = Date.now(), wait = Math.max(state.sceneWait, SCENE_SETTLE_MS);
   await sleep(wait);
   while (Date.now() - t0 < wait + 5000) {
@@ -624,7 +624,7 @@ const projSummary = d => {
 };
 function currentProjectData() {
   const d = projectData(projectId());
-  for (const k of PROJ_SETTINGS) if (d[k] === undefined) d[k] = store.get(k, { delayMs: 20, sceneWait: 2500, livePath: '/live/index.html', setupPath: '/admin/index.html' }[k]);
+  for (const k of PROJ_SETTINGS) if (d[k] === undefined) d[k] = store.get(k, { delayMs: 20, sceneWait: 4000, livePath: '/live/index.html', setupPath: '/admin/index.html' }[k]);
   return d;
 }
 async function saveProjectFile() {
