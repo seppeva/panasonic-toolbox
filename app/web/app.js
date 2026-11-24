@@ -2970,6 +2970,8 @@ const ENG = {
       if (b.dataset.c === 'R' && r?.ok && isErr(r.body)) r = await send('ptz', '#DA' + v);
       return engVerdict(r, v === '1' ? 'On' : 'Off');
     } },
+  ois: { label: v => `Image stabilizer ${v === '1' ? 'on' : 'off'}`,
+    run: async (send, c, v) => engVerdict(await send('cam', 'OIS:' + v), v === '1' ? 'On' : 'Off') },
   tallyBr: { label: v => `Tally brightness ${['Low', 'Mid', 'High'][v]}`,
     run: async (send, c, v) => engVerdict(await send('cam', 'OSA:D3:' + v), ['Low', 'Mid', 'High'][v]) },
   wb: { label: v => `White balance ${WB_NAME[v]}`,
