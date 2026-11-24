@@ -148,9 +148,9 @@
     <div class="zonebar" id="iniZones"></div>
     <div class="row wrap ini-cams" id="iniCams"></div>
     <div class="ini-act">
-      <div class="row between wrap"><h3>Initialize</h3><span class="row"><button class="ghost small" id="baseSaveBtn" title="Read a scene of one camera and keep it as the base scene">Save base scene…</button><button id="iniBtn" title="Put the base scene on scenes 1 to 4 of the chosen cameras">Initialize…</button></span></div>
+      <div class="row between wrap"><h3>Initialize</h3><button id="iniBtn" title="Put the standard scene files on scenes 1 to 4 of the chosen cameras">Initialize…</button></div>
       <p class="small" id="baseInfo"></p>
-      <p class="hint">Puts the shading of the base scene (gain, detail, matrix, gamma, white balance…) on scenes 1 to 4 of the chosen cameras. Save the base scene from a camera that is set up well, or open a scene file above and choose <b>Use as base scene</b>.</p>
+      <p class="hint">Puts the standard shading (gain, detail, matrix, gamma, white balance…) on scenes 1 to 4 of the chosen cameras, the same on every camera. Everything else (engineering and operator settings) stays as it is.</p>
     </div>
     <div class="ini-act">
       <div class="row between wrap"><h3>Engineering file</h3><button id="engInitBtn" title="Put the engineering file on the chosen cameras">Put on cameras…</button></div>
@@ -574,6 +574,7 @@
 <script id="psState" type="application/json">__PS_STATE__</script>
 <script src="catalog.js"></script>
 <script src="commands.js"></script>
+<script src="base-scenes.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

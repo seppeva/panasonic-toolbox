@@ -1543,9 +1543,8 @@ $('#addJobBtn').onclick = () => {
 function renderImports() {
   renderGrid();
   // step 1: list of opened scenes
-  $('#srcList').innerHTML = srcSorted().filter(x => !x.fromShow && !x.savedEng && !x.savedBase).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${srcSorted().filter(x => !x.fromShow && !x.savedEng && !x.savedBase).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' ? `<button class="ghost small" data-enguse="${s.id}" title="Use this file as the engineering file (the card below)">Use as engineering file</button> ` : s.kind === 'scene' ? `<button class="ghost small" data-baseuse="${s.id}" title="Use this scene as the base scene for Initialize (the card below)">Use as base scene</button> ` : ''}<button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
+  $('#srcList').innerHTML = srcSorted().filter(x => !x.fromShow && !x.savedEng && !x.savedBase).length ? `<table class="tbl dense"><thead><tr><th>File</th><th>From camera</th><th>Scene</th><th>Settings</th><th></th></tr></thead><tbody>${srcSorted().filter(x => !x.fromShow && !x.savedEng && !x.savedBase).map(s => `<tr><td>${esc(s.fileName)}</td><td>${esc(s.file.camera?.title || s.file.fromName || '')} <span class="mono muted">${esc(s.file.camera?.ip || s.file.fromIp || '')}</span> <span class="muted small">${esc(s.file.camera?.model || s.file.model || '')}</span></td><td>${KIND_NAME[s.kind] || 'Scene ' + esc(s.file.scenes[s.sceneIdx].scene)}</td><td>${srcParams(s)}</td><td class="end nowrap">${s.kind === 'engineering' ? `<button class="ghost small" data-enguse="${s.id}" title="Use this file as the engineering file (the card below)">Use as engineering file</button> ` : ''}<button class="icon" data-src="${s.id}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>` : '';
   $$('#srcList [data-enguse]').forEach(b => b.onclick = () => { const sr = srcById(b.dataset.enguse); if (sr) useEngFile(sr.file); });
-  $$('#srcList [data-baseuse]').forEach(b => b.onclick = () => { const sr = srcById(b.dataset.baseuse); if (!sr) return; const sc = sceneWbFixed(sr.file.scenes[sr.sceneIdx]); setBase({ scene: sc, savedAt: sr.file.created || new Date().toISOString(), fromIp: sr.file.camera?.ip || '', fromName: sr.file.camera?.title || sr.fileName, model: sr.file.camera?.model || '', fromScene: sc.scene }, 'Use as base scene'); });
   renderIniCams();
   $$('#srcList [data-src]').forEach(b => b.onclick = () => { const id = +b.dataset.src; track('Remove file', () => { state.sources = state.sources.filter(s => s.id !== id); state.jobs = state.jobs.filter(j => j.srcId !== id); }); renderImports(); });
   // step 2: jobs
@@ -2444,47 +2443,31 @@ async function initializeCams() { // engineering file on the chosen cameras
   await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false, okLabel: 'Put on cameras' }, `Put the engineering file on ${cams.length} camera${cams.length > 1 ? 's' : ''}?${ef.values.format ? ' A camera that gets another frequency restarts.' : ''}`);
 }
 $('#engInitBtn').onclick = () => initializeCams();
-// Base scene: one scene (shading) kept as the starting point; Initialize puts it on scenes 1 to 4
-const baseScene = () => store.get('baseScene', null);
+// Initialize: the standard scene files built into the app (base-scenes.js), per family and scene number
+const baseFor = c => (window.BASE_SCENES || {})[profileFor(c.model).fam] || null;
 function renderBase() {
-  const b = baseScene(), el = $('#baseInfo'); if (!el) return;
-  el.innerHTML = b ? `From ${esc(b.fromName || '')} <span class="mono muted small">${esc(b.fromIp || '')}</span>${b.model ? ' · ' + esc(b.model) : ''} · scene ${esc(b.fromScene ?? '?')} · ${b.scene.params.length} settings · saved ${new Date(b.savedAt).toLocaleString('en-GB')} <button type="button" class="icon" id="baseDel" aria-label="Delete the base scene">×</button>` : 'No base scene yet.';
-  $('#baseDel')?.addEventListener('click', () => { const old = baseScene(); store.set('baseScene', null); renderBase(); pushHistory({ label: 'Delete base scene', undo: () => { store.set('baseScene', old); renderBase(); }, redo: () => { store.set('baseScene', null); renderBase(); } }); });
+  const el = $('#baseInfo'); if (!el) return;
+  const fams = Object.keys(window.BASE_SCENES || {});
+  el.innerHTML = fams.length ? `Standard scene files for ${fams.map(f => esc(FAM_TEXT[f] || f)).join(', ')}.` : 'The standard scene files are not in this version yet.';
 }
-function setBase(b, label) {
-  const old = baseScene(); store.set('baseScene', b); renderBase();
-  pushHistory({ label, undo: () => { store.set('baseScene', old); renderBase(); }, redo: () => { store.set('baseScene', b); renderBase(); } });
-  toast(`Base scene: ${b.fromName || b.fromIp || 'file'}, scene ${b.fromScene}`);
-}
-$('#baseSaveBtn').onclick = async () => {
-  const cams = camsOnly(); if (!cams.length) return info('No cameras yet', 'Add cameras on the Cameras page first.');
-  const first = iniChosen()[0] || cams[0], old = baseScene();
-  if (!await ask({ title: 'Save base scene', ok: 'Read and save', body: `<label>Camera <select id="bsCam">${cams.map(c => `<option value="${esc(c.ip)}" ${c === first ? 'selected' : ''}>${esc(camName(c))} – ${esc(c.ip)}</option>`).join('')}</select></label>
-    <label>Scene <select id="bsScene">${[1, 2, 3, 4].map(n => `<option value="${n}">Scene ${n}</option>`).join('')}</select></label>
-    <p class="hint">The camera switches to that scene for a moment if it is not the live scene, then back. Nothing changes on the camera.</p>
-    ${old ? `<p class="warn-text">Replaces the base scene from ${esc(old.fromName || old.fromIp || '')}, scene ${esc(old.fromScene)}.</p>` : ''}` })) return;
-  const c = cams.find(x => x.ip === $('#bsCam').value), n = +$('#bsScene').value;
-  if (!state.bridgeOk && !(await checkBridge())) return;
-  $('#baseInfo').textContent = `Reading ${camName(c)}, scene ${n}…`;
-  try {
-    if (!c.model) await identify(c);
-    const orig = await getScene(c);
-    if (orig !== n) await switchScene(c, n);
-    const sc = await readSceneFile(c, n);
-    if (orig && orig !== n) await switchScene(c, orig);
-    setBase({ scene: sc, savedAt: new Date().toISOString(), fromIp: c.ip, fromName: camName(c), model: c.model || '', fromScene: n }, 'Save base scene');
-    log(`Base scene saved from ${c.ip} scene ${n}: ${sc.params.length} settings`);
-  } catch (e) { renderBase(); info('Could not read the camera', esc(e.message)); }
-};
 $('#iniBtn').onclick = async () => {
-  const b = baseScene();
-  if (!b) return info('No base scene yet', 'Choose <b>Save base scene…</b> to read one from a camera that is set up well, or open a scene file above and choose <b>Use as base scene</b>.');
   const cams = iniChosen(); if (!cams.length) return info('Choose cameras first', 'Tick the cameras on this card, or click a zone.');
+  for (const c of cams) if (!c.model) try { await identify(c); } catch { }
+  const none = cams.filter(c => !baseFor(c));
+  if (none.length === cams.length) return info('No standard scene files for these cameras', `This version has no standard scene files for ${[...new Set(none.map(c => c.model || 'unknown models'))].map(esc).join(', ')}.`);
+  if (none.length && !await ask({ title: 'Some cameras are skipped', ok: 'Go on', body: `<p>No standard scene files for ${none.map(c => esc(camName(c)) + ' (' + esc(c.model || '?') + ')').join(', ')}. These cameras are left as they are.</p>` })) return;
   state.sources = state.sources.filter(x => !x.savedBase);
-  const src = { id: ++srcId, fileName: 'Base scene', file: { format: FORMAT_ID, version: 1, camera: { ip: b.fromIp, title: b.fromName, model: b.model }, scenes: [b.scene] }, sceneIdx: 0, kind: 'scene', savedBase: true };
-  state.sources.push(src);
-  const jobs = cams.flatMap(c => [1, 2, 3, 4].map(n => ({ id: ++jobId, srcId: src.id, target: c.ip, targetScene: String(n), include: true })));
-  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false, okLabel: 'Initialize' }, `Initialize scenes 1 to 4 of ${cams.length} camera${cams.length > 1 ? 's' : ''}?`);
+  const jobs = [];
+  for (const c of cams.filter(baseFor)) {
+    const fam = profileFor(c.model).fam, base = baseFor(c);
+    for (const n of [1, 2, 3, 4]) {
+      const sc = base[n]; if (!sc) continue;
+      let src = state.sources.find(x => x.savedBase && x.fam === fam && x.n === n);
+      if (!src) { src = { id: ++srcId, fileName: `Standard scene ${n}`, file: { format: FORMAT_ID, version: 1, camera: { title: 'Standard', model: FAM_TEXT[fam] || fam }, scenes: [sc] }, sceneIdx: 0, kind: 'scene', savedBase: true, fam, n }; state.sources.push(src); }
+      jobs.push({ id: ++jobId, srcId: src.id, target: c.ip, targetScene: String(n), include: true });
+    }
+  }
+  await runImport(jobs, { backup: true, restore: true, store: true, verify: true, force: false, okLabel: 'Initialize' }, `Initialize scenes 1 to 4 of ${new Set(jobs.map(j => j.target)).size} camera${new Set(jobs.map(j => j.target)).size > 1 ? 's' : ''}?`);
 };
 function renderEngFile() {
   const ef = engFile();
