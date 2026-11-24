@@ -155,7 +155,7 @@
     <div class="ini-act">
       <div class="row between wrap"><h3>Engineering file</h3><button id="engInitBtn" title="Put the engineering file on the chosen cameras">Put on cameras…</button></div>
       <p class="small" id="engInitInfo"></p>
-      <p class="hint">The system setup of a camera: format, OSD mix, tally, pan/tilt, presets, fans and IP video. Make one on the Engineering page (<b>Read from a camera…</b>, then <b>Save as engineering file</b>), or open one above.</p>
+      <p class="hint">The system setup of a camera: format, OIS, OSD mix, tally, pan/tilt, presets, fans and IP video. Make one on the Engineering page (<b>Read from a camera…</b>, then <b>Save as engineering file</b>), or open one above.</p>
     </div>
   </div>
   <div class="card">
@@ -306,7 +306,6 @@
   </div>
   <div class="eng-tiles">
     <div class="live-block e-power"><h3>Power</h3><div class="hold-row"><button data-eng="power" data-v="1">On</button><button data-eng="power" data-v="0">Standby</button></div></div>
-    <div class="live-block e-scene"><h3>Scene file</h3><div class="hold-row" id="engScenes"></div></div>
     <div class="live-block e-ois"><h3>Image stabilizer (OIS)</h3><div class="hold-row"><button data-eng="ois" data-v="1" title="Optical image stabilizer on">On</button><button data-eng="ois" data-v="0" title="Optical image stabilizer off">Off</button></div></div>
     <div class="live-block e-tally"><h3>Tally</h3>
       <div class="eng-line"><span>Red</span><button data-eng="tally" data-c="R" data-v="1">On</button><button data-eng="tally" data-c="R" data-v="0">Off</button></div>
@@ -321,15 +320,15 @@
     </div>
   </div>
   <div class="card" id="menuCard">
-    <div class="row between wrap"><h2>Camera menu</h2><span class="row"><select id="menuCam" aria-label="Camera"></select><button id="menuToggle" title="Show or hide the camera menu (OSD) on the picture">Menu on</button></span></div>
+    <div class="row between wrap"><h2>Camera menu</h2><span class="row"><select id="menuCam" aria-label="Camera"></select><button class="ghost" id="menuToggle" title="Show or hide the camera menu (OSD) on the picture">Menu on</button></span></div>
     <p class="hint">Opens the menu of one camera and shows it on the IP picture, so you can go through it from here. If the camera does not mix the menu into its IP picture, that is switched on while the menu is open and put back when you close it.</p>
     <div class="menu-wrap">
       <div class="live-video menu-video"><img id="menuImg" alt="Picture of the camera with its menu"><div class="live-msg" id="menuMsg">Choose a camera and choose Menu on.</div></div>
       <div class="menu-ctl" id="menuCtl">
         <div class="menu-pad">
-          <span></span><button data-menu="up" aria-label="Up" title="Up (arrow key)">↑</button><span></span>
-          <button data-menu="left" aria-label="Left" title="Left: change a value (arrow key)">←</button><button data-menu="enter" class="menu-ok" title="Enter (Enter key)">Enter</button><button data-menu="right" aria-label="Right" title="Right: change a value (arrow key)">→</button>
-          <span></span><button data-menu="down" aria-label="Down" title="Down (arrow key)">↓</button><span></span>
+          <span></span><button class="ghost" data-menu="up" aria-label="Up" title="Up (arrow key)">↑</button><span></span>
+          <button class="ghost" data-menu="left" aria-label="Left" title="Left: change a value (arrow key)">←</button><button data-menu="enter" class="ghost menu-ok" title="Enter (Enter key)">Enter</button><button class="ghost" data-menu="right" aria-label="Right" title="Right: change a value (arrow key)">→</button>
+          <span></span><button class="ghost" data-menu="down" aria-label="Down" title="Down (arrow key)">↓</button><span></span>
         </div>
         <div class="row wrap menu-row"><button class="ghost" data-menu="cancel" title="Back one level (Esc)">Cancel</button></div>
         <p class="muted small" id="menuStatus"></p>

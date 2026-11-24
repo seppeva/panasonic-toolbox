@@ -2944,9 +2944,6 @@ function renderEng() {
   const box = c => $$('#engCams label:not(.selall-row) input').find(i => i.value === c.ip);
   zoneChips($('#engZones'), { get: c => !!box(c)?.checked, set: (c, v) => { const i = box(c); if (i) i.checked = v; }, done: save }, 'Zone');
   selAllRow($('#engCams'), state.cameras, c => on.has(c.ip), (c, v) => v ? on.add(c.ip) : on.delete(c.ip), () => { setSelection([...on]); renderEng(); });
-  const n = Math.max(4, ...state.cameras.filter(c => c.model).map(c => profileFor(c.model).scenes || 4));
-  $('#engScenes').innerHTML = Array.from({ length: n }, (_, i) => `<button data-eng="scene" data-v="${i + 1}" title="Load scene file ${i + 1}">${i + 1}</button>`).join('');
-  $$('#engScenes [data-eng]').forEach(b => b.onclick = () => engClick(b));
 }
 
 // One command, with what counts as an answer: ok / not supported (ER…) / login / not reachable
@@ -3136,6 +3133,7 @@ const SETUP = [
   { g: 'Video', k: 'format', l: 'Frequency and format', format: true },
   { g: 'Video', k: 'shoot', l: 'Shooting mode', set: 'OSI:30:', q: 'QSI:30', o: [['0', 'Normal'], ['1', 'High Sens.']] },
   { g: 'Video', k: 'color', l: 'Color setting', set: 'OSJ:56:', q: 'QSJ:56', o: [['0', 'Normal'], ['1', 'V-Log']] },
+  { g: 'Video', k: 'ois', l: 'Image stabilizer (OIS)', set: 'OIS:', q: 'QIS', o: OFFON },
   { g: 'Video', k: 'ipvideo', l: 'IP video (H.264)', ipv: true, o: [['1', 'On'], ['0', 'Off']] },
   { g: 'OSD mix', k: 'osd12g', l: '12G SDI / optical', bit: 0x20, o: OFFON },
   { g: 'OSD mix', k: 'osd3g', l: '3G SDI', bit: 0x01, o: OFFON },
