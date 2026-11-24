@@ -1820,7 +1820,10 @@ async function runJob(cam, src, targetScene, opts, progress) {
     const backup = opts.backup ? { name: `${camName(cam).replace(/[^A-Za-z0-9._ -]+/g, '_')}_${cam.ip}_ENGINEERING_BACKUP.json`, text: JSON.stringify({ format: ENG_ID, version: 1, values: before, savedAt: new Date().toISOString(), fromIp: cam.ip, fromName: camName(cam), model: cam.model || '' }, null, 1) } : null;
     const [row] = await applySetup([cam], v, progress);
     const split = t => { const i = t.indexOf(': '); return i > 0 ? { name: t.slice(0, i), err: t.slice(i + 2) } : { name: t, err: 'not set' }; };
-    const r = { scene: null, applied: row.out.filter(o => !o.bad).length, unchanged: 0, skipped: [], failed: row.out.filter(o => o.bad).map(o => split(o.t)), mismatch: [], stored: false, backup, before };
+    // applySetup only sends what differs; count it the same way as scene and operator files
+    const differs = Object.keys(v).filter(k => String(before[k] ?? '') !== String(v[k])).length;
+    const failed = row.out.filter(o => o.bad).map(o => split(o.t));
+    const r = { scene: null, applied: Math.max(0, differs - failed.length), unchanged: Object.keys(v).length - differs, skipped: [], failed, mismatch: [], stored: false, backup, before };
     return { r, undo: () => applySetup([cam], before), redo: () => applySetup([cam], v) };
   }
   if (src.kind === 'operator') {
@@ -3902,7 +3905,7 @@ async function liveAwbMem(m) {
   else toast(`AWB not possible now${r?.body ? ' (' + r.body + ')' : ''}`);
 }
 $('#liveWbStore').onclick = () => armStore($('#liveWbStore'), !$('#liveWbStore').classList.contains('armed'), $('.t-white'), 'wb-storing');
-$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first, or use Store A / Store B.` : 'Auto white balance started (kept in the memory that is active)'); };
+$('#liveAWB').onclick = async () => { const r = await liveSend('cam', 'OWS'); if (r?.ok) toast(isErr(r.body) ? `AWB not possible now (${r.body}). Choose A or B first, or use Store A / Store B.` : `Auto white balance started${$('#liveWB [data-wb="a"]').classList.contains('on') ? ' (kept in memory A)' : $('#liveWB [data-wb="b"]').classList.contains('on') ? ' (kept in memory B)' : ''}`); };
 $('#liveABB').onclick = async () => { const r = await liveSend('cam', 'OAS'); if (r?.ok) toast(isErr(r.body) ? `ABB not possible now (${r.body})` : 'Auto black balance started'); };
 function renderLiveScenes() {
   const cam = live.cam; const box = $('#liveScenes');
