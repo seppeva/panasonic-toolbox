@@ -1286,11 +1286,11 @@ $('#browseFolderBtn').onclick = async () => {
 const OPERATOR_SPEC = [
   ['Presets', ['OSJ:29', '#PST', '#UPVS', 'OSJ:A8', 'OSJ:A9', 'OSJ:AA', 'OSJ:AB', 'OSJ:AC', 'OSJ:AD', 'OSJ:AE', 'OSE:7C', 'OSE:7D', 'OSJ:5B', 'OSJ:D5', 'OSJ:2B', 'OSJ:2C', '#PRF']],
   ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ', 'OSJ:46']],
-  ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E']],
+  ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E', 'OIS']],
 ];
-// Nothing may be in both the operator file and the engineering file: OIS, preset scope, smart picture flip and
-// power-on position are engineering (setup form); pan/tilt speed, speed with zoom, focus adjust, preset speed table
-// and freeze during preset are operator.
+// Nothing may be in both the operator file and the engineering file: preset scope, smart picture flip and power-on
+// position are engineering (setup form); pan/tilt speed, speed with zoom, focus adjust, preset speed table, freeze
+// during preset and the image stabilizer (OIS) are operator.
 const OPERATOR_ID = 'panasonic-ptz-operator';
 const OPERATOR_PARAMS = (() => {
   const out = [];
@@ -2962,8 +2962,6 @@ const ENG = {
       if (b.dataset.c === 'R' && r?.ok && isErr(r.body)) r = await send('ptz', '#DA' + v);
       return engVerdict(r, v === '1' ? 'On' : 'Off');
     } },
-  ois: { label: v => `Image stabilizer ${v === '1' ? 'on' : 'off'}`,
-    run: async (send, c, v) => engVerdict(await send('cam', 'OIS:' + v), v === '1' ? 'On' : 'Off') },
   tallyBr: { label: v => `Tally brightness ${['Low', 'Mid', 'High'][v]}`,
     run: async (send, c, v) => engVerdict(await send('cam', 'OSA:D3:' + v), ['Low', 'Mid', 'High'][v]) },
   wb: { label: v => `White balance ${WB_NAME[v]}`,
@@ -3128,7 +3126,6 @@ const SETUP = [
   { g: 'Video', k: 'format', l: 'Frequency and format', format: true },
   { g: 'Video', k: 'shoot', l: 'Shooting mode', set: 'OSI:30:', q: 'QSI:30', o: [['0', 'Normal'], ['1', 'High Sens.']] },
   { g: 'Video', k: 'color', l: 'Color setting', set: 'OSJ:56:', q: 'QSJ:56', o: [['0', 'Normal'], ['1', 'V-Log']] },
-  { g: 'Video', k: 'ois', l: 'Image stabilizer (OIS)', set: 'OIS:', q: 'QIS', o: OFFON },
   { g: 'Video', k: 'ipvideo', l: 'IP video (H.264)', ipv: true, o: [['1', 'On'], ['0', 'Off']] },
   { g: 'OSD mix', k: 'osd12g', l: '12G SDI / optical', bit: 0x20, o: OFFON },
   { g: 'OSD mix', k: 'osd3g', l: '3G SDI', bit: 0x01, o: OFFON },
@@ -3702,7 +3699,7 @@ async function liveRead() {
 }
 async function liveReadNow(cam) {
   let res;
-  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }, { type: 'cam', cmd: 'QSE:71' }, { type: 'cam', cmd: 'QSI:20' }, { type: 'cam', cmd: 'QFT' }], { delayMs: 0 }); }
+  try { res = await batch(cam, [{ type: 'ptz', cmd: '#O' }, { type: 'ptz', cmd: '#D1' }, { type: 'ptz', cmd: '#D3' }, { type: 'ptz', cmd: '#D6' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }, { type: 'cam', cmd: 'QSF' }, { type: 'ptz', cmd: '#I' }, { type: 'ptz', cmd: '#DA' }, { type: 'cam', cmd: 'QAW' }, { type: 'ptz', cmd: '#INS' }, { type: 'cam', cmd: 'QSI:30' }, { type: 'cam', cmd: 'QSE:71' }, { type: 'cam', cmd: 'QSI:20' }, { type: 'cam', cmd: 'QFT' }, { type: 'cam', cmd: 'QIS' }], { delayMs: 0 }); }
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
@@ -3714,6 +3711,7 @@ async function liveReadNow(cam) {
   { const sm = /^OSI:30:([01])$/i.exec(b(11)); setToggle('#liveShoot0', sm?.[1] === '0'); setToggle('#liveShoot1', sm?.[1] === '1');
     for (const id of ['#liveShoot0', '#liveShoot1']) $(id).disabled = !sm;
     $('#liveShoot1').textContent = /UE160/i.test(cam.model || '') ? 'Low Light' : 'High Sens.' }
+  { const is = /^OIS:([0-9])$/i.exec(b(15)); setToggle('#liveOis1', is && is[1] !== '0'); setToggle('#liveOis0', is?.[1] === '0'); for (const id of ['#liveOis0', '#liveOis1']) $(id).disabled = !is; }
   { const nd = /^OFT:([0-9A-F])$/i.exec(b(14)); if (Date.now() - (live.ndAt || 0) > 2500) $$('#liveNd [data-nd]').forEach(x => { setToggle(x, nd?.[1] === x.dataset.nd); x.disabled = !nd; }); }
   { const k = kelvinFrom(b(13)); if (k && document.activeElement !== $('#liveVarK')) $('#liveVarK').value = k; }
   const wb = /^OAW:(\d)$/i.exec(b(9));
@@ -3812,6 +3810,15 @@ async function liveShoot(v) {
   if (r?.ok && !isErr(r.body)) { setToggle('#liveShoot0', v === 0); setToggle('#liveShoot1', v === 1); $('#liveStatus').textContent = 'Shooting mode: ' + $(v ? '#liveShoot1' : '#liveShoot0').textContent; }
   else toast(`Shooting mode is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
 }
+// Image stabilizer (OIS): 0 = off, 1 = on (other values on some models are shown as on). Part of the operator file.
+async function liveOis(v) {
+  if (!live.cam) return;
+  const r = await liveSend('cam', 'OIS:' + v);
+  if (r?.ok && !isErr(r.body)) { setToggle('#liveOis0', v === 0); setToggle('#liveOis1', v === 1); $('#liveStatus').textContent = 'Image stabilizer ' + (v ? 'on' : 'off'); }
+  else toast(`The image stabilizer is not available on this camera${r?.body ? ' (' + r.body + ')' : ''}`);
+}
+$('#liveOis0').onclick = () => liveOis(0);
+$('#liveOis1').onclick = () => liveOis(1);
 // ND filter: Clear, 1/4, 1/16, 1/64 (OFT)
 $$('#liveNd [data-nd]').forEach(b => b.onclick = async () => {
   const cam = live.cam; if (!cam) return;

@@ -363,15 +363,15 @@ table.grid td{vertical-align:middle}
 .selbar.idle .seln,.selbar.idle button{opacity:.45}
 .selall-row{font-weight:600;border-bottom:1px solid var(--rule-soft);padding-bottom:4px;margin-bottom:2px!important;flex-basis:100%}
 /* Live: no holes. White (three rows) sits next to Day/night and Black stacked; scenes, shooting mode and ND share the last row */
-.live-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"white white day" "white white black" "shoot nd nd" "scenes scenes scenes";gap:10px;align-items:stretch}
+.live-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-areas:"white white day" "white white black" "white white ois" "shoot nd nd" "scenes scenes scenes";gap:10px;align-items:stretch}
 .live-tiles .t-white{grid-area:white}.live-tiles .t-day{grid-area:day}.live-tiles .t-black{grid-area:black}
-.live-tiles .t-scenes{grid-area:scenes}.live-tiles .t-shoot{grid-area:shoot}.live-tiles .t-nd{grid-area:nd}
+.live-tiles .t-ois{grid-area:ois}.live-tiles .t-scenes{grid-area:scenes}.live-tiles .t-shoot{grid-area:shoot}.live-tiles .t-nd{grid-area:nd}
 .live-tiles .live-block{margin:0}
 .live-tiles .t-scenes .live-scenes{grid-template-columns:repeat(4,minmax(0,1fr))}
-.live-tiles .t-day .hold-row,.live-tiles .t-shoot .hold-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.live-tiles .t-day .hold-row,.live-tiles .t-shoot .hold-row,.live-tiles .t-ois .hold-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
 .live-tiles .t-scenes .live-scenes button{padding:0 4px}
 .live-tiles .t-nd .hold-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
-@media (max-width:1250px){.live-tiles{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white white" "day black" "shoot nd" "scenes scenes"}}
+@media (max-width:1250px){.live-tiles{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white white" "day black" "ois shoot" "nd nd" "scenes scenes"}}
 #tab-live.nocam .live-tiles{opacity:.5;pointer-events:none}
 ul.tight{margin:6px 0 0;padding-left:18px}ul.tight li{margin:2px 0}
 .warn-text{color:#e3b04b}
@@ -414,8 +414,8 @@ button.copied{color:#8fd19e}
 .kfield input{width:100%;min-width:0}
 .kfield span{color:var(--muted);font-size:12px}
 /* engineering */
-.eng-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white power" "white ois" "white tally";grid-template-rows:auto auto 1fr;gap:10px;margin-bottom:16px}
-.eng-tiles .e-white{grid-area:white}.eng-tiles .e-power{grid-area:power}.eng-tiles .e-ois{grid-area:ois}.eng-tiles .e-tally{grid-area:tally}
+.eng-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"white power" "white tally";grid-template-rows:auto 1fr;gap:10px;margin-bottom:16px}
+.eng-tiles .e-white{grid-area:white}.eng-tiles .e-power{grid-area:power}.eng-tiles .e-tally{grid-area:tally}
 .eng-tiles .live-block{margin:0}
 .eng-line{display:grid;grid-template-columns:80px repeat(3,minmax(0,1fr));gap:6px;align-items:center;margin-bottom:6px;font-size:12.5px;color:var(--muted)}
 .eng-tiles .hold-row{flex-wrap:wrap}
@@ -425,7 +425,7 @@ button.copied{color:#8fd19e}
 .eng-res td{vertical-align:top}
 .eng-res .raw{font-size:11.5px;color:var(--muted);word-break:break-all}
 
-@media (max-width:900px){.live-tiles{grid-template-areas:"white" "day" "black" "shoot" "nd" "scenes"}.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles{grid-template-areas:"power" "ois" "tally" "white";grid-template-rows:none}}
+@media (max-width:900px){.live-tiles{grid-template-areas:"white" "day" "black" "ois" "shoot" "nd" "scenes"}.eng-tiles,.live-tiles{grid-template-columns:minmax(0,1fr)}.eng-tiles{grid-template-areas:"power" "tally" "white";grid-template-rows:none}}
 .eng-line button{background:var(--raised);border:1px solid var(--rule);color:var(--text);height:32px;padding:0 6px;font-size:13px}
 .eng-line button:hover{background:#353a40}
 .eng-tiles button:active{background:var(--accent);border-color:var(--accent)}
