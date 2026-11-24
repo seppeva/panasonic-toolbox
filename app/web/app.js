@@ -3076,7 +3076,7 @@ async function menuOpen() {
   const cam = state.cameras.find(c => c.ip === $('#menuCam').value);
   if (!cam) return info('Choose a camera first', 'Add cameras on the Cameras page first.');
   if (!state.bridgeOk && !(await checkBridge())) return;
-  menu.cam = cam; store.set('menuCam', cam.ip); $('#menuStatus').textContent = 'Opening the menu…';
+  menu.cam = cam; store.set('menuCam', cam.ip); $('#menuStatus').textContent = '';
   try {
     menu.osdBack = null;
     const m = parseInt(/OSE:7B:([0-9A-F]+)/i.exec((await menuSend('QSE:7B'))?.body || '')?.[1], 16);
@@ -3084,7 +3084,7 @@ async function menuOpen() {
     const r = await menuSend('DUS:1');
     if (!r?.ok || isErr(r.body)) { await menuRestoreOsd(); $('#menuStatus').textContent = `The camera did not open its menu (${r?.body || r?.error || 'no answer'}).`; return; }
     menu.on = true; menuUi(); menuStream(cam);
-    $('#menuStatus').textContent = `Menu open on ${camName(cam)}${menu.osdBack != null ? ' · menu on the IP picture switched on for now' : ''}`;
+    $('#menuStatus').textContent = '';
     log(`${cam.ip}: camera menu open`);
   } catch (e) { $('#menuStatus').textContent = 'Failed: ' + e.message; }
 }
@@ -3103,7 +3103,7 @@ const MENU_CMD = { up: 'DUP', down: 'DDW', left: 'DLT', right: 'DRT', enter: 'DI
 const MENU_UE160 = { up: 'CUP', down: 'CDW', left: 'CLT', right: 'CRT' };
 async function menuKey(k, ten) {
   if (!menu.on || !menu.cam) return;
-  const arrow = ['up', 'down', 'left', 'right'].includes(k), step = ten || $('#menuTen').checked ? 'A' : '1';
+  const arrow = ['up', 'down', 'left', 'right'].includes(k), step = ten ? 'A' : '1';
   const cmd = arrow ? `${MENU_CMD[k]}:${step}` : MENU_CMD[k];
   let r = await menuSend(cmd);
   if (arrow && /^er1/i.test(r?.body || '')) r = await menuSend(`${MENU_UE160[k]}:1`); // AW-UE160
