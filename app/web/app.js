@@ -1284,10 +1284,13 @@ $('#browseFolderBtn').onclick = async () => {
 // Personal operating preferences, separate from the scenes: presets, speeds, pan/tilt and lens behaviour.
 // Tally is left out on purpose: it belongs to the camera/studio setup, not to the operator.
 const OPERATOR_SPEC = [
-  ['Presets', ['OSJ:29', '#PST', '#UPVS', 'OSE:71', 'OSJ:A8', 'OSJ:A9', 'OSJ:AA', 'OSJ:AB', 'OSJ:AC', 'OSJ:AD', 'OSJ:AE', 'OSE:7C', 'OSE:7D', 'OSJ:5B', 'OSJ:D5', 'OSJ:2B', 'OSJ:2C', '#PRF']],
-  ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ', '#SPF', 'OSJ:45', 'OSJ:46']],
-  ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E', 'OIS']],
+  ['Presets', ['OSJ:29', '#PST', '#UPVS', 'OSJ:A8', 'OSJ:A9', 'OSJ:AA', 'OSJ:AB', 'OSJ:AC', 'OSJ:AD', 'OSJ:AE', 'OSE:7C', 'OSE:7D', 'OSJ:5B', 'OSJ:D5', 'OSJ:2B', 'OSJ:2C', '#PRF']],
+  ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ', 'OSJ:46']],
+  ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E']],
 ];
+// Nothing may be in both the operator file and the engineering file: OIS, preset scope, smart picture flip and
+// power-on position are engineering (setup form); pan/tilt speed, speed with zoom, focus adjust, preset speed table
+// and freeze during preset are operator.
 const OPERATOR_ID = 'panasonic-ptz-operator';
 const OPERATOR_PARAMS = (() => {
   const out = [];
@@ -1872,7 +1875,7 @@ function renderOperatorTab() {
   gsel.innerHTML = '<option value="">All groups</option>' + groups.map(x => `<option ${x === g ? 'selected' : ''}>${esc(x)}</option>`).join('');
   const list = OPERATOR_PARAMS.filter(p => (!g || p.g === g) && words.every(w => (p.name + ' ' + p.cmd + ' ' + p.q + ' ' + p.g).toLowerCase().includes(w)));
   $('#operCount').textContent = list.length;
-  $('#operInfo').textContent = `${OPERATOR_PARAMS.length} settings go into an operator file (.poper): an operator's own way of working, separate from the scenes. Tally is not included; that stays with the camera. A camera skips whatever its model does not support.`;
+  $('#operInfo').textContent = `${OPERATOR_PARAMS.length} settings go into an operator file (.poper): an operator's own way of working, separate from the scenes and from the engineering file (nothing is in both). Tally is not included; that stays with the camera. A camera skips whatever its model does not support.`;
   $('#operTable tbody').innerHTML = list.map(p => `<tr><td class="grp">${esc(p.g)}</td><td>${esc(p.name)}</td><td class="mono">${esc(p.src.c)}</td><td class="mono">${esc(p.q)}</td><td class="small muted">${esc(operatorValues(p.src))}</td><td class="small muted">${esc(p.src.m.join(', '))}</td></tr>`).join('');
 }
 $('#operGroup').onchange = renderOperatorTab;
@@ -3146,12 +3149,7 @@ const SETUP = [
   { g: 'Tally', k: 'lamp', l: 'Status lamp', ptz: '#LMP', o: DISEN },
   { g: 'Pan / tilt', k: 'install', l: 'Install position', ptz: '#INS', o: [['0', 'Desktop'], ['1', 'Hanging']] },
   { g: 'Pan / tilt', k: 'spf', l: 'Smart picture flip', ptz: '#SPF', o: [['0', 'Off'], ['1', 'Auto']] },
-  { g: 'Pan / tilt', k: 'ptspeed', l: 'P/T speed mode', set: 'OSJ:2D:', q: 'QSJ:2D', o: [['0', 'Normal (60°/s)'], ['1', 'Fast (180°/s)'], ['2', 'Quick (60°/s)']] },
-  { g: 'Pan / tilt', k: 'swz', l: 'Speed with zoom position', ptz: '#SWZ', o: OFFON },
-  { g: 'Pan / tilt', k: 'faz', l: 'Focus adjust with PTZ', set: 'OAZ:', q: 'QAZ', o: OFFON },
   { g: 'Presets', k: 'scope', l: 'Preset scope', set: 'OSE:71:', q: 'QSE:71', o: [['0', 'Mode A'], ['1', 'Mode B'], ['2', 'Mode C']] },
-  { g: 'Presets', k: 'pst', l: 'Preset speed table', ptz: '#PST', o: [['0', 'Slow'], ['1', 'Mid (not on AW-UE150)'], ['2', 'Fast']] }, // AW-UE150 V3.20 answers eR3 to #PST1
-  { g: 'Presets', k: 'prf', l: 'Freeze during preset', ptz: '#PRF', o: OFFON },
   { g: 'Presets', k: 'pwron', l: 'Power-on position', set: 'OSJ:45:', q: 'QSJ:45', o: [['0', 'None'], ['1', 'Standby'], ['2', 'Home'], ['3', 'Preset']] },
   { g: 'System', k: 'wlc', l: 'Wireless control', ptz: '#WLC', o: DISEN },
   { g: 'System', k: 'fan1', l: 'Fan 1', ptz: '#FAN', o: FAN },
