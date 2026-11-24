@@ -574,3 +574,8 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .eng-tiles button.mixed{border-style:dashed;border-color:var(--accent)}
 .eng-tiles button.on[data-eng=tally][data-c=R][data-v="1"]{background:rgba(224,87,77,.25);border-color:#e0574d;color:#fff}
 .eng-tiles button.on[data-eng=tally][data-c=G][data-v="1"]{background:rgba(71,178,108,.25);border-color:#47b26c;color:#fff}
+
+/* Cameras: cameras in the list that did not answer */
+.offline-cams{margin:12px 0 4px;border:1px solid var(--rule-soft);border-radius:8px;padding:8px 12px}
+.offline-cams summary{cursor:pointer;color:var(--muted);font-weight:600}
+.offline-cams[open] summary{margin-bottom:8px}

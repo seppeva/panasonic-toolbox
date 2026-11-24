@@ -796,6 +796,8 @@ function netRow(c) {
   return l;
 }
 const netPending = r => JSON.stringify(r.edit) !== JSON.stringify(r.orig);
+// A camera in the list that did not answer (search or check): shown apart as 'Not on the network'
+const isOffline = c => !c.busy && c.statusKind === 'err' && /^(not reachable|no response)/i.test(c.status || '');
 const foundRows = () => state.eip.filter(r => !state.cameras.some(c => c.ip === r.orig.ip));
 const allNetRows = () => [...state.cameras.map(netRow), ...foundRows()];
 function renderCams() {
@@ -816,7 +818,9 @@ function renderCams() {
   const dot = h => `<span class="sdot s-${h}" title="${HEALTH_TXT[h]}" aria-label="${HEALTH_TXT[h]}"></span>`;
   const tally = { ok: 0, far: 0, off: 0, new: 0 };
   const bindNet = (tr, r) => $$('input[data-k]', tr).forEach(i => i.onchange = () => { r.edit[i.dataset.k] = i.value.trim(); renderCams(); });
-  for (const c of state.cameras) {
+  const offline = state.cameras.filter(isOffline);
+  offline.forEach(c => { c.selected = false; }); // out of sight, so not part of the selection either
+  for (const c of state.cameras.filter(c => !isOffline(c))) {
     const r = netRow(c);
     const tr = document.createElement('tr'); tally[health(c, r)] = (tally[health(c, r)] || 0) + 1;
     const status = c.busy ? '<span class="pill busy">Busy</span>' : range(r) ? '<span class="pill warn" title="Another IP range than this computer: give the camera an address in your range (type it in the IP column), or change this computer\'s IP address">Other range</span>' : c.statusKind === 'ok' && c.power === 'standby' ? '<span class="pill busy">Standby</span>' : c.status ? `<span class="pill ${c.statusKind || ''}">${esc(c.status)}</span>` : '';
@@ -851,6 +855,17 @@ function renderCams() {
     $('[data-act=add]', tr).onclick = () => addFound([r]);
     tb.appendChild(tr);
   }
+  // in the list, but not answering the last search: shown apart, under the list
+  tally.off = (tally.off || 0) + offline.length;
+  $('#camOffline').classList.toggle('hidden', !offline.length); $('#camOfflineN').textContent = offline.length;
+  const otb = $('#camOfflineTable tbody'); otb.innerHTML = '';
+  for (const c of offline) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="namecell">${dot('off')}${esc(c.title || '–')}</td><td class="mono">${esc(c.ip)}</td><td>${c.model ? `<span class="pill">${esc(c.model)}</span>` : '–'}</td><td>${esc(c.zone || '–')}</td><td class="muted">${esc(c.desc || '')}</td>
+      <td class="end"><button class="icon" data-act="del" title="Remove from the list" aria-label="Remove ${esc(c.ip)}">×</button></td>`;
+    $('[data-act=del]', tr).onclick = () => { track(`Remove ${c.ip}`, () => { state.cameras = state.cameras.filter(x => x !== c); }); saveCams(); renderCams(); };
+    otb.appendChild(tr);
+  }
   const nf = foundRows().length;
   $('#camHealth').innerHTML = state.cameras.length + nf ? [['ok', 'reachable'], ['far', 'in another IP range'], ['off', 'not reachable'], ['new', 'found, not in your list']].filter(([k]) => tally[k]).map(([k, t]) => `<span>${dot(k)}<b>${tally[k]}</b>${t}</span>`).join('') : '';
   $('#camCount').textContent = state.cameras.length;
@@ -871,6 +886,11 @@ function addFound(list) {
   else toast(`${list.length} camera${list.length > 1 ? 's' : ''} added to the list`);
 }
 $('#camAddFound').onclick = () => { const sel = foundRows().filter(r => r.sel); addFound(sel.length ? sel : foundRows()); };
+$('#camOfflineDel').onclick = () => {
+  const off = state.cameras.filter(isOffline); if (!off.length) return;
+  track(`Remove ${off.length} camera(s) not on the network`, () => { state.cameras = state.cameras.filter(c => !isOffline(c)); });
+  saveCams(); renderCams(); toast(`${off.length} camera${off.length > 1 ? 's' : ''} removed from the list (Undo brings ${off.length > 1 ? 'them' : 'it'} back)`);
+};
 $('#camDiscard').onclick = () => { allNetRows().forEach(r => { r.edit = { ...r.orig }; }); renderCams(); };
 $('#camApply').onclick = () => applyNet(allNetRows().filter(netPending));
 // Search: Easy IP over the whole cable (also other IP ranges) and read every camera in the list again

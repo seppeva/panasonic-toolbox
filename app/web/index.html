@@ -67,6 +67,11 @@
       <thead><tr><th class="w30"><input type="checkbox" id="selAll" aria-label="Select all"></th><th>Name</th><th>IP address</th><th>Description</th><th>Model</th><th>Zone</th><th>Scene</th><th>Status</th><th>Web pages</th><th><span class="sr">Remove</span></th></tr></thead>
       <tbody></tbody>
     </table>
+    <details class="offline-cams hidden" id="camOffline"><summary>Not on the network <span class="count" id="camOfflineN">0</span></summary>
+      <p class="hint">These cameras are in your list but did not answer the last search. They come back in the list above as soon as they answer again. Their name, zone and description are kept until you remove them.</p>
+      <table class="tbl dense" id="camOfflineTable"><thead><tr><th>Name</th><th>IP address</th><th>Model</th><th>Zone</th><th>Description</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="row"><button class="ghost small danger-text" id="camOfflineDel">Remove these from the list</button></div>
+    </details>
     <p class="empty muted" id="camEmpty">No cameras yet. Choose Search to find the cameras on the network, or Add… to add one by IP address.</p>
     <div class="pendbar hidden" id="camPending"><span id="camPendingN"></span><span class="grow"></span><button class="ghost small" id="camDiscard">Discard</button><button class="small" id="camApply">Apply</button></div>
     <p class="hint">Changing an IP address only works in the first 20 minutes after a camera is switched on. If it does not work, switch the camera off and on and try again.</p>
