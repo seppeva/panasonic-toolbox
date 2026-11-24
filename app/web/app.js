@@ -2292,27 +2292,17 @@ $('#saveShowBtn').onclick = async () => {
 };
 function renderShows() {
   const tb = $('#showTable tbody'); tb.innerHTML = '';
+  const es = $('#gridEditSel'); if (es) es.innerHTML = `<option value="">Edit a saved show…</option>` + state.shows.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('');
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : i.kind === 'engineering' ? 'engineering file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
-      <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> ${icoBtn('edit', 'edit', 'Edit this show')}${icoBtn('file', 'save', 'Save the show file')} <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
+      <td class="end nowrap"><button class="secondary small" data-act="recall">Recall</button> <button class="icon" data-act="del" aria-label="Delete show">×</button></td>`;
     $('input[type=checkbox]', tr).onchange = e => { sh.sel = e.target.checked; updShowSel(); };
     $('[data-act=recall]', tr).onclick = () => recallShow(sh);
-    $('[data-act=edit]', tr).onclick = () => editShow(sh);
     const ni = $('.namein', tr);
     ni.addEventListener('keydown', e => { if (e.key === 'Enter') ni.blur(); if (e.key === 'Escape') { ni.value = sh.name; ni.blur(); } });
     ni.addEventListener('change', () => renameShow(sh, ni.value));
     // Save file: a show that already has its file is written into that same file (no "… (1).pshow" copies)
-    $('[data-act=file]', tr).onclick = async () => {
-      if (IN_APP && sh.path) {
-        try {
-          const b = new TextEncoder().encode(showJson(sh)); let bin = ''; for (let i = 0; i < b.length; i += 0x8000) bin += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
-          const j = await bridgeFetch('/api/rename', { path: sh.path, name: showFile(sh), dataB64: btoa(bin) });
-          sh.path = j.path; saveShows(); renderShows(); log(`Saved: ${j.path}`); toast('Show file updated', j.path); return;
-        } catch (e) { log(`${sh.path}: ${e.message}, saving a new file`); }
-      }
-      const p = await download(showFile(sh), showJson(sh), undefined, 'show'); if (p) { sh.path = p; saveShows(); renderShows(); }
-    };
     $('[data-act=del]', tr).onclick = async () => { if (await ask({ title: `Delete “${esc(sh.name)}”?`, body: '<p>The cameras are not changed. A saved .pshow file stays where it is.</p>', ok: 'Delete', danger: true })) { track('Delete show', () => { state.shows = state.shows.filter(x => x !== sh); }); saveShows(); renderShows(); } };
     tb.appendChild(tr);
   }
@@ -2511,7 +2501,12 @@ async function useEngFile(data, quiet) {
 }
 
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
-$('#gridClear').onclick = () => { state.grid = {}; endGridEdit(); renderGrid(); };
+// Clear empties the whole block: the grid, the chosen cameras, the name and an edit in progress.
+$('#gridClear').onclick = () => {
+  track('Clear the show grid', () => { state.grid = {}; state.gridCams = new Set(); saveGridCams(); $('#gridName').value = ''; endGridEdit(); });
+  renderGrid();
+};
+$('#gridEditSel').onchange = () => { const sh = state.shows[+$('#gridEditSel').value]; $('#gridEditSel').value = ''; if (sh) editShow(sh); };
 // Edit a saved show: its scenes go back into the grid (as opened files), its cameras are selected.
 function editShow(sh) {
   for (const it of sh.items) if (!state.cameras.some(c => c.ip === it.target)) upsertCam(it.target, it.port, { title: it.targetTitle });

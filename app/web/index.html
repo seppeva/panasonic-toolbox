@@ -336,7 +336,8 @@
 <section id="tab-shows" class="tab">
   <header class="page-head"><h1>Shows</h1><p>A show puts the right settings on every camera with one click, for example "Concert" or "Talk show". Make one from your cameras as they are now with <b>New show from cameras…</b>, then recall it whenever you need it.</p></header>
   <div class="card">
-    <div class="row between wrap"><h2>Saved shows <span class="count" id="showCount">0</span></h2><span class="row"><button class="ghost small" id="showNew">New show from cameras…</button><button class="ghost small" id="showOpen">Open show file…</button></span></div>
+    <div class="row between wrap"><h2>Saved shows <span class="count" id="showCount">0</span></h2></div>
+    <p class="hint">Recall puts a show on its cameras. Make and edit shows in the block below.</p>
     <div class="hidden" id="showProgress"></div>
     <div class="selbar hidden" id="showSelBar"><span class="seln"><b id="showSelN">0</b> selected</span><span class="grow"></span><button class="ghost small danger-text" id="showDelSel">Delete</button></div>
     <table class="tbl" id="showTable">
@@ -346,8 +347,8 @@
     <p class="empty muted" id="showEmpty">No shows yet.</p>
   </div>
   <div class="card" id="gridCard">
-    <div class="row between wrap"><h2>Build a show from files</h2><span class="row"><button class="ghost small" id="gridOpen">Open files…</button><details class="menu"><summary>More</summary><div class="menu-pop"><button type="button" id="gridAuto" title="Put every opened scene on the camera it came from, in the same scene number">Fill from the same cameras</button><button type="button" id="gridClear" class="danger-text">Clear grid</button></div></details></span></div>
-    <p class="hint">Rows are cameras, columns are scenes. In each cell choose which opened scene goes into that scene of that camera. Files opened here or on the Restore page can be used.</p>
+    <div class="row between wrap"><h2>Make or edit a show</h2><span class="row wrap"><button class="ghost small" id="showNew" title="Read the cameras as they are now and save that as a show">New show from cameras…</button><button class="ghost small" id="gridOpen" title="Build a show offline from scene, operator and engineering files">Open files…</button><button class="ghost small" id="showOpen" title="Open a .pshow file to add it to the saved shows">Open show file…</button><select id="gridEditSel" class="small" aria-label="Edit a saved show"><option value="">Edit a saved show…</option></select><details class="menu"><summary>More</summary><div class="menu-pop"><button type="button" id="gridAuto" title="Put every opened scene on the camera it came from, in the same scene number">Fill from the same cameras</button><button type="button" id="gridClear" class="danger-text" title="Empty this block: the choices in the grid, the cameras and the name">Clear</button></div></details></span></div>
+    <p class="hint"><b>New show from cameras…</b> reads the cameras as they are now. To build or change a show without the cameras, open files (or edit a saved show) and choose in the grid what goes where: rows are cameras, columns are scenes. Files opened here or on the Restore page can be used.</p>
     <div class="note hidden" id="gridEditing"></div>
     <p class="muted small" id="gridFiles"></p>
     <div class="zonebar" id="gridZones"></div>
