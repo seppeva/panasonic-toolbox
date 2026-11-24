@@ -92,7 +92,7 @@ const state = {
   bridgeUrl: location.protocol.startsWith('http') ? location.origin : 'http://127.0.0.1:8765',
   version: '',
   delayMs: store.get('delayMs', 20),
-  sceneWait: store.get('sceneWait', 2000),
+  sceneWait: store.get('sceneWait', 2500),
   bridgeOk: false,
   localIps: [],
   cameras: store.get('cameras', []).map(c => ({ ...c, status: '', busy: false })),
@@ -315,15 +315,19 @@ async function getScene(cam) {
   const [r] = await batch(cam, [{ cmd: 'QSF' }]);
   return parseSceneResp(r, cam);
 }
+const SCENE_SETTLE_MS = 2500; // measured on an AW-UE150: matrix values change about 2.0 s after XSF
 async function switchScene(cam, n) {
   log(`${cam.ip}: switching to scene ${n}`);
   const r = await batch(cam, [{ cmd: 'XSF:' + n }]);
   if (!r[0].ok || isErr(r[0].body)) throw new Error(`Switching to scene ${n} failed (${r[0].body || r[0].error})`);
-  // go on as soon as the camera reports the new scene (usually within 0.1 s); the wait setting is the longest wait
-  const end = Date.now() + state.sceneWait;
-  while (Date.now() < end) {
-    try { if (+(await getScene(cam)) === +n) { await sleep(200); return; } } catch { }
-    await sleep(100);
+  // The camera reports the new scene within about 0.5 s, but some settings (the matrix, for example) only follow after
+  // about 2 s. Reading or writing before that sees the previous scene's values, so always wait the full time (at least
+  // 2.5 s, longer if Settings says so), then check that the camera is really in the new scene.
+  const t0 = Date.now(), wait = Math.max(state.sceneWait, SCENE_SETTLE_MS);
+  await sleep(wait);
+  while (Date.now() - t0 < wait + 5000) {
+    try { if (+(await getScene(cam)) === +n) return; } catch { }
+    await sleep(200);
   }
 }
 // White balance mode: the camera answers QAW with other numbers than OAW takes (query 2 = AWB A, 3 = AWB B;
@@ -547,7 +551,7 @@ $('#bridgeSettingsBtn').onclick = () => {
   $('#settingsDlg').showModal();
 };
 $('#saveSettings').onclick = () => {
-  state.delayMs = +$('#setDelay').value || 0; state.sceneWait = +$('#setSceneWait').value || 2000;
+  state.delayMs = +$('#setDelay').value || 0; state.sceneWait = Math.max(SCENE_SETTLE_MS, +$('#setSceneWait').value || SCENE_SETTLE_MS);
   state.livePath = $('#setLivePath').value.trim() || '/'; state.setupPath = $('#setSetupPath').value.trim() || '/';
   store.set('delayMs', state.delayMs); store.set('sceneWait', state.sceneWait);
   store.set('livePath', state.livePath); store.set('setupPath', state.setupPath);
@@ -620,7 +624,7 @@ const projSummary = d => {
 };
 function currentProjectData() {
   const d = projectData(projectId());
-  for (const k of PROJ_SETTINGS) if (d[k] === undefined) d[k] = store.get(k, { delayMs: 20, sceneWait: 2000, livePath: '/live/index.html', setupPath: '/admin/index.html' }[k]);
+  for (const k of PROJ_SETTINGS) if (d[k] === undefined) d[k] = store.get(k, { delayMs: 20, sceneWait: 2500, livePath: '/live/index.html', setupPath: '/admin/index.html' }[k]);
   return d;
 }
 async function saveProjectFile() {
