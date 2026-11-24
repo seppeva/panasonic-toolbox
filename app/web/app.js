@@ -2937,6 +2937,7 @@ function renderEng() {
   const box = c => $$('#engCams label:not(.selall-row) input').find(i => i.value === c.ip);
   zoneChips($('#engZones'), { get: c => !!box(c)?.checked, set: (c, v) => { const i = box(c); if (i) i.checked = v; }, done: save }, 'Zone');
   selAllRow($('#engCams'), state.cameras, c => on.has(c.ip), (c, v) => v ? on.add(c.ip) : on.delete(c.ip), () => { setSelection([...on]); renderEng(); });
+  setTimeout(() => engReadState(), 0);
 }
 
 // One command, with what counts as an answer: ok / not supported (ER…) / login / not reachable
@@ -3035,9 +3036,38 @@ async function engClick(btn) {
   $('#engStatus').textContent = `${ok} of ${rows.length} done · ${new Date().toLocaleTimeString('en-GB')}`;
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td class="${r.bad ? 'warn-text' : 'ok-text'}">${esc(r.res)}</td><td class="mono raw">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
   log(`Engineering: ${label}: ${ok}/${rows.length} ok`);
+  engReadState();
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
+// Feedback on the tiles: a button lights up when every selected camera is in that state, and gets a dashed edge when
+// only some of them are. Read every few seconds while the Engineering page is open, and right after an action.
+const ENG_WB_Q = { '0': 'auto', '9': 'var', '2': 'a', '3': 'b', '4': 'k32', '5': 'k56' }; // QAW answers (A = 2, B = 3)
+const engFb = { reading: false };
+async function engReadState() {
+  if (engFb.reading || !$('#tab-eng')?.classList.contains('active') || $('#tab-eng').classList.contains('busy')) return;
+  const cams = engCams().filter(c => !isCtrl(c));
+  engFb.reading = true;
+  try {
+    const res = await Promise.all(cams.map(c => batch(c, [{ type: 'ptz', cmd: '#O' }, { type: 'cam', cmd: 'QIS' }, { type: 'cam', cmd: 'QAW' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' }], { delayMs: 0 }).catch(() => null)));
+    if ($('#tab-eng').classList.contains('busy')) return; // an action started meanwhile: its own read follows
+    const vals = res.filter(r => r && r[0]?.ok).map(r => {
+      const b = i => (r[i]?.ok ? (r[i].body || '').trim() : '');
+      const p = b(0).toLowerCase(), ois = /^OIS:(\d)$/i.exec(b(1))?.[1];
+      return { power: p === 'p1' ? '1' : p === 'p0' ? '0' : '', ois: ois == null ? '' : ois === '0' ? '0' : '1',
+        wb: ENG_WB_Q[/^OAW:(\w)$/i.exec(b(2))?.[1]] || '', R: /^OLR:([01])$/i.exec(b(3))?.[1] || '', G: /^OLG:([01])$/i.exec(b(4))?.[1] || '' };
+    });
+    const mark = (btn, key, want) => {
+      const n = vals.filter(x => x[key] === want).length, all = vals.length > 0 && n === vals.length;
+      btn.classList.toggle('on', all); btn.classList.toggle('mixed', n > 0 && !all); btn.setAttribute('aria-pressed', all ? 'true' : 'false');
+    };
+    $$('#tab-eng [data-eng=power]').forEach(b => mark(b, 'power', b.dataset.v));
+    $$('#tab-eng [data-eng=ois]').forEach(b => mark(b, 'ois', b.dataset.v));
+    $$('#tab-eng [data-eng=wb]').forEach(b => mark(b, 'wb', b.dataset.v));
+    $$('#tab-eng [data-eng=tally]').forEach(b => mark(b, b.dataset.c, b.dataset.v));
+  } finally { engFb.reading = false; }
+}
+setInterval(engReadState, 3000);
 /* ---- Engineering: camera menu (OSD) with the IP picture. DUS:1/0 opens and closes the menu; DUP/DDW/DLT/DRT move
    (1 = one step, A = 10 steps), DIT is Enter, DPG is Cancel. An AW-UE160 takes CUP/CDW/CLT/CRT for the arrows.
    The menu shows on the IP picture only with OSD mix IP on (OSE:7B bit 0x10): switched on for as long as the menu is open. */

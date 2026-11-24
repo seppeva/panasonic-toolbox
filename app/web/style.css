@@ -568,3 +568,9 @@ body:not(.expert) #camTable th:nth-child(7),body:not(.expert) #camTable td:nth-c
 .menu-row{gap:10px;margin:12px 0 4px;justify-content:center}
 .menu-ctl.off .menu-pad button,.menu-ctl.off [data-menu]{opacity:.45;pointer-events:none}
 #menuToggle.on{background:var(--accent);color:#fff}
+
+/* Engineering tiles: state of the selected cameras (all = lit, some = dashed edge) */
+.eng-tiles button.on{background:var(--accent-soft);border-color:var(--accent);color:#cfe0fb}
+.eng-tiles button.mixed{border-style:dashed;border-color:var(--accent)}
+.eng-tiles button.on[data-eng=tally][data-c=R][data-v="1"]{background:rgba(224,87,77,.25);border-color:#e0574d;color:#fff}
+.eng-tiles button.on[data-eng=tally][data-c=G][data-v="1"]{background:rgba(71,178,108,.25);border-color:#47b26c;color:#fff}
