@@ -252,7 +252,7 @@ async function batch(cam, items, opts = {}) {
   const step = opts.parallel ? 200 : 20;
   for (let i = 0; i < items.length; i += step) {
     const part = items.slice(i, i + step);
-    const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, parallel: opts.parallel || 1, items: part }, Math.max(120000, part.length * 8000));
+    const j = await bridgeFetch('/api/batch', { ip: cam.ip, port: cam.port || 80, user: a.user, pass: a.pass, delayMs: opts.delayMs ?? state.delayMs, parallel: opts.parallel || 1, ...(opts.timeout ? { timeout: opts.timeout } : {}), items: part }, Math.max(120000, part.length * 8000));
     out.push(...j.results);
     if (j.results.some(r => /Errno 65|No route to host/i.test(r.error || ''))) localNetworkBlocked(cam);
     const stop = j.results.find(r => r.unreachable || r.status === 401);
@@ -280,7 +280,7 @@ async function identify(cam) {
     cam.scene = null; return cam;
   }
   const r = await batch(cam, [{ cmd: 'QID' }, { cmd: 'QSF' }, { type: 'ptz', cmd: '#O' }, { cmd: 'QSJ:5C' }]);
-  if (r[0].status === 401) throw new Error('Login required (enter user name and password)');
+  if (r[0].status === 401) throw new Error('Login required or wrong password (Camera login in Settings)');
   if (!r[0].ok) throw new Error(r[0].unreachable ? 'Not reachable' : (r[0].error || 'no response'));
   if (!/^OID:/i.test(r[0].body)) throw new Error('Not a Panasonic camera response: ' + r[0].body);
   cam.model = r[0].body.slice(4);
@@ -1686,7 +1686,11 @@ async function runImport(jobs, opts, title = 'Restore these cameras?') {
           (r.mismatch.length ? `<br>Different after checking: ${r.mismatch.map(m => esc(m.name)).join(', ')}${r.mismatch.some(m => /shutter/i.test(m.name)) ? ' <span class="muted">(shutter values depend on the frequency: a file from a camera at another frequency, for example 50 Hz into 59.94 Hz, gets the nearest value)</span>' : ''}` : '') +
           (r.stored ? '<br>Stored in the scene file (UE160).' : ''));
         log(`${cam.ip}: imported ${srcLabel(src)}: ${r.applied} changed, ${r.unchanged || 0} already right, ${r.failed.length} refused, ${r.mismatch.length} different`);
-      } catch (e) { setRow('err', `${esc(cam.ip)}: import failed. ${esc(e.message)}`); log(`${cam.ip}: import failed: ${e.message}`, 'ERROR'); }
+      } catch (e) {
+        if (e.undo) undos.push({ undo: e.undo, redo: e.redo });
+        setRow('err', `<b>${esc(cam.title || cam.model || '')}</b> <span class="mono">${esc(cam.ip)}</span><br>${esc(srcLabel(src))}: ${e.lost ? '' : 'import failed. '}${esc(e.message)}`); log(`${cam.ip}: import failed: ${e.message}`, 'ERROR');
+        if (e.lost) break; // the next files for this camera would fail the same way
+      }
     }
     cam.busy = false; try { await identify(cam); } catch { } renderCams();
   }));
@@ -1716,6 +1720,13 @@ const MODE_ENABLERS = [
   { ctl: 'OSA:2D', on: '1', label: 'knee Manual', deps: ['OSA:20', 'OSA:24'] },
   { ctl: 'OSE:31', on: '3', label: 'matrix User', deps: ['OSD:A4', 'OSD:A5', 'OSD:A6', 'OSD:A7', 'OSD:A8', 'OSD:A9', 'OSJ:1C', 'OSJ:1D', ...COLOR_CORR] },
 ];
+// A camera that stops answering halfway (cable out, power off): stop right away instead of trying every remaining
+// setting, and say how far it got. The settings from before go with the error, so the change can still be undone.
+function camLost(cam, done, total, extra = {}) {
+  const e = new Error(`The camera stopped answering after ${done} of ${total} settings. The rest was not sent. When the camera is back, restore again or use Undo to put back the settings from before.`);
+  return Object.assign(e, { lost: true }, extra);
+}
+const lostAt = res => res.findIndex(r => r?.unreachable);
 async function importScene(cam, sceneData, targetScene, opts, progress) {
   sceneData = sceneWbFixed(sceneData);
   if (!cam.model) await identify(cam);
@@ -1738,10 +1749,16 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     before = await readSceneFile(cam, target);
     if (opts.backup) backup = { name: fileName(cam, [before], '_BACKUP'), text: JSON.stringify(makeFile(cam, [before]), null, 1) };
   }
+  let sent = 0; // settings the camera took, for the message when it stops answering
+  const lost = () => camLost(cam, sent, toSend.length, before?.params?.length ? { before, scene: target } : {});
   const send = async (items, label) => {
     progress(label);
     const res = await batch(cam, items.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.send })));
-    return items.map((x, i) => ({ x, res: res[i], ok: res[i]?.ok && !isErr(res[i].body) }));
+    const out = items.map((x, i) => ({ x, res: res[i], ok: res[i]?.ok && !isErr(res[i].body) }));
+    const at = lostAt(res);
+    sent += out.slice(0, at < 0 ? out.length : at).filter(z => z.ok).length;
+    if (at >= 0) throw lost();
+    return out;
   };
   // Only what differs from the camera's current values is sent. A value that already matches needs no command, and
   // many of those cannot be written in the current mode anyway (the camera answers ER2, e.g. Synchro Value while the
@@ -1783,6 +1800,7 @@ async function importScene(cam, sceneData, targetScene, opts, progress) {
     }
     if (back) items.push({ cmd: back }, { sleepMs: en.wait || 300 });
     const r3 = await batch(cam, items);
+    if (lostAt(r3) >= 0) throw lost();
     const okCmds = new Set(items.map((it, i) => ({ it, r: r3[i] })).filter(z => z.it.cmd && z.r?.ok && !isErr(z.r.body)).map(z => z.it.cmd));
     pending = pending.filter(x => !(deps.includes(x) && okCmds.has(x.raw)));
   }
@@ -1827,6 +1845,7 @@ async function importOperator(cam, data, opts, progress) {
   const list = all.filter(x => now.get(x.cmd) !== x.raw.toUpperCase());
   progress(`setting ${list.length} values…`);
   let res = await batch(cam, list.map(x => ({ type: x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: x.raw })));
+  { const at = lostAt(res); if (at >= 0) throw camLost(cam, res.slice(0, at).filter(r => r?.ok && !isErr(r.body)).length, list.length, before?.settings?.length ? { before } : {}); }
   let failed = list.map((x, i) => ({ x, r: res[i] })).filter(z => !(z.r?.ok && !isErr(z.r.body)));
   if (failed.length) { res = await batch(cam, failed.map(z => ({ type: z.x.cmd.startsWith('#') ? 'ptz' : 'cam', cmd: z.x.raw }))); failed = failed.map((z, i) => ({ x: z.x, r: res[i] })).filter(z => !(z.r?.ok && !isErr(z.r.body))); }
   return { scene: null, applied: list.length - failed.length, unchanged: all.length - list.length, skipped: data.settings.filter(x => !known.has(x.cmd)), failed: failed.map(z => ({ cmd: z.x.cmd, name: z.x.name, err: /^er2/i.test(z.r?.body || '') ? 'ER2: not changeable in the current mode' : (z.r?.body || z.r?.error || 'ER').slice(0, 8) })), mismatch: [], stored: false, backup, before };
@@ -1839,6 +1858,8 @@ async function runJob(cam, src, targetScene, opts, progress) {
     const before = engOnly(await readSetup(cam, false));
     const backup = opts.backup ? { name: `${camName(cam).replace(/[^A-Za-z0-9._ -]+/g, '_')}_${cam.ip}_ENGINEERING_BACKUP.json`, text: JSON.stringify({ format: ENG_ID, version: 1, values: before, savedAt: new Date().toISOString(), fromIp: cam.ip, fromName: camName(cam), model: cam.model || '' }, null, 1) } : null;
     const [row] = await applySetup([cam], v, progress);
+    const gone = row.out.find(o => /^The camera stopped answering/.test(o.t));
+    if (gone) throw Object.assign(new Error(gone.t + ' When the camera is back, restore again or use Undo to put back the settings from before.'), { lost: true, undo: () => applySetup([cam], before), redo: () => applySetup([cam], v) });
     const split = t => { const i = t.indexOf(': '); return i > 0 ? { name: t.slice(0, i), err: t.slice(i + 2) } : { name: t, err: 'not set' }; };
     // applySetup only sends what differs; count it the same way as scene and operator files
     const differs = Object.keys(v).filter(k => String(before[k] ?? '') !== String(v[k])).length;
@@ -1847,13 +1868,17 @@ async function runJob(cam, src, targetScene, opts, progress) {
     return { r, undo: () => applySetup([cam], before), redo: () => applySetup([cam], v) };
   }
   if (src.kind === 'operator') {
-    const r = await importOperator(cam, src.file, opts, progress);
+    let r;
+    try { r = await importOperator(cam, src.file, opts, progress); }
+    catch (e) { if (e.before) Object.assign(e, { undo: () => importOperator(cam, e.before, { backup: false }, () => { }), redo: () => importOperator(cam, src.file, { backup: false }, () => { }) }); throw e; }
     return { r, undo: () => importOperator(cam, r.before, { backup: false }, () => { }), redo: () => importOperator(cam, src.file, { backup: false }, () => { }) };
   }
   // Undo and redo also read the camera first, so only the settings that differ are sent (a few seconds instead of minutes).
   const sceneData = src.file.scenes[src.sceneIdx];
-  const r = await importScene(cam, sceneData, targetScene, opts, progress);
   const o2 = { ...opts, backup: false, verify: false, };
+  let r;
+  try { r = await importScene(cam, sceneData, targetScene, opts, progress); }
+  catch (e) { if (e.before) Object.assign(e, { undo: () => importScene(cam, e.before, String(e.scene), o2, () => { }), redo: () => importScene(cam, sceneData, String(e.scene), o2, () => { }) }); throw e; }
   return { r, undo: () => importScene(cam, r.before, String(r.scene), o2, () => { }), redo: () => importScene(cam, sceneData, String(r.scene), o2, () => { }) };
 }
 
@@ -2734,7 +2759,7 @@ async function sendCmd(t, cmd, outEl, c) {
     let prev = null;
     if (c && c.q) { try { const [q] = await batch(cam, [{ type: t, cmd: c.q }]); if (q.ok) prev = restoreCmd(t, q.body); } catch { } }
     const [r] = await batch(cam, [{ type: t, cmd }]);
-    outEl.textContent = r.ok ? `Response: ${r.body || '(empty)'}` : `No response: ${r.error || ''}`;
+    outEl.textContent = r.ok ? `Response: ${r.body || '(empty)'}` : r.status === 401 ? 'Login required or wrong password (Camera login in Settings)' : `No response: ${r.error || ''}`;
     log(`${tg.ip}: ${cmd} → ${r.ok ? r.body : r.error}`);
     const same = (x, y) => t === 'ptz' ? x.startsWith(c.q) && y.startsWith(c.q) : x.split(':').slice(0, -1).join(':') === y.split(':').slice(0, -1).join(':');
     if (r.ok && !isErr(r.body) && prev && prev !== cmd && same(prev, cmd)) pushHistory({
@@ -2985,7 +3010,7 @@ function renderEng() {
 // One command, with what counts as an answer: ok / not supported (ER…) / login / not reachable
 function engVerdict(r, okText = 'Done') {
   if (!r) return { res: 'No answer', bad: true };
-  if (r.status === 401) return { res: 'Login required (Camera login in Settings)', bad: true };
+  if (r.status === 401) return { res: 'Login required or wrong password (Camera login in Settings)', bad: true };
   if (r.unreachable || !r.ok) return { res: 'Not reachable', bad: true };
   if (isErr(r.body)) return { res: r.body.toUpperCase().startsWith('ER2') ? 'Camera busy or in standby (ER2)' : r.body.toUpperCase().startsWith('ER3') ? 'Value out of range (ER3)' : 'Not supported by this camera (' + r.body + ')', bad: true };
   return { res: okText };
@@ -3042,7 +3067,7 @@ const ENG = {
       // the camera's own settings page posts h264_transmit to set_h264, set_h264_2…4 (a GET is refused with 400)
       const paths = ['/cgi-bin/set_h264', '/cgi-bin/set_h264_2', '/cgi-bin/set_h264_3', '/cgi-bin/set_h264_4'];
       const rs = []; for (const p of paths) rs.push(await cgi(p, { h264_transmit: v }, 'POST'));
-      if (rs[0]?.status === 401) return { res: 'Login required (Camera login in Settings)', bad: true };
+      if (rs[0]?.status === 401) return { res: 'Login required or wrong password (Camera login in Settings)', bad: true };
       if (rs.every(r => !r?.ok)) return { res: rs[0]?.unreachable ? 'Not reachable' : 'Not accepted (HTTP ' + (rs[0]?.status || '?') + ')', bad: true };
       const sd = (await cgi('/cgi-bin/setdata', {}))?.body || '';
       const now = ['H264', 'H264_2', 'H264_3', 'H264_4'].map(k => (new RegExp('^' + k + ',"(\\d)"', 'm').exec(sd) || [])[1]).filter(Boolean);
@@ -3080,39 +3105,60 @@ async function engClick(btn) {
   $('#engStatus').textContent = `${ok} of ${rows.length} done · ${new Date().toLocaleTimeString('en-GB')}`;
   $('#engResult').innerHTML = `<table class="tbl dense eng-res"><thead><tr><th>Camera</th><th>IP</th><th>Result</th><th>Camera's answer</th></tr></thead><tbody>${rows.map(r => `<tr><td>${esc(camName(r.c))}</td><td class="mono small">${esc(r.c.ip)}</td><td class="${r.bad ? 'warn-text' : 'ok-text'}">${esc(r.res)}</td><td class="mono raw">${r.raw.map(esc).join('<br>')}</td></tr>`).join('')}</tbody></table>`;
   log(`Engineering: ${label}: ${ok}/${rows.length} ok`);
-  engReadState();
+  engReadAfter();
   if (live.cam && cams.includes(live.cam)) liveRead();
 }
 $$('#tab-eng .eng-tiles [data-eng]').forEach(b => b.onclick = () => engClick(b));
 // Feedback on the tiles: a button lights up when every selected camera is in that state, and gets a dashed edge when
-// only some of them are. Read every few seconds while the Engineering page is open, and right after an action.
+// only some of them are. Read when the page opens or the selection changes, right after an action (and again a few
+// seconds later: a camera that powers on takes a while), and otherwise only every 30 s, to see changes made with a
+// remote controller or the camera menu. Every camera is read and shown on its own: one that does not answer is
+// given up after about a second and does not hold up the others.
 const ENG_WB_Q = { '0': 'auto', '9': 'var', '2': 'a', '3': 'b', '4': 'k32', '5': 'k56' }; // QAW answers (A = 2, B = 3)
-const engFb = { reading: false };
-async function engReadState() {
-  if (engFb.reading || !$('#tab-eng')?.classList.contains('active') || $('#tab-eng').classList.contains('busy')) return;
-  const cams = engCams().filter(c => !isCtrl(c));
-  engFb.reading = true;
+const ENG_READ = [{ type: 'cam', cmd: 'QIS' }, { type: 'cam', cmd: 'QAW' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' },
+  { type: 'cam', cmd: 'QBR' }, { type: 'cam', cmd: 'QSV' }, { type: 'ptz', cmd: '#FS1' }, { type: 'ptz', cmd: '#FS2' }, { type: 'ptz', cmd: '#RER' }, { type: 'cam', cmd: 'QUS' }];
+const engFb = { res: {}, reading: new Set(), later: [] };
+const engActive = () => $('#tab-eng')?.classList.contains('active') && document.visibilityState === 'visible';
+async function engReadCam(c) {
+  if (engFb.reading.has(c.ip)) return;
+  engFb.reading.add(c.ip);
   try {
-    const res = await Promise.all(cams.map(c => batch(c, [{ type: 'ptz', cmd: '#O' }, { type: 'cam', cmd: 'QIS' }, { type: 'cam', cmd: 'QAW' }, { type: 'cam', cmd: 'QLR' }, { type: 'cam', cmd: 'QLG' },
-      { type: 'cam', cmd: 'QBR' }, { type: 'cam', cmd: 'QSV' }, { type: 'ptz', cmd: '#FS1' }, { type: 'ptz', cmd: '#FS2' }, { type: 'ptz', cmd: '#RER' }, { type: 'cam', cmd: 'QUS' }], { delayMs: 0, parallel: 4 }).catch(() => null)));
-    renderEngStatus(cams, res);
-    if ($('#tab-eng').classList.contains('busy')) return; // an action started meanwhile: its own read follows
-    const vals = res.filter(r => r && r[0]?.ok).map(r => {
-      const b = i => (r[i]?.ok ? (r[i].body || '').trim() : '');
-      const p = b(0).toLowerCase(), ois = /^OIS:(\d)$/i.exec(b(1))?.[1];
-      return { power: p === 'p1' ? '1' : p === 'p0' ? '0' : '', ois: ois == null ? '' : ois === '0' ? '0' : '1',
-        wb: ENG_WB_Q[/^OAW:(\w)$/i.exec(b(2))?.[1]] || '', R: /^OLR:([01])$/i.exec(b(3))?.[1] || '', G: /^OLG:([01])$/i.exec(b(4))?.[1] || '', bars: /^OBR:([01])$/i.exec(b(5))?.[1] || '' };
-    });
-    const mark = (btn, key, want) => {
-      const n = vals.filter(x => x[key] === want).length, all = vals.length > 0 && n === vals.length;
-      btn.classList.toggle('on', all); btn.classList.toggle('mixed', n > 0 && !all); btn.setAttribute('aria-pressed', all ? 'true' : 'false');
-    };
-    $$('#tab-eng [data-eng=power]').forEach(b => mark(b, 'power', b.dataset.v));
-    $$('#tab-eng [data-eng=ois]').forEach(b => mark(b, 'ois', b.dataset.v));
-    $$('#tab-eng [data-eng=bars]').forEach(b => mark(b, 'bars', b.dataset.v));
-    $$('#tab-eng [data-eng=wb]').forEach(b => mark(b, 'wb', b.dataset.v));
-    $$('#tab-eng [data-eng=tally]').forEach(b => mark(b, b.dataset.c, b.dataset.v));
-  } finally { engFb.reading = false; }
+    const [p] = await batch(c, [{ type: 'ptz', cmd: '#O' }], { delayMs: 0, timeout: 1 }).catch(() => [null]);
+    const r = !p?.ok ? [p] : [p, ...await batch(c, ENG_READ, { delayMs: 0, parallel: 4, timeout: 2 }).catch(() => [])];
+    engFb.res[c.ip] = r;
+  } finally { engFb.reading.delete(c.ip); }
+  if (!$('#tab-eng').classList.contains('busy')) engShowState();
+}
+function engReadState() {
+  if (!$('#tab-eng')?.classList.contains('active') || $('#tab-eng').classList.contains('busy')) return;
+  engCams().filter(c => !isCtrl(c)).forEach(c => engReadCam(c));
+  engShowState();
+}
+// After an action: read now, and again after 2 and 6 s
+function engReadAfter() {
+  engFb.later.forEach(clearTimeout);
+  engReadState();
+  engFb.later = [2000, 6000].map(ms => setTimeout(engReadState, ms));
+}
+function engShowState() {
+  const cams = engCams().filter(c => !isCtrl(c));
+  const res = cams.map(c => engFb.res[c.ip]);
+  renderEngStatus(cams, res);
+  const vals = res.filter(r => r && r[0]?.ok).map(r => {
+    const b = i => (r[i]?.ok ? (r[i].body || '').trim() : '');
+    const p = b(0).toLowerCase(), ois = /^OIS:(\d)$/i.exec(b(1))?.[1];
+    return { power: p === 'p1' ? '1' : p === 'p0' ? '0' : '', ois: ois == null ? '' : ois === '0' ? '0' : '1',
+      wb: ENG_WB_Q[/^OAW:(\w)$/i.exec(b(2))?.[1]] || '', R: /^OLR:([01])$/i.exec(b(3))?.[1] || '', G: /^OLG:([01])$/i.exec(b(4))?.[1] || '', bars: /^OBR:([01])$/i.exec(b(5))?.[1] || '' };
+  });
+  const mark = (btn, key, want) => {
+    const n = vals.filter(x => x[key] === want).length, all = vals.length > 0 && n === vals.length;
+    btn.classList.toggle('on', all); btn.classList.toggle('mixed', n > 0 && !all); btn.setAttribute('aria-pressed', all ? 'true' : 'false');
+  };
+  $$('#tab-eng [data-eng=power]').forEach(b => mark(b, 'power', b.dataset.v));
+  $$('#tab-eng [data-eng=ois]').forEach(b => mark(b, 'ois', b.dataset.v));
+  $$('#tab-eng [data-eng=bars]').forEach(b => mark(b, 'bars', b.dataset.v));
+  $$('#tab-eng [data-eng=wb]').forEach(b => mark(b, 'wb', b.dataset.v));
+  $$('#tab-eng [data-eng=tally]').forEach(b => mark(b, b.dataset.c, b.dataset.v));
 }
 // Status tile: firmware, fans, last error and whether the camera menu is open, per selected camera (read only)
 function renderEngStatus(cams, res) {
@@ -3120,7 +3166,9 @@ function renderEngStatus(cams, res) {
   $('#engStatusEmpty').classList.toggle('hidden', cams.length > 0); $('#engStatusTable').classList.toggle('hidden', !cams.length);
   tb.innerHTML = cams.map((c, i) => {
     const r = res[i]; const b = k => (r?.[k]?.ok ? (r[k].body || '').trim() : '');
-    if (!r || !r[0]?.ok) return `<tr><td>${esc(camName(c))}</td><td colspan="5" class="bad">Not reachable</td></tr>`;
+    if (!r) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="muted">Reading…</td></tr>`;
+    if (r[0]?.status === 401) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="bad">Login required or wrong password (Camera login in Settings)</td></tr>`;
+    if (!r[0]?.ok) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="bad">Not reachable</td></tr>`;
     const fan = v => { const m = /^fS[12](\d)$/i.exec(v); return !m ? '<span class="muted">–</span>' : m[1] === '1' ? 'OK' : `<span class="bad" title="${esc(v)}">Check</span>`; };
     const er = /^rER(\w+)$/i.exec(b(9))?.[1];
     const err = er == null ? '<span class="muted">–</span>' : /^0+$/.test(er) ? 'None' : `<span class="bad">Code ${esc(er)}</span>`;
@@ -3128,7 +3176,8 @@ function renderEngStatus(cams, res) {
     return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td class="mono">${esc(fw)}</td><td>${fan(b(7))}</td><td>${fan(b(8))}</td><td>${err}</td><td>${menu}</td></tr>`;
   }).join('');
 }
-setInterval(engReadState, 3000);
+setInterval(() => { if (engActive()) engReadState(); }, 30000);
+window.addEventListener('focus', () => { if (engActive()) engReadState(); });
 /* ---- Engineering: camera menu (OSD) with the IP picture. DUS:1/0 opens and closes the menu; DUP/DDW/DLT/DRT move
    (1 = one step, A = 10 steps), DIT is Enter, DPG is Cancel. An AW-UE160 takes CUP/CDW/CLT/CRT for the arrows.
    The menu shows on the IP picture only with OSD mix IP on (OSE:7B bit 0x10): switched on for as long as the menu is open. */
@@ -3384,7 +3433,8 @@ async function applySetup(cams, v, progress = () => {}) {
   const plan = SETUP.filter(f => v[f.k]), scenes = plan.filter(f => f.wb);
   return Promise.all(cams.map(async c => {
     const raw = [], out = [];
-    const send = async (type, cmd) => { try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
+    let lost = false; // the camera stopped answering: send nothing more, say so once
+    const send = async (type, cmd) => { if (lost) return { ok: false, unreachable: true, error: 'Camera not reachable' }; try { const r = (await batch(c, [{ type, cmd }], { delayMs: 0 }))[0]; if (r?.unreachable) lost = true; raw.push(`${cmd} → ${r?.ok ? (r.body || '(empty)') : (r?.status === 401 ? '401' : r?.error || 'no answer')}`); return r; } catch (e) { raw.push(`${cmd} → ${e.message}`); return { ok: false, error: e.message }; } };
     const okBody = r => r?.ok && !isErr(r.body);
     try { if (!c.model) await identify(c); } catch { return { c, raw, out: [{ bad: true, t: 'Not reachable' }], bad: true }; }
     // 1. frequency and format first (a frequency change restarts the camera)
@@ -3452,6 +3502,7 @@ async function applySetup(cams, v, progress = () => {}) {
       }
       try { if (orig && cur !== orig) await switchScene(c, orig); c.scene = orig; } catch (e) { out.push({ bad: true, t: `Back to scene ${orig}: ${e.message}` }); }
     }
+    if (lost) { const n = out.filter(o => !o.bad).length; out.splice(0, out.length, ...out.filter(o => !o.bad), { bad: true, t: `The camera stopped answering${n ? ` after ${n} setting${n > 1 ? 's' : ''}` : ''}. The rest was not sent.` }); }
     return { c, raw, out, bad: out.some(o => o.bad) };
   }));
 }
@@ -3794,6 +3845,7 @@ async function liveReadNow(cam) {
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
+  if (res[0]?.status === 401) { $('#liveStatus').textContent = 'Login required or wrong password'; liveMsg('This camera asks for a login, and the user name or password in Settings › Camera login is not right.'); return; }
   const b = i => (res[i]?.ok ? (res[i].body || '').trim() : '');
   const power = b(0).toLowerCase();
   live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';

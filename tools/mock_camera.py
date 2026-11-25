@@ -9,6 +9,7 @@ from urllib.parse import urlparse, parse_qs
 
 HOST, PORT, MODEL, TITLE = sys.argv[1], int(sys.argv[2]), sys.argv[3], (sys.argv[4] if len(sys.argv) > 4 else "")
 BASIC_ONLY = len(sys.argv) > 5 and sys.argv[5] == "basic"  # title only on /cgi-bin/get_basic, like older models
+AUTH = os.environ.get("MOCK_AUTH", "")  # "user:pass": User Auth on (Basic), anything else answers 401
 root = os.path.join(os.path.dirname(__file__), "..")
 cat = json.loads(re.search(r"window\.PANA_CATALOG = (.*);\s*$", open(os.path.join(root, "app", "web", "catalog.js")).read(), re.S).group(1))
 fam = "UE160" if "UE160" in MODEL else "UE80" if re.search(r"UE(80|50|40)", MODEL) else "UE150"
@@ -34,6 +35,10 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
         u = urlparse(self.path)
+        if AUTH:
+            import base64
+            if self.headers.get("Authorization", "") != "Basic " + base64.b64encode(AUTH.encode()).decode():
+                self.send_response(401); self.send_header("WWW-Authenticate", 'Basic realm="mock"'); self.send_header("Content-Length", "0"); self.end_headers(); return
         if u.path == "/cgi-bin/mjpeg":
             return self.mjpeg()
         if u.path == "/cgi-bin/get_basic":
