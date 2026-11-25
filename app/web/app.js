@@ -2898,6 +2898,7 @@ async function eipVerify(snap, field, fails) {
   let found = [];
   try { found = (await bridgeFetch('/api/eip/discover', { timeout: 3 })).cameras || []; } catch (e) { eipProgress('Search failed: ' + e.message); }
   eipTake(found);
+  const moved = []; // cameras now on a new address: their web server needs a while longer than Easy IP to come back
   const rows = snap.map(r => {
     const want = r[field], was = r[field === 'edit' ? 'orig' : 'edit'], now = found.find(f => f.mac === r.mac);
     const out = [];
@@ -2909,11 +2910,11 @@ async function eipVerify(snap, field, fails) {
         out.push({ t: `IP ${was.ip} → ${want.ip}` });
         // the camera keeps its place, description and zones in the Cameras list under its new address
         const c = state.cameras.find(x => x.ip === was.ip), old = state.cameras.find(x => x !== c && x.ip === want.ip);
-        if (c && !old) { c.ip = want.ip; c.port = want.port || 80; c.status = ''; saveCams(); renderCams(); }
+        if (c && !old) { c.ip = want.ip; c.port = want.port || 80; saveCams(); moved.push(c); }
         else if (old) { // a replaced camera: the new one takes over its entry (zone, description), the temporary entry goes
           if (c) state.cameras.splice(state.cameras.indexOf(c), 1);
-          old.port = want.port || 80; old.status = ''; old.statusKind = ''; old.scene = null; if (now.model) old.model = now.model;
-          saveCams(); renderCams();
+          old.port = want.port || 80; old.scene = null; if (now.model) old.model = now.model;
+          saveCams(); moved.push(old);
         }
       }
       else out.push({ bad: true, t: `IP not changed: the camera still announces ${now.ip}. Cameras only accept a new address in the first 20 minutes after power-on (Easy IP Setup accommodate period): switch it off and on and try again.` });
@@ -2924,7 +2925,13 @@ async function eipVerify(snap, field, fails) {
     }
     return { r, out };
   });
+  moved.forEach(c => { c.status = 'Restarting network…'; c.statusKind = ''; c.busy = true; });
   state.netLocal.clear(); renderCams();
+  moved.forEach(async c => { // wait until it answers on the new address (at most 90 s), then show its real status
+    const t0 = Date.now();
+    while (Date.now() - t0 < 90000) { const [r] = await batch(c, [{ type: 'cam', cmd: 'QID' }], { delayMs: 0, timeout: 1 }).catch(() => [null]); if (r?.ok || r?.status === 401) break; await sleep(1500); }
+    c.busy = false; refreshAll([c]);
+  });
   const bad = rows.some(x => x.out.some(o => o.bad));
   eipProgress(bad ? 'Not everything changed. See the result.' : `Done · ${new Date().toLocaleTimeString('en-GB')}`);
   await ask({ title: bad ? 'Not every change was made' : 'Network settings changed', ok: 'OK', cancel: null, wide: true,
