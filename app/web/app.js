@@ -1305,10 +1305,10 @@ $('#browseFolderBtn').onclick = async () => {
 // Tally is left out on purpose: it belongs to the camera/studio setup, not to the operator.
 const OPERATOR_SPEC = [
   ['Presets', ['OSJ:29', '#PST', '#UPVS', 'OSJ:A8', 'OSJ:A9', 'OSJ:AA', 'OSJ:AB', 'OSJ:AC', 'OSJ:AD', 'OSJ:AE', 'OSE:7C', 'OSE:7D', 'OSJ:5B', 'OSJ:D5', 'OSJ:2B', 'OSJ:2C', '#PRF']],
-  ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ', 'OSJ:46']],
+  ['Pan/tilt', ['OSJ:2D', '#SWZ', 'OAZ']],
   ['Lens', ['OAF', 'OSJ:D8', 'OSE:70', 'OSE:7A', 'OSJ:4E', 'OIS']],
 ];
-// Nothing may be in both the operator file and the engineering file: preset scope, smart picture flip and power-on
+// Nothing may be in both the operator file and the engineering file: preset scope, smart picture flip, power-on preset and power-on
 // position are engineering (setup form); pan/tilt speed, speed with zoom, focus adjust, preset speed table, freeze
 // during preset and the image stabilizer (OIS) are operator.
 const OPERATOR_ID = 'panasonic-ptz-operator';
@@ -3294,6 +3294,8 @@ const SETUP = [
   { g: 'Pan / tilt', k: 'spf', l: 'Smart picture flip', ptz: '#SPF', o: [['0', 'Off'], ['1', 'Auto']] },
   { g: 'Presets', k: 'scope', l: 'Preset scope', set: 'OSE:71:', q: 'QSE:71', o: [['0', 'Mode A'], ['1', 'Mode B'], ['2', 'Mode C']] },
   { g: 'Presets', k: 'pwron', l: 'Power-on position', set: 'OSJ:45:', q: 'QSJ:45', o: [['0', 'None'], ['1', 'Standby'], ['2', 'Home'], ['3', 'Preset']] },
+  // the preset the camera goes to at power-on when Power-on position is Preset; data 00-99 (decimal) = preset 1-100
+  { g: 'Presets', k: 'pwrpst', l: 'Power-on preset', set: 'OSJ:46:', q: 'QSJ:46', o: Array.from({ length: 100 }, (_, i) => [String(i).padStart(2, '0'), `Preset ${i + 1}`]) },
   { g: 'System', k: 'wlc', l: 'Wireless control', ptz: '#WLC', o: DISEN },
   { g: 'System', k: 'fan1', l: 'Fan 1', ptz: '#FAN', o: FAN },
   { g: 'System', k: 'fan2', l: 'Fan 2', ptz: '#FA2', o: FAN },
@@ -3318,6 +3320,9 @@ function renderSetup() {
   $('#setupForm').innerHTML = setupFieldsHtml(SETUP.filter(f => !f.wb), v);
   $('#wbSceneForm').innerHTML = setupFieldsHtml(SETUP.filter(f => f.wb), w);
   $$('#wbSceneForm [data-k]').forEach(el => el.onchange = () => wbSceneLive(el));
+  // Power-on preset only matters when Power-on position is Preset (a dash: the camera's own setting, so leave it open)
+  const pwrDep = () => { const p = $('#setupForm [data-k=pwron]'), n = $('#setupForm [data-k=pwrpst]'); if (p && n) { n.disabled = !!p.value && p.value !== '3'; n.title = n.disabled ? 'Only used when Power-on position is Preset' : ''; } };
+  pwrDep(); $('#setupForm [data-k=pwron]')?.addEventListener('change', pwrDep);
   $$('#setupForm [data-k]').forEach(el => el.onchange = () => {
     const key = isWbKey(el.dataset.k) ? 'engWbScenes' : 'engSetup', t = store.get(key, {});
     if (el.value.trim()) t[el.dataset.k] = el.value.trim(); else delete t[el.dataset.k];
