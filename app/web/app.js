@@ -3234,6 +3234,7 @@ async function menuOpen() {
     menu.on = true; menuUi(); menuStream(cam);
     $('#menuStatus').textContent = '';
     log(`${cam.ip}: camera menu open`);
+    engReadAfter(); // the Status tile shows the menu as open
   } catch (e) { $('#menuStatus').textContent = 'Failed: ' + e.message; }
 }
 async function menuRestoreOsd() {
@@ -3246,6 +3247,7 @@ async function menuClose() {
   const was = menu.on; menu.on = false; menuUi();
   if (was && menu.cam) { try { await menuSend('DUS:0'); await menuRestoreOsd(); log(`${menu.cam.ip}: camera menu closed`); } catch { } }
   await menuStream(null); menuMsg('Choose a camera and choose Menu on.'); $('#menuStatus').textContent = '';
+  if (was) engReadAfter();
 }
 const MENU_CMD = { up: 'DUP', down: 'DDW', left: 'DLT', right: 'DRT', enter: 'DIT:1', cancel: 'DPG:1' };
 const MENU_UE160 = { up: 'CUP', down: 'CDW', left: 'CLT', right: 'CRT' };
