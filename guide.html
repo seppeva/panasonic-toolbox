@@ -67,7 +67,7 @@ td:first-child{color:var(--text)}
       <li><span>9</span><a href="#s9">Parameters</a></li><li><span>10</span><a href="#s10">RP150 assignment</a></li><li><span>11</span><a href="#s11">Troubleshooting</a></li><li><span>12</span><a href="#s12">Contact</a></li>
     </ul>
   </div>
-  <div class="meta">Version 2.30 · November 2026 · seppeva.github.io/panasonic-toolbox</div>
+  <div class="meta">Version 2.47 · November 2026 · seppeva.github.io/panasonic-toolbox</div>
 </section>
 
 <section class="page">
@@ -97,7 +97,7 @@ td:first-child{color:var(--text)}
     <tr><th style="width:38mm">Where</th><th>What it does</th></tr>
     <tr><td>Menu on the left</td><td>Cameras, Live, Engineering, Back up, Restore, Shows, Parameters, RP150 assignment</td></tr>
     <tr><td>Project</td><td>Keeps productions apart: each project has its own cameras, zones, shows, settings and folder</td></tr>
-    <tr><td>Zones</td><td>Click a zone (for example <span class="btn">Stage 3</span>) on any page to select only its cameras. Shift-click adds or removes a zone, so you can select several zones</td></tr>
+    <tr><td>Zones</td><td>Click a zone (for example <span class="btn">Stage 3</span>) on any page to select only its cameras. Shift-, Ctrl- or Cmd-click adds or removes a zone, so you can select several zones</td></tr>
     <tr><td>Select all</td><td>The checkbox above every camera list selects or clears all cameras</td></tr>
     <tr><td>Undo / Redo</td><td>Bottom left, or Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z</td></tr>
     <tr><td>Log</td><td>Everything the app did, with the time</td></tr>
@@ -114,7 +114,7 @@ td:first-child{color:var(--text)}
   <img class="shot" src="assets/guide/cameras.png">
   <ol>
     <li>Click <span class="btn p">Search</span>. The app also searches by itself when it starts. Cameras not in your list yet show a blue dot. Cameras in your list that do not answer move to <b>Not on the network</b> under the list, where you can remove them.</li>
-    <li>Select them and choose <span class="btn">More</span> › <b>Add found cameras to my list</b>. <span class="btn">Add…</span> adds a camera by hand.</li>
+    <li>Select them and click <span class="btn">Add to my list</span> in the selection bar. <span class="btn">Add…</span> adds a camera by hand.</li>
     <li>Select the cameras you want to work with.</li>
   </ol>
   <table>
@@ -136,7 +136,7 @@ td:first-child{color:var(--text)}
   <table>
     <tr><th style="width:38mm">Block</th><th>What you can do</th></tr>
     <tr><td>Pan / tilt, zoom, focus, iris</td><td>Hold a button to move; the camera stops when you let go. Speed with a button back to nominal. Auto focus, Push AF, Auto iris.</td></tr>
-    <tr><td>Camera presets</td><td>Recall with one click; <span class="btn">Store</span> then a number saves the current position</td></tr>
+    <tr><td>Camera presets</td><td>Recall with one click; <span class="btn">Store</span> then a number saves the current position; <span class="btn">Delete</span> then a number deletes a preset</td></tr>
     <tr><td>White</td><td>Auto, Var, A, B, 3200K, 5600K, a kelvin value with Set VAR, AWB and Store</td></tr>
     <tr><td>Black, Day / night</td><td>ABB; Day or Night</td></tr>
     <tr><td>Image stabilizer</td><td>On or Off (OIS)</td></tr>
@@ -155,9 +155,9 @@ td:first-child{color:var(--text)}
   <p>At the top, select the cameras (Select all and the zones help). Every setting is in one place:</p>
   <div class="two">
     <div class="card"><h3 style="margin-top:0">Tiles: right away</h3>
-      <ul><li><b>Power</b>: On or Standby</li><li><b>Tally</b>: red and green on or off</li><li><b>Image stabilizer (OIS)</b>: on or off</li><li><b>Color bars</b>: on or off</li><li><b>Status</b>: firmware, fans, last error and camera menu of each selected camera</li><li>A lit button shows the state of all selected cameras; a dashed edge means only some of them. (read on opening, after a button and every 30 s)</li><li><b>White balance</b>: Auto, Var, A, B, 3200K, 5600K, kelvin, AWB, ABB, Store</li><li><b>White balance per scene</b>: scenes 1 to 4 in one go</li></ul></div>
+      <ul><li><b>Power</b>: On or Standby</li><li><b>Tally</b>: red and green on or off</li><li><b>Image stabilizer (OIS)</b>: on or off</li><li><b>Color bars</b>: on or off</li><li><b>White balance</b>: Auto, Var, A, B, 3200K, 5600K, kelvin, AWB, ABB, Store</li><li><b>White balance per scene</b>: scenes 1 to 4 in one go</li><li><b>Status</b>: firmware, fans, last error and camera menu of each selected camera</li></ul><p style="margin:6px 0 0">A lit button: all selected cameras are in that state; a dashed edge: only some. Read when the page opens, after a button and every 30 s.</p></div>
     <div class="card"><h3 style="margin-top:0">Setup form: the fixed setup</h3>
-      <ul><li>Frequency and format, shooting mode, colour, IP video</li><li>OSD mix per output</li><li>Tally on/off, brightness, status lamp</li><li>Installation, smart picture flip, preset scope</li><li>Power-on position, wireless control, fans</li></ul></div>
+      <ul><li>Frequency and format, shooting mode, colour, IP video</li><li>OSD mix per output</li><li>Tally on/off, brightness, status lamp</li><li>Install position, smart picture flip, preset scope</li><li>Power-on position, wireless control, fans</li></ul></div>
   </div>
   <ol>
     <li><span class="btn">Read from a camera…</span> fills the form from one camera, or fill it in yourself. A dash leaves that setting as it is.</li>
@@ -180,7 +180,7 @@ td:first-child{color:var(--text)}
     <tr><td>Operator file</td><td>An operator's own preferences: preset speeds, pan/tilt speed and lens behaviour. Nothing in it is also in the engineering file</td></tr>
     <tr><td>Engineering file</td><td>The system setup (format, OSD mix, tally, pan/tilt, presets, fans, IP video). No white balance per scene: that is in the scene files.</td></tr>
   </table>
-  <p>Select the cameras, choose what to back up, check the file name and click <span class="btn p">Back up</span>. Several cameras go into one ZIP in your project folder.</p>
+  <p>Select the cameras, choose what to back up, check the file name and click <span class="btn p">Back up</span>. The files go to your project folder; several cameras can go into one ZIP.</p>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>7</span></div>
 </section>
 
@@ -196,7 +196,7 @@ td:first-child{color:var(--text)}
   </ol>
   <p>By default the current settings are saved first and every setting is read back afterwards. If a camera stops answering halfway, its restore stops and says how far it got. Undo takes a restore back. <b>Save as show</b> turns the rows into a show.</p>
   <h3>Initialize</h3>
-  <p>The <b>Initialize</b> block starts with the cameras: tick them, use <b>Select all</b>, or click a zone. <span class="btn">Initialize…</span> then puts the <b>standard scene files</b> on scenes 1 to 4: their shading (gain, detail, matrix, gamma, white balance…) is the same again on every camera. The engineering and operator settings stay as they are. It runs like a restore: what changes first, a back-up, and a check afterwards.</p>
+  <p>The <b>Initialize</b> block starts with the cameras: tick them, use <b>Select all</b>, or click a zone. <span class="btn">Initialize…</span> then puts the <b>standard scene files</b> on scenes 1 to 4 (for now AW-UE150, UE155 and HE145): their shading (gain, detail, matrix, gamma, white balance…) is the same again on every camera. The engineering and operator settings stay as they are. It runs like a restore: what changes first, a back-up, and a check afterwards.</p>
   <p>The <b>engineering file</b> saved on the Engineering page is in the file list as well: <b>Add to the list</b> adds a row, then choose the cameras like for any other file.</p>
   <div class="tip">Shutter values depend on the frequency. A scene file from a camera at 50 Hz put on a camera at 59.94 Hz gets the nearest shutter value; the result explains it.</div>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>8</span></div>
