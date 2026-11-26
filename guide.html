@@ -124,7 +124,7 @@ td:first-child{color:var(--text)}
     <tr><td><span class="dot" style="background:var(--err)"></span>Red</td><td>Not reachable: check power, cable and IP address</td></tr>
     <tr><td><span class="dot" style="background:var(--accent)"></span>Blue</td><td>Found on the network, not in your list yet</td></tr>
   </table>
-  <p><b>Edit…</b> (in the selection bar) changes everything about the selected cameras in one window: name, IP address, subnet mask and gateway go to the cameras; description, zone, port and login stay in the app. <b>Fill in all</b> numbers the addresses from the first one. A camera accepts a new IP address only in the first 20 minutes after it is switched on. An address of a broken camera that no longer answers can be reused: the new camera takes over its zone and description.</p>
+  <p><b>Edit…</b> (in the selection bar) changes everything about the selected cameras in one window: name, IP address, subnet mask and gateway go to the cameras; description, zone, port and login stay in the app. <b>Fill in all</b> numbers the addresses from the first one. A camera accepts a new IP address only in the first 20 minutes after it is switched on; it shows <i>Restarting network…</i> until it answers on its new address. An address of a broken camera that no longer answers can be reused: the new camera takes over its zone and description.</p>
   <p><b>Web pages.</b> The icons in each row open the camera's live page or settings page, already logged in. The same icons in the selection bar open them for every selected camera. AW-RP remote controllers can be in the list too: they show <i>Online · remote controller</i> and get no camera actions.</p>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>4</span></div>
 </section>
@@ -194,7 +194,7 @@ td:first-child{color:var(--text)}
     <li>Check <b>Scene, operator and engineering files</b>: each file goes to the camera with the same IP address and into the same scene. Change the camera and scene per row; the zones select rows quickly.</li>
     <li>Click <span class="btn p">Restore</span>. You first see what changes per camera.</li>
   </ol>
-  <p>By default the current settings are saved first and every setting is read back afterwards. Undo takes a restore back. <b>Save as show</b> turns the rows into a show.</p>
+  <p>By default the current settings are saved first and every setting is read back afterwards. If a camera stops answering halfway, its restore stops and says how far it got. Undo takes a restore back. <b>Save as show</b> turns the rows into a show.</p>
   <h3>Initialize</h3>
   <p>The <b>Initialize</b> block starts with the cameras: tick them, use <b>Select all</b>, or click a zone. <span class="btn">Initialize…</span> then puts the <b>standard scene files</b> on scenes 1 to 4: their shading (gain, detail, matrix, gamma, white balance…) is the same again on every camera. The engineering and operator settings stay as they are. It runs like a restore: what changes first, a back-up, and a check afterwards.</p>
   <p>The <b>engineering file</b> saved on the Engineering page is in the file list as well: <b>Add to the list</b> adds a row, then choose the cameras like for any other file.</p>
@@ -207,7 +207,7 @@ td:first-child{color:var(--text)}
   <p class="lead">Puts a whole setup on all cameras with one click, for example "Concert" or "Talk show".</p>
   <img class="shot" src="assets/guide/shows.png">
   <ul>
-    <li><b>Saved shows</b> lists your shows. <span class="btn">Recall</span>: every camera gets its own files, the engineering file first, with a back-up before. × deletes a show (the cameras are not changed).</li>
+    <li><b>Saved shows</b> lists your shows. <span class="btn">Recall</span>: every camera gets its own files, the engineering file first, with a back-up before. × deletes a show (the cameras are not changed). Every show is also a .pshow file with all its files inside: open it on another computer with <span class="btn">Open show file…</span>.</li>
     <li><b>Make or edit a show</b>: <span class="btn">New show from cameras…</span> saves the scenes (and operator files) of the cameras as they are now. Without cameras, <span class="btn">Open files…</span> or <b>Edit a saved show</b> fills the grid: rows are cameras, columns are scenes, the operator file and the engineering file. Pick per cell what goes there. <b>More › Clear</b> empties the block.</li>
   </ul>
   <div class="foot"><span>Panasonic Toolbox · User guide</span><span>9</span></div>
@@ -244,7 +244,8 @@ td:first-child{color:var(--text)}
     <tr><td>Red dot</td><td>The camera does not answer: check power, cable and IP address</td></tr>
     <tr><td>A new IP address is not accepted</td><td>Switch the camera off and on, then try again within 20 minutes</td></tr>
     <tr><td>"IP address in use"</td><td>Another device still answers at that address. Switch it off or give it another address first</td></tr>
-    <tr><td>Settings refused, or web pages ask for a password</td><td>Fill in the camera login on the Cameras page</td></tr>
+    <tr><td>"Login required or wrong password"</td><td>User auth is on in the camera: fill in its user name and password under Camera login on the Cameras page</td></tr>
+    <tr><td>"The camera stopped answering" during a restore</td><td>Check power and cable, then restore again, or use Undo to put back the settings from before</td></tr>
     <tr><td>No picture in Live</td><td>Switch on JPEG streaming in the camera (Video over IP)</td></tr>
     <tr><td>A setting shows ER3</td><td>That value does not exist on this model, for example preset speed Mid on the AW-UE150</td></tr>
     <tr><td>IP video "not available" right after a frequency change</td><td>The camera's web server needs a little longer after the restart; wait and try again</td></tr>

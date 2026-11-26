@@ -280,7 +280,7 @@ async function identify(cam) {
     cam.scene = null; return cam;
   }
   const r = await batch(cam, [{ cmd: 'QID' }, { cmd: 'QSF' }, { type: 'ptz', cmd: '#O' }, { cmd: 'QSJ:5C' }]);
-  if (r[0].status === 401) throw new Error('Login required or wrong password (Camera login in Settings)');
+  if (r[0].status === 401) throw new Error('Login required or wrong password (Camera login on the Cameras page)');
   if (!r[0].ok) throw new Error(r[0].unreachable ? 'Not reachable' : (r[0].error || 'no response'));
   if (!/^OID:/i.test(r[0].body)) throw new Error('Not a Panasonic camera response: ' + r[0].body);
   cam.model = r[0].body.slice(4);
@@ -1355,6 +1355,11 @@ function renderExportScenes() {
 async function readCamScenes(cam, mode, picked, status = () => { }) {
   if (!cam.model) await identify(cam);
   const orig = await getScene(cam);
+  if (orig == null) { // no scene number: find out why before reading 100+ settings that would all fail
+    const [r] = await batch(cam, [{ type: 'cam', cmd: 'QID' }], { delayMs: 0, timeout: 2 }).catch(() => [null]);
+    if (r?.status === 401) throw new Error('Login required or wrong password (Camera login on the Cameras page)');
+    if (!r?.ok) throw new Error('Camera not reachable');
+  }
   const scenes = [];
   const list = mode === 'active' ? [orig ?? 0] : picked.filter(n => n <= profileFor(cam.model).scenes);
   let current = orig;
@@ -1379,13 +1384,13 @@ $('#exportBtn').onclick = async () => {
   const picked = $$('#expScenes input:checked').map(i => +i.value);
   if (kind === 'scene' && mode === 'pick' && !picked.length) return info('No scenes chosen', 'Select the scenes you want to export.');
   // read the live scene first, so the confirmation shows the real scene numbers (and which cameras do not answer)
-  const offline = new Set();
+  const offline = new Map(); // camera → why it cannot be read
   $('#exportBtn').disabled = true; $('#expSel').textContent = 'Checking the cameras…';
-  await Promise.all(cams.map(async c => { try { if (!c.model) await identify(c); const n = await getScene(c); if (n != null) c.scene = n; else offline.add(c); } catch { offline.add(c); } }));
+  await Promise.all(cams.map(async c => { try { if (!c.model) await identify(c); const n = await getScene(c); if (n != null) c.scene = n; else offline.set(c, 'not reachable'); } catch (e) { offline.set(c, /login|password/i.test(e.message) ? 'login required or wrong password' : 'not reachable'); } }));
   $('#exportBtn').disabled = false; renderCams();
   // what each camera will give, and the file it goes into
   const plan = cams.map(c => {
-    if (offline.has(c)) return { c, what: '<b class="warn-text">not reachable</b>', name: '', html: true };
+    if (offline.has(c)) return { c, what: `<b class="warn-text">${offline.get(c)}</b>`, name: '', html: true };
     if (kind === 'operator') return { c, what: 'operator settings', name: operatorName(c) };
     const sc = mode === 'active' ? [c.scene || 1] : picked.filter(n => n <= (c.model ? profileFor(c.model).scenes : 4));
     return { c, what: mode === 'active' ? `live scene${c.scene ? ' (scene ' + c.scene + ')' : ''}` : sc.length ? 'scene ' + sc.join(', ') : 'nothing (this model has fewer scenes)', name: sc.length || kind === 'operator' ? fileName(c, sc.map(n => ({ scene: n }))) : '' };
@@ -2759,7 +2764,7 @@ async function sendCmd(t, cmd, outEl, c) {
     let prev = null;
     if (c && c.q) { try { const [q] = await batch(cam, [{ type: t, cmd: c.q }]); if (q.ok) prev = restoreCmd(t, q.body); } catch { } }
     const [r] = await batch(cam, [{ type: t, cmd }]);
-    outEl.textContent = r.ok ? `Response: ${r.body || '(empty)'}` : r.status === 401 ? 'Login required or wrong password (Camera login in Settings)' : `No response: ${r.error || ''}`;
+    outEl.textContent = r.ok ? `Response: ${r.body || '(empty)'}` : r.status === 401 ? 'Login required or wrong password (Camera login on the Cameras page)' : `No response: ${r.error || ''}`;
     log(`${tg.ip}: ${cmd} → ${r.ok ? r.body : r.error}`);
     const same = (x, y) => t === 'ptz' ? x.startsWith(c.q) && y.startsWith(c.q) : x.split(':').slice(0, -1).join(':') === y.split(':').slice(0, -1).join(':');
     if (r.ok && !isErr(r.body) && prev && prev !== cmd && same(prev, cmd)) pushHistory({
@@ -3017,7 +3022,7 @@ function renderEng() {
 // One command, with what counts as an answer: ok / not supported (ER…) / login / not reachable
 function engVerdict(r, okText = 'Done') {
   if (!r) return { res: 'No answer', bad: true };
-  if (r.status === 401) return { res: 'Login required or wrong password (Camera login in Settings)', bad: true };
+  if (r.status === 401) return { res: 'Login required or wrong password (Camera login on the Cameras page)', bad: true };
   if (r.unreachable || !r.ok) return { res: 'Not reachable', bad: true };
   if (isErr(r.body)) return { res: r.body.toUpperCase().startsWith('ER2') ? 'Camera busy or in standby (ER2)' : r.body.toUpperCase().startsWith('ER3') ? 'Value out of range (ER3)' : 'Not supported by this camera (' + r.body + ')', bad: true };
   return { res: okText };
@@ -3074,7 +3079,7 @@ const ENG = {
       // the camera's own settings page posts h264_transmit to set_h264, set_h264_2…4 (a GET is refused with 400)
       const paths = ['/cgi-bin/set_h264', '/cgi-bin/set_h264_2', '/cgi-bin/set_h264_3', '/cgi-bin/set_h264_4'];
       const rs = []; for (const p of paths) rs.push(await cgi(p, { h264_transmit: v }, 'POST'));
-      if (rs[0]?.status === 401) return { res: 'Login required or wrong password (Camera login in Settings)', bad: true };
+      if (rs[0]?.status === 401) return { res: 'Login required or wrong password (Camera login on the Cameras page)', bad: true };
       if (rs.every(r => !r?.ok)) return { res: rs[0]?.unreachable ? 'Not reachable' : 'Not accepted (HTTP ' + (rs[0]?.status || '?') + ')', bad: true };
       const sd = (await cgi('/cgi-bin/setdata', {}))?.body || '';
       const now = ['H264', 'H264_2', 'H264_3', 'H264_4'].map(k => (new RegExp('^' + k + ',"(\\d)"', 'm').exec(sd) || [])[1]).filter(Boolean);
@@ -3174,7 +3179,7 @@ function renderEngStatus(cams, res) {
   tb.innerHTML = cams.map((c, i) => {
     const r = res[i]; const b = k => (r?.[k]?.ok ? (r[k].body || '').trim() : '');
     if (!r) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="muted">Reading…</td></tr>`;
-    if (r[0]?.status === 401) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="bad">Login required or wrong password (Camera login in Settings)</td></tr>`;
+    if (r[0]?.status === 401) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="bad">Login required or wrong password (Camera login on the Cameras page)</td></tr>`;
     if (!r[0]?.ok) return `<tr><td>${esc(camName(c))} <span class="mono muted small">${esc(c.ip)}</span></td><td colspan="5" class="bad">Not reachable</td></tr>`;
     const fan = v => { const m = /^fS[12](\d)$/i.exec(v); return !m ? '<span class="muted">–</span>' : m[1] === '1' ? 'OK' : `<span class="bad" title="${esc(v)}">Check</span>`; };
     const er = /^rER(\w+)$/i.exec(b(9))?.[1];
@@ -3852,7 +3857,7 @@ async function liveReadNow(cam) {
   catch (e) { $('#liveStatus').textContent = 'Not reachable: ' + e.message; return; }
   if (cam !== live.cam) return;
   if (res[0]?.unreachable) { $('#liveStatus').textContent = 'Camera not reachable'; return; }
-  if (res[0]?.status === 401) { $('#liveStatus').textContent = 'Login required or wrong password'; liveMsg('This camera asks for a login, and the user name or password in Settings › Camera login is not right.'); return; }
+  if (res[0]?.status === 401) { $('#liveStatus').textContent = 'Login required or wrong password'; liveMsg('This camera asks for a login, and the user name or password under Camera login on the Cameras page is not right.'); return; }
   const b = i => (res[i]?.ok ? (res[i].body || '').trim() : '');
   const power = b(0).toLowerCase();
   live.power = power === 'p1' ? 'on' : power === 'p0' ? 'standby' : power === 'p3' ? 'starting' : '';

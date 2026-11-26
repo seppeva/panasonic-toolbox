@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.47.1"
+VERSION = "2.47.2"
 DEFAULT_PORT = 8765
 
 
@@ -740,9 +740,14 @@ def api_batch(req):
     par = max(1, min(4, int(req.get("parallel") or 1)))
     plain = all(not it.get("sleepMs") and it.get("type") in (None, "", "cam", "ptz") for it in items)
     if par > 1 and plain and len(items) > 1 and not motion:
+        refused = threading.Event()  # wrong or missing login: the other commands would be refused too
         def one(it):
+            if refused.is_set():
+                return {"ok": False, "status": 401, "cmd": it.get("cmd"), "error": "auth"}
             r = send_command(ip, port, "ptz" if it.get("type") == "ptz" else "cam", str(it.get("cmd", "")), user, pw, timeout)
             r["cmd"] = it.get("cmd")
+            if r.get("status") == 401:
+                refused.set()
             return r
         with cam_lock(ip):
             with ThreadPoolExecutor(max_workers=par) as ex:
