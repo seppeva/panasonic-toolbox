@@ -743,14 +743,12 @@ async function checkUpdate() {
 // Remote controllers (AW-RP…) found on the network can be in the list (status, web page) but get no camera actions
 const isCtrl = c => /^AW-RP/i.test(c?.model || '');
 const camsOnly = () => state.cameras.filter(c => !isCtrl(c));
-const saveCams = () => (state.cameras.sort((a, b) => ipNum(a.ip) - ipNum(b.ip)), store.set('cameras', state.cameras.map(({ ip, port, model, title, desc, selected, zone, user, pass }) => ({ ip, port, model, title, desc, selected, zone, user, pass: $('#rememberLogin').checked ? pass : undefined }))));
-const login = store.get('login', null);
-if (login) { $('#authUser').value = login.user || ''; $('#authPass').value = login.pass || ''; $('#rememberLogin').checked = true; }
-function saveLogin() {
-  if ($('#rememberLogin').checked) store.set('login', { user: $('#authUser').value.trim(), pass: $('#authPass').value });
-  else store.set('login', null);
-}
-['#authUser', '#authPass', '#rememberLogin'].forEach(s => $(s).addEventListener('change', saveLogin));
+const saveCams = () => (state.cameras.sort((a, b) => ipNum(a.ip) - ipNum(b.ip)), store.set('cameras', state.cameras.map(({ ip, port, model, title, desc, selected, zone, user }) => ({ ip, port, model, title, desc, selected, zone, user }))));
+// Passwords are never written to disk: they live in memory while the app is open. The user name is kept.
+// Earlier versions could remember the login: remove what they saved.
+{ const old = store.get('login', null); if (old?.user) $('#authUser').value = old.user; store.set('login', old?.user ? { user: old.user } : null); }
+if (state.cameras.some(c => c.pass)) saveCams();
+['#authUser'].forEach(s => $(s).addEventListener('change', () => store.set('login', $('#authUser').value.trim() ? { user: $('#authUser').value.trim() } : null)));
 const loginSummary = () => { $('#loginSummary').textContent = $('#authUser').value.trim() ? `User ${$("#authUser").value.trim()}` : 'No login filled in'; };
 ['#authUser', '#authPass'].forEach(s => $(s).addEventListener('input', loginSummary)); loginSummary();
 

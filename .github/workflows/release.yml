@@ -66,6 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r app/requirements.txt
+          python tools/collect_licenses.py
 
       - name: macOS — certificaat laden (enkel als secrets ingesteld zijn)
         if: matrix.target == 'mac' && env.HAS_APPLE_CERT == 'true'
@@ -193,7 +194,7 @@ jobs:
           test -f out/PanasonicToolbox-Windows-Setup.exe
       - name: Preview release (from a preview/** branch)
         if: ${{ startsWith(github.ref, 'refs/heads/preview/') }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: preview-${{ steps.v.outputs.version }}-${{ github.run_number }}
           name: Preview ${{ steps.v.outputs.version }} (${{ github.ref_name }})
@@ -205,7 +206,7 @@ jobs:
             Test version from the branch ${{ github.ref_name }}. Not the normal release: the installers and the update check ignore it.
             Download the file for your computer below.
       - if: ${{ !startsWith(github.ref, 'refs/heads/preview/') }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ steps.v.outputs.version }}
           name: Panasonic Toolbox ${{ steps.v.outputs.version }}

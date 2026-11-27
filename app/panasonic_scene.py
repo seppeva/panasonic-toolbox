@@ -15,6 +15,7 @@ import argparse
 import base64
 import contextlib
 import http.client
+import http.cookies
 import re
 import subprocess
 import ipaddress
@@ -35,7 +36,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 APP_NAME = "Panasonic Toolbox"
-VERSION = "2.47.6"
+VERSION = "2.48.0"
 DEFAULT_PORT = 8765
 
 
@@ -289,9 +290,14 @@ def write_state():
     path = state_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # only this user can read it
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(STATE, f, ensure_ascii=False)
     os.replace(tmp, path)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def api_state_set(req):
@@ -447,6 +453,9 @@ def rename_file(path, new_name, data=None):
     src = os.path.realpath(os.path.expanduser(str(path or "")))
     if not os.path.isfile(src) or not src.lower().endswith(ALLOWED_EXT):
         raise ValueError("File not found")
+    root = os.path.realpath(save_dir())
+    if os.path.commonpath([root, src]) != root:  # only files in the app's own save folder
+        raise ValueError("Only files in the save folder can be renamed")
     ext = ".pscene.json" if src.lower().endswith(".pscene.json") else os.path.splitext(src)[1]
     stem = safe_name(re.sub(r"(\.pscene\.json|\.[A-Za-z0-9]+)$", "", os.path.basename(str(new_name))) + ext)[: -len(ext)]
     d = os.path.dirname(src)
@@ -501,7 +510,7 @@ _HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
         "transfer-encoding", "upgrade", "content-length", "host"}
 
 
-def _cam_proxy_handler(ip, port, user, password):
+def _cam_proxy_handler(ip, port, user, password, secret, touch):
     def opener():
         handlers = [_NoRedirect(), urllib.request.ProxyHandler({}), _QuickHTTPHandler()]
         if user:
@@ -516,7 +525,46 @@ def _cam_proxy_handler(ip, port, user, password):
         def log_message(self, *a):
             pass
 
+        def _refuse(self):
+            msg = b"Not allowed"
+            self.send_response(403); self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(msg))); self.end_headers(); self.wfile.write(msg)
+
+        def _allowed(self):
+            """Only the browser tab the app opened may use this pass-through: the right address (no DNS rebinding),
+            no request from another website, and the secret cookie set by the link the app opened."""
+            here = self.server.server_address[1]
+            own = (f"127.0.0.1:{here}", f"localhost:{here}")
+            if (self.headers.get("Host") or "").lower() not in own:
+                return False
+            origin = self.headers.get("Origin")
+            if origin and origin.lower() not in tuple("http://" + o for o in own):
+                return False
+            if (self.headers.get("Sec-Fetch-Site") or "same-origin").lower() not in ("same-origin", "none"):
+                return False  # a request started by another site, or by a page on another port of this computer
+            jar = http.cookies.SimpleCookie()
+            try:
+                jar.load(self.headers.get("Cookie") or "")
+            except http.cookies.CookieError:
+                return False
+            c = jar.get(f"pt{here}")
+            return bool(c) and secrets.compare_digest(c.value, secret)
+
         def _go(self):
+            here = self.server.server_address[1]
+            entry = f"/__pt/{secret}"
+            if self.path == entry or self.path.startswith(entry + "/"):
+                # the link the app opened: hand the browser the secret as a cookie, then go to the page
+                if (self.headers.get("Host") or "").lower() not in (f"127.0.0.1:{here}", f"localhost:{here}"):
+                    return self._refuse()
+                self.send_response(302)
+                self.send_header("Set-Cookie", f"pt{here}={secret}; Path=/; HttpOnly; SameSite=Strict")
+                self.send_header("Location", self.path[len(entry):] or "/")
+                self.send_header("Content-Length", "0"); self.end_headers()
+                return
+            if not self._allowed():
+                return self._refuse()
+            touch()
             n = int(self.headers.get("Content-Length") or 0)
             data = self.rfile.read(n) if n else None
             req = urllib.request.Request(f"http://{ip}:{port}{self.path}", data=data, method=self.command)
@@ -524,7 +572,12 @@ def _cam_proxy_handler(ip, port, user, password):
             there = f"http://{ip}" + ("" if int(port) == 80 else f":{port}")
             for k, v in self.headers.items():
                 kl = k.lower()
-                if kl in ("origin", "referer"):
+                if kl == "cookie":
+                    v = "; ".join(x for x in v.split(";") if not x.strip().startswith(f"pt{here}="))
+                    if not v.strip():
+                        continue
+                    req.add_header(k, v)
+                elif kl in ("origin", "referer"):
                     # the camera checks that its own pages ask: point them at the camera instead of 127.0.0.1
                     req.add_header(k, v.replace(here, there))
                 elif kl not in _HOP and kl not in ("authorization", "accept-encoding"):
@@ -541,7 +594,7 @@ def _cam_proxy_handler(ip, port, user, password):
             code = resp.status if hasattr(resp, "status") else resp.code
             if code == 401:
                 msg = (f"<html><body style='font-family:sans-serif;background:#1d1f22;color:#ddd;padding:40px'><h2>The camera {ip} refused the login</h2>"
-                       "<p>Check the camera login in Panasonic Toolbox (Settings, Camera communication) and open the page again.</p></body></html>").encode()
+                       "<p>Check the camera login at the bottom of the Cameras page in Panasonic Toolbox and open the page again.</p></body></html>").encode()
                 self.send_response(401); self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(msg))); self.end_headers(); self.wfile.write(msg)
                 return
@@ -579,14 +632,41 @@ def cam_page_url(ip, port, user, password, path):
         raise ValueError("Only camera addresses on the local network can be opened")
     key = (ip, int(port), user or "", password or "")
     with _cam_proxies_lock:
-        srv = _cam_proxies.get(key)
-        if not srv:
-            srv = ThreadingHTTPServer(("127.0.0.1", 0), _cam_proxy_handler(ip, int(port), user, password))
+        ent = _cam_proxies.get(key)
+        if not ent:
+            ent = {"secret": secrets.token_urlsafe(24), "t": time.time()}
+            srv = ThreadingHTTPServer(("127.0.0.1", 0), _cam_proxy_handler(ip, int(port), user, password, ent["secret"], lambda: ent.update(t=time.time())))
             srv.daemon_threads = True
+            ent["srv"] = srv
             threading.Thread(target=srv.serve_forever, daemon=True).start()
-            _cam_proxies[key] = srv
+            _cam_proxies[key] = ent
+            _start_proxy_reaper()
+        ent["t"] = time.time()
     path = path if path.startswith("/") else "/" + path
-    return f"http://127.0.0.1:{srv.server_address[1]}{path}"
+    return f"http://127.0.0.1:{ent['srv'].server_address[1]}/__pt/{ent['secret']}{path}"
+
+
+_reaper = {"on": False}
+
+
+def _start_proxy_reaper():
+    """Stops a camera page pass-through after an hour without use. Called with _cam_proxies_lock held."""
+    if _reaper["on"]:
+        return
+    _reaper["on"] = True
+
+    def run():
+        while True:
+            time.sleep(60)
+            with _cam_proxies_lock:
+                old = [k for k, e in _cam_proxies.items() if time.time() - e["t"] > 3600]
+                ents = [_cam_proxies.pop(k) for k in old]
+            for e in ents:
+                try:
+                    e["srv"].shutdown(); e["srv"].server_close()
+                except Exception:
+                    pass
+    threading.Thread(target=run, daemon=True).start()
 
 
 def open_camera_with_login(req):
@@ -838,7 +918,7 @@ def api_call(path, req):
         if req.get("sub"):
             d = sub_dir(req["sub"])
             return ({"ok": True, "path": save_file(req.get("name"), data, d), "dir": d})
-        return ({"ok": True, "path": save_file(req.get("name"), data, req.get("dir")), "dir": req.get("dir") or save_dir()})
+        return ({"ok": True, "path": save_file(req.get("name"), data), "dir": save_dir()})
     if path == "/api/rename":
         data = base64.b64decode(req["dataB64"], validate=True) if req.get("dataB64") else None
         return {"ok": True, "path": rename_file(req.get("path"), req.get("name"), data)}

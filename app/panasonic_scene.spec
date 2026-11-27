@@ -6,14 +6,15 @@ HERE = os.path.abspath(SPECPATH)
 ROOT = os.path.dirname(HERE)
 VERSION = re.search(r'VERSION = "([^"]+)"', open(os.path.join(HERE, 'panasonic_scene.py')).read()).group(1)
 NAME = 'Panasonic Toolbox'
-# Ondertekening (enkel als het certificaat in de build beschikbaar is, zie SIGNING.md)
+# Signing (only when the certificate is available in the build)
 SIGN_ID = os.environ.get('MAC_SIGN_IDENTITY') or None
 ENTITLEMENTS = os.path.join(HERE, 'entitlements.plist') if SIGN_ID else None
 
 a = Analysis(
     [os.path.join(HERE, 'panasonic_scene.py')],
     pathex=[HERE],
-    datas=[(os.path.join(HERE, 'web'), 'web')],
+    # licenses/: the license texts of the app and of everything bundled with it (tools/collect_licenses.py)
+    datas=[(os.path.join(HERE, 'web'), 'web')] + ([(os.path.join(HERE, 'licenses'), 'licenses')] if os.path.isdir(os.path.join(HERE, 'licenses')) else []),
     hiddenimports=['webview', 'easyip'],
     excludes=['tkinter', 'unittest', 'pydoc', 'test'],
 )

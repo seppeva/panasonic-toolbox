@@ -44,8 +44,7 @@ Exports, imports, saving an edited show, opening a project file and closing a pr
 | `installer/windows.iss` | Inno Setup script for the Windows installer |
 | `.github/workflows/release.yml` | Builds the Mac and Windows versions and publishes a GitHub Release |
 | `tools/` | Mock camera for testing and the generators for `catalog.js` and `commands.js` |
-| `PARAMETERS.md` | Every setting in a scene file, per model |
-| `PRIVACY.md`, `SECURITY.md`, `SIGNING.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Privacy, security, code signing, license (MIT) and open source components |
+| `privacy.html`, `SECURITY.md`, `LICENSE`, `THIRD_PARTY_NOTICES.md` | Privacy statement, security, license (MIT) and open source components |
 
 ## How it works
 
@@ -87,7 +86,7 @@ Change `VERSION = "x.y.z"` in `app/panasonic_scene.py` and push to `main`. GitHu
 
 It then publishes release `vX.Y.Z`. The download buttons point to `releases/latest/download/…`, so they work right away. Pushing a tag `vX.Y.Z` works too.
 
-Without code signing, macOS and Windows show a warning the first time; the Terminal and PowerShell install commands avoid it. See [SIGNING.md](SIGNING.md) to enable signing (Apple notarization runs automatically once the secrets are set).
+Without code signing, macOS and Windows show a warning the first time; the Terminal and PowerShell install commands avoid it.
 
 ## The website
 
@@ -136,7 +135,7 @@ Other files the app writes: operator files (`.poper`, format `panasonic-ptz-oper
 | UE100 | 98 |
 | UE80 series | 85 |
 
-Other models, such as the AW-HE130 and AW-UE70, get every scene setting they support. Operator files hold 30 settings (presets, pan/tilt and lens preferences); tally is not part of them. The scene settings per model are in [PARAMETERS.md](PARAMETERS.md); the operator settings are on the Parameters tab in the app.
+Other models, such as the AW-HE130 and AW-UE70, get every scene setting they support. Operator files hold 30 settings (presets, pan/tilt and lens preferences); tally is not part of them. The scene, operator and engineering settings per model are on the Parameters tab in the app.
 
 ---
 Not affiliated with Panasonic. Use at your own risk and don't test on a camera that is on air.

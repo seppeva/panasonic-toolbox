@@ -3,3 +3,4 @@ __pycache__/
 tools/test-output/
 node_modules/
 package-lock.json
+app/licenses/
