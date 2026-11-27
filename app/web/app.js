@@ -2364,7 +2364,7 @@ $('#saveShowBtn').onclick = async () => {
 };
 function renderShows() {
   const tb = $('#showTable tbody'); tb.innerHTML = '';
-  const es = $('#gridEditSel'); if (es) es.innerHTML = `<option value="">Edit a saved show…</option>` + state.shows.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('');
+  const es = $('#gridEditSel'); if (es) es.innerHTML = `<option value="">Edit show…</option>` + state.shows.map((x, i) => `<option value="${i}">${esc(x.name)}</option>`).join('');
   for (const sh of state.shows) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><input type="checkbox" ${sh.sel ? 'checked' : ''} aria-label="Select show"></td><td><input class="namein" value="${esc(sh.name)}" aria-label="Show name" title="Type a new name; the saved file is renamed too">${sh.path ? `<div class="muted small mono filepath" title="${esc(sh.path)}">${esc(sh.path.split(/[\\/]/).pop())}</div>` : '<div class="muted small">Not saved as a file yet</div>'}</td><td class="small">${sh.items.map(i => `${esc(i.targetTitle || i.target)} <span class="mono muted">${esc(i.target)}</span>: ${i.kind === 'operator' ? 'operator file' : i.kind === 'engineering' ? 'engineering file' : (i.targetScene === 'active' ? 'live scene' : 'scene ' + esc(i.targetScene))}`).join('<br>')}</td><td class="muted small">${new Date(sh.created).toLocaleString('en-GB')}</td>
@@ -2413,6 +2413,19 @@ const camName = c => c.title || c.desc || c.model || 'Camera';
 state.gridCams = new Set(store.get('gridCams', []));
 state.grid = {}; // ip -> { '1': srcId, ..., op: srcId }
 const saveGridCams = () => store.set('gridCams', [...state.gridCams]);
+// Every opened file goes by itself into the empty cell of the camera it came from (same scene number), so a show
+// from back-ups needs no extra step. A cell the user emptied stays empty, and a saved show being edited is left as it is.
+state.gridCleared = new Set();
+function gridAutoFill(cams) {
+  if (state.gridEdit) return;
+  for (const c of cams) for (const src of state.sources) {
+    if (src.fromShow || (src.file.camera?.ip || src.file.fromIp) !== c.ip) continue;
+    const k = src.kind === 'operator' ? 'op' : src.kind === 'engineering' ? 'eng' : String(src.file.scenes[src.sceneIdx].scene);
+    if (src.kind === 'scene' && +k > (c.model ? profileFor(c.model).scenes : 4)) continue;
+    const g = state.grid[c.ip] = state.grid[c.ip] || {};
+    if (g[k] == null && !state.gridCleared.has(c.ip + '|' + k)) g[k] = src.id;
+  }
+}
 function renderGrid() {
   if (!$('#gridTable') || !state.gridCams) return;
   syncSavedEngSource();
@@ -2426,6 +2439,7 @@ function renderGrid() {
   const n = Math.max(0, ...cams.map(c => c.model ? profileFor(c.model).scenes : 4));
   // drop assignments whose file was closed
   for (const ip in state.grid) for (const k in state.grid[ip]) if (!srcById(state.grid[ip][k])) delete state.grid[ip][k];
+  gridAutoFill(cams);
   const byFile = list => { const m = new Map(); list.forEach(x => { if (!m.has(x.fileName)) m.set(x.fileName, []); m.get(x.fileName).push(x); }); return m; };
   const opts = (list, cur) => `<option value="">–</option>` + [...byFile(list)].map(([f, xs]) => `<optgroup label="${esc(f)}">${xs.map(x => `<option value="${x.id}" ${+cur === x.id ? 'selected' : ''}>${esc(srcLabel(x))}</option>`).join('')}</optgroup>`).join('');
   const t = $('#gridTable');
@@ -2440,7 +2454,7 @@ function renderGrid() {
     $$('#gridTable select').forEach(sel => sel.onchange = () => {
       const ip = sel.closest('tr').dataset.ip, k = sel.dataset.col;
       state.grid[ip] = state.grid[ip] || {};
-      if (sel.value) state.grid[ip][k] = +sel.value; else delete state.grid[ip][k];
+      if (sel.value) { state.grid[ip][k] = +sel.value; state.gridCleared.delete(ip + '|' + k); } else { delete state.grid[ip][k]; state.gridCleared.add(ip + '|' + k); }
       sel.classList.toggle('set', !!sel.value); gridCount();
     });
   }
@@ -2575,7 +2589,7 @@ async function useEngFile(data, quiet) {
 $('#gridOpen').onclick = () => $('#openFilesBtn').click();
 // Clear empties the whole block: the grid, the chosen cameras, the name and an edit in progress.
 $('#gridClear').onclick = () => {
-  track('Clear the show grid', () => { state.grid = {}; state.gridCams = new Set(); saveGridCams(); $('#gridName').value = ''; endGridEdit(); });
+  track('Clear the show grid', () => { state.grid = {}; state.gridCleared = new Set(); state.gridCams = new Set(); saveGridCams(); $('#gridName').value = ''; endGridEdit(); });
   renderGrid();
 };
 $('#gridEditSel').onchange = () => { const sh = state.shows[+$('#gridEditSel').value]; $('#gridEditSel').value = ''; if (sh) editShow(sh); };
@@ -2608,16 +2622,6 @@ function endGridEdit() {
   $('#gridEditing').classList.add('hidden');
   state.sources = state.sources.filter(x => !x.fromShow || Object.values(state.grid).some(g => Object.values(g).includes(x.id)));
 }
-$('#gridAuto').onclick = () => {
-  let n = 0;
-  for (const c of state.cameras.filter(x => state.gridCams.has(x.ip))) for (const src of state.sources) {
-    if ((src.file.camera?.ip || src.file.fromIp) !== c.ip) continue;
-    const k = src.kind === 'operator' ? 'op' : src.kind === 'engineering' ? 'eng' : String(src.file.scenes[src.sceneIdx].scene);
-    if (src.kind === 'scene' && +k > (c.model ? profileFor(c.model).scenes : 4)) continue;
-    state.grid[c.ip] = state.grid[c.ip] || {}; state.grid[c.ip][k] = src.id; n++;
-  }
-  renderGrid(); toast(n ? `${n} cell${n === 1 ? '' : 's'} filled` : 'No opened file comes from these cameras');
-};
 $('#gridSave').onclick = async () => {
   const items = gridItems();
   if (!items.length) return info('Nothing chosen', 'Choose a scene in at least one cell.');
@@ -2730,10 +2734,6 @@ $('#showNew').onclick = async () => {
   if (fails.length) info('Show saved without some cameras', `These cameras could not be read and are not in the show: ${esc(fails.join(', '))}.`);
   const path = await download(showFile(show), showJson(show), undefined, 'show');
   if (path) { show.path = path; saveShows(); renderShows(); }
-};
-$('#showOpen').onclick = async () => {
-  try { const j = await bridgeFetch('/api/choose', { kind: 'files', multiple: true }); if (j.ok) return openPaths(j.paths || []); } catch { }
-  $('#fileInput').click();
 };
 
 /* ------------------------------------------------------------------ send a command (with undo) */
