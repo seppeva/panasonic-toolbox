@@ -1,19 +1,19 @@
 # Privacy statement for Panasonic Toolbox
 
-*Last updated: 30 October 2026*
+*Last updated: 27 November 2026*
 
 Panasonic Toolbox is free, open source software by Seppe Van Aken (Belgium). This statement explains what data the app and the download page process. In short: **the app collects nothing about you**. There are no accounts, no analytics, no cookies and no tracking.
 
-**Contact:** Seppe Van Aken, CONTACT_EMAIL_TO_FILL_IN
+**Contact:** Seppe Van Aken, [seppe@vanaken.be](mailto:seppe@vanaken.be)
 
 ## 1. The app on your computer
 - **Everything stays local.** The app only talks to the cameras on your own network. No data is sent to the developer or to anyone else.
-- **Stored on your computer:** the list of cameras you found (IP address, model and title) and your settings, so they are still there next time. You can clear the list in the app.
-- **Camera login:** the camera user name and password are only kept in memory while the app is open. If you tick *Remember on this computer*, they are stored in the app's local storage on your computer only. They are sent only to your own cameras.
-- **Camera web pages:** when you open a camera's live or settings page, your default browser opens a link to that camera on your local network, including the camera login if you entered one.
+- **Stored on your computer:** the list of cameras (IP address, model, title, zone and description), your projects, shows, scripts and settings, in the app's data folder, so they are still there next time. You can clear them in the app or by uninstalling it.
+- **Camera login:** the camera user name and password are only kept in memory while the app is open. If you tick *Remember on this computer*, or set a login for one camera, it is saved in the app's data folder on your computer, without encryption. A login is only sent to your own cameras.
+- **Camera web pages:** when you open a camera's live or settings page, your default browser opens that camera's page. If a camera login is set, the page goes through a small pass-through in the app on your own computer, which adds the login on the way to the camera.
 - **Network setup:** searching for cameras sends a broadcast on your local network (UDP ports 10669 and 10670, as Panasonic's Easy IP Setup does). It never leaves your network.
 - **Scripts and shows:** scripts and show files you save stay in the folder you choose. If a camera login is set, a saved script contains it in plain text.
-- **Scene files and backups** are saved in the folder *Downloads › Panasonic Toolbox* on your computer. Existing files are never overwritten.
+- **Scene, operator and engineering files and backups** are saved in your save folder (by default *Downloads › Panasonic Toolbox*) on your computer. Existing files are never overwritten.
 - **Update check:** when you are online, the app asks GitHub (GitHub, Inc.) for the latest version number. Like with any website visit, GitHub sees your IP address. Nothing about you or your cameras is sent. You can turn this off in *Settings › Check for new versions*.
 
 ## 2. The download page
